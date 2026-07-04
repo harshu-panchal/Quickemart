@@ -74,6 +74,9 @@ importers:
       socket.io:
         specifier: ^4.8.3
         version: 4.8.3(supports-color@5.5.0)
+      uuid:
+        specifier: ^9.0.1
+        version: 9.0.1
     devDependencies:
       '@babel/preset-env':
         specifier: ^7.29.0
@@ -10952,8 +10955,7 @@ snapshots:
 
   uuid@8.3.2: {}
 
-  uuid@9.0.1:
-    optional: true
+  uuid@9.0.1: {}
 
   v8-to-istanbul@9.3.0:
     dependencies:
