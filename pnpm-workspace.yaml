@@ -1,0 +1,13 @@
+packages:
+  - 'frontend'
+  - 'backend'
+
+allowBuilds:
+  "esbuild": true
+  "@firebase/util": true
+  "bcrypt": true
+  "msgpackr-extract": true
+  "protobufjs": true
+  "unrs-resolver": true
+  "tesseract.js": true
+  "core-js": true
