@@ -192,6 +192,17 @@ export async function createAllIndexes() {
     for (const [collectionName, indexes] of Object.entries(INDEX_DEFINITIONS)) {
       const collection = mongoose.connection.collection(collectionName);
       
+      // Ensure the collection exists to avoid NamespaceNotFound (code 26) errors 5/07/26
+      try {
+        await mongoose.connection.db.createCollection(collectionName);
+        logger.info(`[DatabaseIndexManager] Created missing collection: "${collectionName}"`);
+      } catch (err) {
+        // code 48 means NamespaceExists (collection already exists), which is expected
+        if (err.code !== 48 && err.codeName !== "NamespaceExists") {
+          logger.warn(`[DatabaseIndexManager] Warning ensuring collection "${collectionName}":`, err.message);
+        }
+      }
+      
       for (const indexDef of indexes) {
         try {
           const indexName = indexDef.options?.name || Object.keys(indexDef.keys).join("_");
