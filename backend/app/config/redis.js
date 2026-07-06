@@ -119,8 +119,8 @@ function attachRedisErrorHandler(client) {
 
 function standaloneOptions() {
   return {
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: parseInt(process.env.REDIS_PORT || "6379", 10),
+    host: process.env.REDIS_HOST || "187.127.191.94",
+    port: parseInt(process.env.REDIS_PORT || "14667", 10),
     password: process.env.REDIS_PASSWORD || undefined,
     lazyConnect: true,
     enableReadyCheck: true,
