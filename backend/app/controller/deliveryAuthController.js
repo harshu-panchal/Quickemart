@@ -101,11 +101,17 @@ export const signupDelivery = async (req, res) => {
         }
 
         if (useRealSMS()) {
-            await sendSmsIndiaHubOtp({ phone, otp });
+            try {
+                await sendSmsIndiaHubOtp({ phone, otp });
+            } catch (smsErr) {
+                // SMS failure should NOT block rider signup — log and continue
+                console.error("[SMS] Failed to send signup OTP:", smsErr.message);
+            }
         }
 
         return handleResponse(res, 200, "OTP sent successfully");
     } catch (error) {
+        console.error("[signupDelivery] 500 ERROR:", error.message, error.stack);
         return handleResponse(res, 500, error.message);
     }
 };
@@ -137,7 +143,12 @@ export const loginDelivery = async (req, res) => {
         await delivery.save();
 
         if (useRealSMS()) {
-            await sendSmsIndiaHubOtp({ phone, otp });
+            try {
+                await sendSmsIndiaHubOtp({ phone, otp });
+            } catch (smsErr) {
+                // SMS failure should NOT block rider login — log and continue
+                console.error("[SMS] Failed to send login OTP:", smsErr.message);
+            }
         }
 
         return handleResponse(res, 200, "OTP sent successfully");

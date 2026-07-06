@@ -90,118 +90,80 @@ const DeliveryAuth = () => {
     return () => clearInterval(interval);
   }, [step, timer]);
 
-  const performOCR = async (file, type) => {
-    setIsScanning(true);
-    setOcrProgress(0);
+  /* AI_VALIDATION_DISABLED — OCR document matching commented out.
+   * Riders can now upload any document without AI verification.
+   * To re-enable, uncomment this block and restore the original upload handlers below.
+   *
+   * const performOCR = async (file, type) => {
+   *   setIsScanning(true);
+   *   setOcrProgress(0);
+   *   if (type === "dl") setDlVerified(null);
+   *   if (type === "pan") setPanVerified(null);
+   *   if (type === "aadhar") setAadharVerified(null);
+   *   try {
+   *     const result = await Tesseract.recognize(file, 'eng', {
+   *       logger: (m) => {
+   *         if (m.status === 'recognizing text') {
+   *           setOcrProgress(Math.round(m.progress * 100));
+   *         }
+   *       },
+   *     });
+   *     const rawText = result.data.text.toLowerCase();
+   *     const cleanText = rawText.replace(/[^a-z0-9]/g, "");
+   *     const normalize = (str) => str.replace(/o/g, "0").replace(/s/g, "5").replace(/[il]/g, "1");
+   *     const normalizedCleanText = normalize(cleanText);
+   *     let isMatch = false;
+   *     let targetNumber = "";
+   *     if (type === "dl") {
+   *       targetNumber = signupDLNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
+   *       const normalizedTarget = normalize(targetNumber);
+   *       isMatch = (targetNumber && cleanText.includes(targetNumber)) ||
+   *         (normalizedTarget && normalizedCleanText.includes(normalizedTarget));
+   *       if (isMatch) { setDlVerified(true); setDlFile(file); toast.success("Driving License Verified!"); }
+   *       else { setDlVerified(false); setDlFile(null); toast.error("DL Number mismatch."); }
+   *     } else if (type === "pan") {
+   *       targetNumber = signupPanNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
+   *       const normalizedTarget = normalize(targetNumber);
+   *       isMatch = (targetNumber && cleanText.includes(targetNumber)) ||
+   *         (normalizedTarget && normalizedCleanText.includes(normalizedTarget));
+   *       if (isMatch) { setPanVerified(true); setPanFile(file); toast.success("PAN Card Verified!"); }
+   *       else { setPanVerified(false); setPanFile(null); toast.error("PAN mismatch."); }
+   *     } else if (type === "aadhar") {
+   *       targetNumber = signupAadharNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
+   *       const normalizedTarget = normalize(targetNumber);
+   *       isMatch = (targetNumber && cleanText.includes(targetNumber)) ||
+   *         (normalizedTarget && normalizedCleanText.includes(normalizedTarget));
+   *       if (isMatch) { setAadharVerified(true); setAadharFile(file); toast.success("Aadhar Card Verified!"); }
+   *       else { setAadharVerified(false); setAadharFile(null); toast.error("Aadhar mismatch."); }
+   *     }
+   *   } catch (error) {
+   *     console.error("OCR Error:", error);
+   *     toast.error("Failed to scan document. Please try again.");
+   *   } finally {
+   *     setIsScanning(false);
+   *   }
+   * };
+   *
+   * Original handlers (with OCR):
+   * const handleDLUpload = (file) => { if (file) performOCR(file, "dl"); else { setDlFile(null); setDlVerified(null); } };
+   * const handlePanUpload = (file) => { if (file) performOCR(file, "pan"); else { setPanFile(null); setPanVerified(null); } };
+   * const handleAadharUpload = (file) => { if (file) performOCR(file, "aadhar"); else { setAadharFile(null); setAadharVerified(null); } };
+   */
 
-    // Reset specific verification state
-    if (type === "dl") setDlVerified(null);
-    if (type === "pan") setPanVerified(null);
-    if (type === "aadhar") setAadharVerified(null);
-
-    try {
-      const result = await Tesseract.recognize(file, 'eng', {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            setOcrProgress(Math.round(m.progress * 100));
-          }
-        },
-      });
-
-      const rawText = result.data.text.toLowerCase();
-      const cleanText = rawText.replace(/[^a-z0-9]/g, "");
-
-      // Handle common OCR character substitutions for more robust matching
-      // e.g., '0' read as 'o', '5' as 's', '1' as 'i' or 'l'
-      const normalize = (str) => str.replace(/o/g, "0").replace(/s/g, "5").replace(/[il]/g, "1");
-      const normalizedCleanText = normalize(cleanText);
-
-      console.log(`OCR Raw [${type}]:`, rawText);
-      console.log(`OCR Cleaned [${type}]:`, cleanText);
-
-      let isMatch = false;
-      let targetNumber = "";
-
-      if (type === "dl") {
-        targetNumber = signupDLNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
-        const normalizedTarget = normalize(targetNumber);
-
-        // Match either exact cleaned text or normalized text (handles 0/O, 5/S etc)
-        isMatch = (targetNumber && cleanText.includes(targetNumber)) ||
-          (normalizedTarget && normalizedCleanText.includes(normalizedTarget));
-
-        const dlKeywords = ["driving", "licence", "license", "india", "union", "government", "transport", "validity", "form", "rj"];
-        const hasDlKeywords = dlKeywords.some(k => rawText.includes(k));
-
-        if (isMatch) {
-          setDlVerified(true);
-          setDlFile(file);
-          toast.success("Driving License Verified!");
-        } else {
-          setDlVerified(false);
-          setDlFile(null);
-          toast.error("DL Number mismatch. Make sure you typed the exact number from the photo.");
-        }
-      } else if (type === "pan") {
-        targetNumber = signupPanNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
-        const normalizedTarget = normalize(targetNumber);
-
-        const panKeywords = ["permanent", "account", "income", "tax", "department", "india", "signature", "card", "govt"];
-        const hasPanKeywords = panKeywords.some(k => rawText.includes(k));
-
-        isMatch = (targetNumber && cleanText.includes(targetNumber)) ||
-          (normalizedTarget && normalizedCleanText.includes(normalizedTarget));
-
-        if (isMatch || (hasPanKeywords && isMatch)) {
-          setPanVerified(true);
-          setPanFile(file);
-          toast.success("PAN Card Verified!");
-        } else {
-          setPanVerified(false);
-          setPanFile(null);
-          toast.error("PAN mismatch. Photo must be clear and show the PAN number.");
-        }
-      } else if (type === "aadhar") {
-        targetNumber = signupAadharNumber.toLowerCase().replace(/[^a-z0-9]/g, "");
-        const normalizedTarget = normalize(targetNumber);
-
-        const aadharKeywords = ["government", "india", "male", "female", "unique", "identification", "authority", "enrollment", "birth", "dob", "address", "आधार", "भारत"];
-        const hasAadharKeywords = aadharKeywords.some(k => rawText.includes(k));
-
-        isMatch = (targetNumber && cleanText.includes(targetNumber)) ||
-          (normalizedTarget && normalizedCleanText.includes(normalizedTarget));
-
-        if (isMatch || (hasAadharKeywords && isMatch)) {
-          setAadharVerified(true);
-          setAadharFile(file);
-          toast.success("Aadhar Card Verified!");
-        } else {
-          setAadharVerified(false);
-          setAadharFile(null);
-          toast.error("Aadhar mismatch. 12-digit number should be clearly visible.");
-        }
-      }
-    } catch (error) {
-      console.error("OCR Error:", error);
-      toast.error("Failed to scan document. Please try again.");
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
+  // AI validation disabled — files accepted directly without OCR scanning
   const handleDLUpload = (file) => {
-    if (file) performOCR(file, "dl");
-    else { setDlFile(null); setDlVerified(null); }
+    if (file) setDlFile(file);
+    else setDlFile(null);
   };
 
   const handlePanUpload = (file) => {
-    if (file) performOCR(file, "pan");
-    else { setPanFile(null); setPanVerified(null); }
+    if (file) setPanFile(file);
+    else setPanFile(null);
   };
 
   const handleAadharUpload = (file) => {
-    if (file) performOCR(file, "aadhar");
-    else { setAadharFile(null); setAadharVerified(null); }
+    if (file) setAadharFile(file);
+    else setAadharFile(null);
   };
 
   const handleSendOtp = async () => {
@@ -776,8 +738,9 @@ const DeliveryAuth = () => {
                                   )}
                                 </label>
 
+                                {/* AI_VALIDATION_DISABLED — OCR progress badges commented out */}
                                 {/* OCR Progress & Badge for DL */}
-                                {doc.id === "dl" && (
+                                {/* doc.id === "dl" && (
                                   <div className="mt-2 px-1">
                                     {(isScanning && doc.state === null) && (
                                       <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1">
@@ -794,14 +757,15 @@ const DeliveryAuth = () => {
                                         </div>
                                       </div>
                                     )}
+*/}
 
+                                {/* AI_VALIDATION_DISABLED — DL verified/warning badges commented out
                                     {!isScanning && dlVerified === true && (
                                       <div className="flex items-center gap-1.5 text-brand-600 animate-in zoom-in-95 duration-300">
                                         <CheckCircle className="w-3.5 h-3.5" />
                                         <span className="text-[10px] font-black uppercase tracking-wider">AI Verified: Valid DL Found</span>
                                       </div>
                                     )}
-
                                     {!isScanning && dlVerified === false && (
                                       <div className="flex items-center gap-1.5 text-rose-500 animate-in shake duration-500">
                                         <XCircle className="w-3.5 h-3.5" />
@@ -809,77 +773,22 @@ const DeliveryAuth = () => {
                                       </div>
                                     )}
                                   </div>
-                                )}
+                                ) */}
 
-                                {/* OCR Progress & Badge for PAN */}
+
+                                {/* AI_VALIDATION_DISABLED — PAN OCR block commented out
                                 {doc.id === "pan" && (
                                   <div className="mt-2 px-1">
-                                    {(isScanning && doc.state === null) && (
-                                      <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1">
-                                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-brand-500">
-                                          <span>AI Scanning PAN...</span>
-                                          <span>{ocrProgress}%</span>
-                                        </div>
-                                        <div className="h-1.5 w-full bg-brand-50 rounded-full overflow-hidden">
-                                          <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${ocrProgress}%` }}
-                                            className="h-full bg-brand-500"
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {!isScanning && panVerified === true && (
-                                      <div className="flex items-center gap-1.5 text-brand-600 animate-in zoom-in-95 duration-300">
-                                        <CheckCircle className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-black uppercase tracking-wider">AI Verified: Valid PAN Found</span>
-                                      </div>
-                                    )}
-
-                                    {!isScanning && panVerified === false && (
-                                      <div className="flex items-center gap-1.5 text-rose-500 animate-in shake duration-500">
-                                        <XCircle className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-rose-500">AI Warning: PAN Match Failed</span>
-                                      </div>
-                                    )}
+                                    scanning + verified + warning badges here
                                   </div>
-                                )}
+                                )} */}
 
-                                {/* OCR Progress & Badge for Aadhar */}
+                                {/* AI_VALIDATION_DISABLED — Aadhar OCR block commented out
                                 {doc.id === "aadhar" && (
                                   <div className="mt-2 px-1">
-                                    {(isScanning && doc.state === null) && (
-                                      <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1">
-                                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-brand-500">
-                                          <span>AI Scanning Aadhar...</span>
-                                          <span>{ocrProgress}%</span>
-                                        </div>
-                                        <div className="h-1.5 w-full bg-brand-50 rounded-full overflow-hidden">
-                                          <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${ocrProgress}%` }}
-                                            className="h-full bg-brand-500"
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {!isScanning && aadharVerified === true && (
-                                      <div className="flex items-center gap-1.5 text-brand-600 animate-in zoom-in-95 duration-300">
-                                        <CheckCircle className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-black uppercase tracking-wider">AI Verified: Valid Aadhar Found</span>
-                                      </div>
-                                    )}
-
-                                    {!isScanning && aadharVerified === false && (
-                                      <div className="flex items-center gap-1.5 text-rose-500 animate-in shake duration-500">
-                                        <XCircle className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-rose-500">AI Warning: Aadhar Match Failed</span>
-                                      </div>
-                                    )}
+                                    scanning + verified + warning badges here
                                   </div>
-                                )}
+                                )} */}
                               </div>
                             ))}
                             <p className="text-[10px] text-gray-400 italic px-1 flex items-center gap-1.5">
@@ -897,7 +806,7 @@ const DeliveryAuth = () => {
                             </button>
                             <button
                               onClick={handleSendOtp}
-                              disabled={loading || dlVerified !== true || panVerified !== true || aadharVerified !== true}
+                              disabled={loading}
                               className="flex-[2] py-4 bg-black  text-primary-foreground rounded-2xl text-sm font-black tracking-widest uppercase shadow-lg shadow-brand-200 hover:bg-brand-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               {loading ? (
