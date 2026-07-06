@@ -5,8 +5,8 @@ import {
   createBullRedisClient,
 } from "../config/redis.js";
 
-const redisOpts = getRedisOptionsForBull();
 
+// const redisOpts = getRedisOptionsForBull();
 const queueSettings = {
   stalledInterval: 30000,
   maxStalledCount: 2,
@@ -24,7 +24,7 @@ function createNoopQueue() {
 
 export const sellerTimeoutQueue = isRedisEnabled()
   ? new Bull("seller-timeout", {
-      redis: redisOpts,
+      redis: getRedisOptionsForBull(),
       createClient: createBullRedisClient,
       settings: queueSettings,
     })
@@ -32,7 +32,7 @@ export const sellerTimeoutQueue = isRedisEnabled()
 
 export const deliveryTimeoutQueue = isRedisEnabled()
   ? new Bull("delivery-timeout", {
-      redis: redisOpts,
+      redis: getRedisOptionsForBull(),
       createClient: createBullRedisClient,
       settings: queueSettings,
     })
@@ -40,7 +40,7 @@ export const deliveryTimeoutQueue = isRedisEnabled()
 
 export const returnPickupTimeoutQueue = isRedisEnabled()
   ? new Bull("return-pickup-timeout", {
-      redis: redisOpts,
+      redis: getRedisOptionsForBull(),
       createClient: createBullRedisClient,
       settings: queueSettings,
     })
