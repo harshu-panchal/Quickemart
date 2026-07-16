@@ -100,6 +100,22 @@ const DeliveryAuth = () => {
     return () => clearInterval(interval);
   }, [step, timer]);
 
+  // Auto-scroll focused field into view above the keyboard on mobile
+  useEffect(() => {
+    const handleFocusin = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        // Wait for keyboard to finish opening (~300ms) then scroll field into view
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+      }
+    };
+    document.addEventListener("focusin", handleFocusin);
+    return () => document.removeEventListener("focusin", handleFocusin);
+  }, []);
+
+
   const performOCR = async (file, type) => {
     setIsScanning(true);
     setOcrProgress(0);
@@ -319,7 +335,7 @@ const DeliveryAuth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0F4FF] flex flex-col items-center justify-center p-5 font-['Outfit',_sans-serif]">
+    <div className="min-h-screen bg-[#F0F4FF] flex flex-col items-center justify-start overflow-y-auto py-6 px-5 font-['Outfit',_sans-serif]">
       {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -left-32 w-80 h-80 bg-brand-200/40 rounded-full blur-3xl" />
@@ -333,10 +349,10 @@ const DeliveryAuth = () => {
         className="w-full max-w-[420px] relative z-10"
       >
         {/* Card */}
-        <div className="bg-white rounded-[2.5rem] shadow-[0_24px_60px_rgba(99,102,241,0.1)] border border-brand-50 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="bg-white rounded-[2.5rem] shadow-[0_24px_60px_rgba(99,102,241,0.1)] border border-brand-50 overflow-hidden flex flex-col">
 
-          {/* Header with Lottie */}
-          <div className="bg-gradient-to-br from-brand-50 to-purple-50 p-8 flex flex-col items-center relative shrink-0">
+          {/* Header with Lottie — hide animation on very small screens when keyboard is open */}
+          <div className="bg-gradient-to-br from-brand-50 to-purple-50 p-6 sm:p-8 flex flex-col items-center relative shrink-0">
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
               <div className="w-14 h-14 rounded-2xl bg-white/85 backdrop-blur-sm border border-brand-100 shadow-sm flex items-center justify-center overflow-hidden">
                 {logoUrl ? (
@@ -398,7 +414,7 @@ const DeliveryAuth = () => {
           )}
 
           {/* Form Body */}
-          <div className="p-6 pt-4 overflow-y-auto custom-scrollbar">
+          <div className="p-6 pt-4 overflow-y-auto custom-scrollbar flex-1">
             <AnimatePresence mode="wait">
               {step === "form" && (
                 <motion.div
