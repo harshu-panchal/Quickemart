@@ -63,7 +63,14 @@ export function validate(schema, source = "body") {
     // Mutating req.query / req.params is supported by Express and matches
     // the pre-existing req.body pattern; downstream handlers see the
     // sanitized value transparently.
-    req[source] = value;
+    // In ES modules (strict mode), assigning to a getter-only property throws.
+    // Express defines req.query as a getter. We override it here.
+    Object.defineProperty(req, source, {
+      value: value,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
     return next();
   };
 }

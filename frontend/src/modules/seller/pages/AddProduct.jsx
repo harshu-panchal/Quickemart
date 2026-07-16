@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Button from "@shared/components/ui/Button";
 import Badge from "@shared/components/ui/Badge";
 import {
@@ -14,7 +14,6 @@ import {
   HiOutlineTrash,
   HiOutlinePlus,
   HiOutlineSquaresPlus,
-  HiOutlineXMark,
 } from "react-icons/hi2";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -26,6 +25,9 @@ const AddProduct = () => {
   const navigate = useNavigate();
   const [modalTab, setModalTab] = useState("general");
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedGalleryType, setSelectedGalleryType] = useState("");
+  const [pendingSlot, setPendingSlot] = useState(null);
+  const galleryFileInputRef = useRef(null);
 
   const makeSku = (name, index = 1) => {
     const prefix =
@@ -56,8 +58,8 @@ const AddProduct = () => {
     weight: "",
     brand: "",
     mainImage: null,
-    galleryImages: [],
-    galleryImageTypes: [],
+    galleryImages: [null, null, null, null, null],
+    galleryLabels: ["", "", "", "", ""],
     variants: [
       {
         id: Date.now(),
@@ -69,14 +71,6 @@ const AddProduct = () => {
       },
     ],
   });
-
-  const imageTypeOptions = [
-    { value: "front", label: "Front" },
-    { value: "back", label: "Back" },
-    { value: "product_details", label: "Product details image" },
-    { value: "left_side", label: "Left side" },
-    { value: "right_side", label: "Right side" },
-  ];
 
   const [dbCategories, setDbCategories] = useState([]);
   const [isLoadingCats, setIsLoadingCats] = useState(true);
@@ -175,10 +169,18 @@ const AddProduct = () => {
         data.append("mainImage", formData.mainImageFile);
       }
 
-      if (formData.galleryFiles && formData.galleryFiles.length > 0) {
-        formData.galleryFiles.forEach(file => {
-          data.append("galleryImages", file);
-        });
+      // Gallery images — collect non-null slots in order
+      const galleryFilesList = (formData.galleryFiles || []).filter(Boolean);
+      galleryFilesList.forEach(file => {
+        data.append("galleryImages", file);
+      });
+
+      // Send labels only for slots that have images
+      const galleryLabelsList = formData.galleryImages
+        .map((img, i) => (img ? (formData.galleryLabels[i] || "") : null))
+        .filter((l) => l !== null);
+      if (galleryLabelsList.length > 0) {
+        data.append("galleryLabels", JSON.stringify(galleryLabelsList));
       }
 
       // Variants
@@ -199,41 +201,66 @@ const AddProduct = () => {
     }
   };
 
-  const handleImageUpload = (e, type, imageType = null) => {
+  const IMAGE_LABEL_OPTIONS = ["Front", "Back", "Product details image", "Left side", "Right side"];
+
+  const handleRemoveGalleryImage = (idx) => {
+    const newImages = [...formData.galleryImages];
+    const newFiles = [...(formData.galleryFiles || [null, null, null, null, null])];
+    const newLabels = [...formData.galleryLabels];
+    newImages[idx] = null;
+    newFiles[idx] = null;
+    newLabels[idx] = "";
+    setFormData({ ...formData, galleryImages: newImages, galleryFiles: newFiles, galleryLabels: newLabels });
+  };
+
+  const handleGalleryTypeSelect = (e) => {
+    const type = e.target.value;
+    if (!type) {
+      setSelectedGalleryType("");
+      return;
+    }
+    const firstEmpty = formData.galleryImages.findIndex((img) => !img);
+    if (firstEmpty === -1) {
+      toast.error("All 5 gallery slots are already filled.");
+      return;
+    }
+    setSelectedGalleryType(type);
+    setPendingSlot(firstEmpty);
+    galleryFileInputRef.current.value = "";
+    galleryFileInputRef.current.click();
+  };
+
+  const handleGalleryFileChange = (e) => {
+    if (!e.target.files || !e.target.files[0] || pendingSlot === null) return;
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const newImages = [...formData.galleryImages];
+      const newFiles = [...(formData.galleryFiles || [null, null, null, null, null])];
+      const newLabels = [...formData.galleryLabels];
+      newImages[pendingSlot] = reader.result;
+      newFiles[pendingSlot] = file;
+      newLabels[pendingSlot] = selectedGalleryType;
+      setFormData({ ...formData, galleryImages: newImages, galleryFiles: newFiles, galleryLabels: newLabels });
+      setSelectedGalleryType("");
+      setPendingSlot(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageUpload = (e, type) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (type === "main") {
-          setFormData({
-            ...formData,
-            mainImage: reader.result,
-            mainImageFile: file
-          });
-        } else if (type === "gallery" && imageType) {
-          setFormData({
-            ...formData,
-            galleryImages: [...formData.galleryImages, reader.result],
-            galleryFiles: [...(formData.galleryFiles || []), file],
-            galleryImageTypes: [...formData.galleryImageTypes, imageType]
-          });
-        }
+        setFormData({
+          ...formData,
+          mainImage: reader.result,
+          mainImageFile: file
+        });
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  const handleRemoveGalleryImage = (index) => {
-    setFormData({
-      ...formData,
-      galleryImages: formData.galleryImages.filter((_, i) => i !== index),
-      galleryFiles: formData.galleryFiles.filter((_, i) => i !== index),
-      galleryImageTypes: formData.galleryImageTypes.filter((_, i) => i !== index)
-    });
-  };
-
-  const getAvailableImageTypes = () => {
-    return imageTypeOptions.filter(option => !formData.galleryImageTypes.includes(option.value));
   };
 
   return (
@@ -456,10 +483,18 @@ const AddProduct = () => {
                       </label>
                       <input
                         type="number"
+                        min="0"
+                        onKeyDown={(e) => {
+                          if (['-', '+', 'e', 'E'].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
                         value={variant.price}
                         onChange={(e) => {
+                          const val = e.target.value;
+                          if (val !== '' && Number(val) < 0) return;
                           const newVariants = [...formData.variants];
-                          newVariants[index].price = e.target.value;
+                          newVariants[index].price = val;
                           setFormData({ ...formData, variants: newVariants });
                         }}
                         placeholder="500"
@@ -472,10 +507,18 @@ const AddProduct = () => {
                       </label>
                       <input
                         type="number"
+                        min="0"
+                        onKeyDown={(e) => {
+                          if (['-', '+', 'e', 'E'].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
                         value={variant.salePrice}
                         onChange={(e) => {
+                          const val = e.target.value;
+                          if (val !== '' && Number(val) < 0) return;
                           const newVariants = [...formData.variants];
-                          newVariants[index].salePrice = e.target.value;
+                          newVariants[index].salePrice = val;
                           setFormData({ ...formData, variants: newVariants });
                         }}
                         placeholder="450"
@@ -488,10 +531,18 @@ const AddProduct = () => {
                       </label>
                       <input
                         type="number"
+                        min="0"
+                        onKeyDown={(e) => {
+                          if (['-', '+', 'e', 'E'].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
                         value={variant.stock}
                         onChange={(e) => {
+                          const val = e.target.value;
+                          if (val !== '' && Number(val) < 0) return;
                           const newVariants = [...formData.variants];
-                          newVariants[index].stock = e.target.value;
+                          newVariants[index].stock = val;
                           setFormData({ ...formData, variants: newVariants });
                         }}
                         placeholder="10"
@@ -657,87 +708,103 @@ const AddProduct = () => {
               </div>
 
               {/* Gallery Section */}
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
+              <div className="space-y-4">
+                {/* Hidden file input */}
+                <input
+                  ref={galleryFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleGalleryFileChange}
+                />
+
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-widest">
                   Gallery Photos (Max 5)
                 </label>
-                
-                {/* Image Type Selection */}
-                {formData.galleryImages.length < 5 && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase tracking-widest ml-1">
-                      Select Image Type
-                    </label>
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        const selectedType = e.target.value;
-                        if (selectedType) {
-                          const fileInput = document.getElementById(`gallery-file-input-${selectedType}`);
-                          if (fileInput) {
-                            fileInput.click();
-                          }
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-primary/5 transition-all">
-                      <option value="">Select image type to upload...</option>
-                      {getAvailableImageTypes().map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
-                {/* Display Uploaded Images */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  {formData.galleryImages.map((image, index) => {
-                    const imageType = formData.galleryImageTypes[index];
-                    const typeLabel = imageTypeOptions.find(opt => opt.value === imageType)?.label || 'Unknown';
+                {/* Single dropdown - selecting a type auto-opens file picker */}
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    Select Image Type
+                  </p>
+                  <div className="relative">
+                    <select
+                      value={selectedGalleryType}
+                      onChange={handleGalleryTypeSelect}
+                      className="w-full px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none cursor-pointer appearance-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                    >
+                      <option value="">Select image type to upload...</option>
+                      {IMAGE_LABEL_OPTIONS.map((opt) => {
+                        const alreadyUsed = formData.galleryLabels.includes(opt);
+                        if (alreadyUsed) return null;
+                        return (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
+                      <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium ml-1">
+                    Choosing a type will instantly open the file picker.
+                  </p>
+                </div>
+
+                {/* 5 fixed image slots - display only, auto-filled on upload */}
+                <div className="grid grid-cols-5 gap-3">
+                  {[0, 1, 2, 3, 4].map((idx) => {
+                    const image = formData.galleryImages[idx];
+                    const label = formData.galleryLabels[idx];
+                    const hasImage = !!image;
+
                     return (
-                      <div
-                        key={index}
-                        className="aspect-square rounded-md border-2 border-slate-200 bg-slate-50 relative overflow-hidden group">
-                        <img
-                          src={image}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-2 left-2 bg-black/70 text-white text-[8px] font-bold px-2 py-1 rounded uppercase tracking-wider">
-                          {typeLabel}
+                      <div key={idx} className="flex flex-col gap-1.5">
+                        <div
+                          className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center relative overflow-hidden transition-all ${
+                            hasImage
+                              ? "border-slate-200"
+                              : "border-slate-200 bg-slate-50 opacity-70"
+                          }`}
+                        >
+                          {hasImage ? (
+                            <>
+                              <img
+                                src={image}
+                                alt={label}
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveGalleryImage(idx); }}
+                                className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors z-20 shadow"
+                              >
+                                <HiOutlineTrash className="h-3 w-3" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <HiOutlinePlus className="h-5 w-5 text-slate-300" />
+                              <p className="text-[9px] font-bold uppercase tracking-widest mt-1 text-slate-300">
+                                Empty
+                              </p>
+                            </>
+                          )}
                         </div>
-                        <button
-                          onClick={() => handleRemoveGalleryImage(index)}
-                          className="absolute top-2 right-2 bg-rose-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                          <HiOutlineXMark className="h-3 w-3" />
-                        </button>
+                        {/* Label badge below slot */}
+                        {label && (
+                          <p className="text-[8px] font-black text-center text-primary uppercase tracking-wider truncate">
+                            {label}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
-                  
-                  {/* Empty slots */}
-                  {[...Array(5 - formData.galleryImages.length)].map((_, i) => (
-                    <div
-                      key={`empty-${i}`}
-                      className="aspect-square rounded-md border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center">
-                      <HiOutlinePlus className="h-5 w-5 text-slate-200" />
-                      <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
-                        Empty
-                      </p>
-                    </div>
-                  ))}
                 </div>
-
-                {/* Hidden file inputs for each image type */}
-                {getAvailableImageTypes().map((option) => (
-                  <input
-                    key={option.value}
-                    id={`gallery-file-input-${option.value}`}
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => handleImageUpload(e, "gallery", option.value)}
-                  />
-                ))}
               </div>
 
               <p className="text-xs text-slate-600 font-medium italic text-center pt-4 border-t border-slate-50">

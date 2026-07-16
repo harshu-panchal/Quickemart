@@ -68,7 +68,7 @@ const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onClo
                                                     {notif.title}
                                                 </p>
                                                 <span className="text-[9px] font-bold text-slate-400">
-                                                    {new Date(notif.createdAt).toLocaleDateString()}
+                                                    {new Date(notif.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                                 </span>
                                             </div>
                                             <p className="text-[11px] text-slate-500 font-medium leading-relaxed line-clamp-2">

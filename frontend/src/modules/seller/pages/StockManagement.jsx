@@ -429,7 +429,7 @@ const StockManagement = () => {
                                         </div>
                                         <div className="flex items-center justify-end gap-1.5 text-[10px] font-bold text-slate-600">
                                             <HiOutlineCalendarDays className="h-3.5 w-3.5" />
-                                            {new Date(log.createdAt).toLocaleDateString()} • {new Date(log.createdAt).toLocaleTimeString()}
+                                            {new Date(log.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {new Date(log.createdAt).toLocaleTimeString()}
                                         </div>
                                     </div>
                                 </div>

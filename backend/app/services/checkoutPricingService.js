@@ -1,6 +1,7 @@
 import Seller from "../models/seller.js";
 import Category from "../models/category.js";
 import { distanceMeters } from "../utils/geoUtils.js";
+import { getCachedRoute } from "./mapsRouteService.js";
 import {
   HANDLING_FEE_STRATEGY,
   isWalletRedemptionReducesPayableEnabled,
@@ -41,7 +42,7 @@ export function groupHydratedItemsBySeller(hydratedItems = []) {
 
 async function computeDistanceKmForSeller({ sellerId, addressLocation, session = null }) {
   const normalizedLocation = normalizeLocation(addressLocation);
-  if (!normalizedLocation) return 0;
+  if (!normalizedLocation) return { distanceKm: 0, distanceSource: "haversine" };
 
   const query = Seller.findById(sellerId).select("location serviceRadius shopName").lean();
   if (session) query.session(session);
@@ -52,15 +53,33 @@ async function computeDistanceKmForSeller({ sellerId, addressLocation, session =
     throw err;
   }
   const coords = seller?.location?.coordinates;
-  if (!Array.isArray(coords) || coords.length < 2) return 0;
+  if (!Array.isArray(coords) || coords.length < 2) return { distanceKm: 0, distanceSource: "haversine" };
 
   const [sellerLng, sellerLat] = coords;
-  const distanceInMeters = distanceMeters(
-    normalizedLocation.lat,
-    normalizedLocation.lng,
-    Number(sellerLat),
-    Number(sellerLng),
+  
+  const route = await getCachedRoute(
+    { lat: Number(sellerLat), lng: Number(sellerLng) },
+    { lat: normalizedLocation.lat, lng: normalizedLocation.lng },
+    "driving",
+    null,
+    "delivery"
   );
+
+  let distanceInMeters;
+  let distanceSource = "google_routes";
+
+  if (route && route.distanceMeters != null && !route.degraded) {
+    distanceInMeters = route.distanceMeters;
+  } else {
+    distanceInMeters = distanceMeters(
+      normalizedLocation.lat,
+      normalizedLocation.lng,
+      Number(sellerLat),
+      Number(sellerLng),
+    );
+    distanceSource = "haversine_fallback";
+  }
+
   const distanceKm = Number((distanceInMeters / 1000).toFixed(3));
   
   const radius = Number(seller.serviceRadius || 5);
@@ -70,7 +89,7 @@ async function computeDistanceKmForSeller({ sellerId, addressLocation, session =
     throw err;
   }
 
-  return distanceKm;
+  return { distanceKm, distanceSource };
 }
 
 function sumField(rows, field) {
@@ -437,7 +456,7 @@ export async function buildCheckoutPricingSnapshot({
 
   for (const sellerId of sellerIds) {
     const sellerItems = itemsBySeller.get(sellerId) || [];
-    const distanceKm = await computeDistanceKmForSeller({
+    const { distanceKm, distanceSource } = await computeDistanceKmForSeller({
       sellerId,
       addressLocation: address?.location,
       session,
@@ -452,6 +471,7 @@ export async function buildCheckoutPricingSnapshot({
     const breakdown = await generateOrderPaymentBreakdown({
       preHydratedItems: sellerItems,
       distanceKm,
+      distanceSource,
       discountTotal: sellerDiscount,
       taxTotal: 0,
       session,

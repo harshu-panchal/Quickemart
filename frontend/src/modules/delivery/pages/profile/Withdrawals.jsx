@@ -208,7 +208,7 @@ const Withdrawals = () => {
                                         <div>
                                             <p className="font-bold text-gray-900">₹{Math.abs(item.amount).toLocaleString()}</p>
                                             <p className="text-[10px] font-medium text-gray-400 mt-0.5">
-                                                {new Date(item.date).toLocaleDateString()} • {item.id}
+                                                {new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {item.id}
                                             </p>
                                         </div>
                                     </div>

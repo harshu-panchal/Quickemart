@@ -5,12 +5,12 @@ import {
     getPendingReviews,
     updateReviewStatus
 } from "../controller/reviewController.js";
-import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
+import { verifyToken, allowRoles, optionalVerifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // Public routes
-router.get("/product/:productId", getProductReviews);
+router.get("/product/:productId", optionalVerifyToken, getProductReviews);
 
 // Authenticated User routes
 router.post("/submit", verifyToken, submitReview);

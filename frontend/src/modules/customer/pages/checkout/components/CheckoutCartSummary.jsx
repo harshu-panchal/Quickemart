@@ -46,26 +46,27 @@ const CheckoutCartSummary = React.memo(function CheckoutCartSummary({
               Move to wishlist
             </button>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2 bg-primary rounded-lg px-2 py-1">
-              <button
-                onClick={() =>
-                  item.quantity > 1
-                    ? onUpdateQuantity(item.id, -1, item.variantSku)
-                    : onRemoveFromCart(item.id, item.variantSku)
-                }
-                className="text-white p-1 hover:bg-white/20 rounded transition-colors">
-                <Minus size={14} strokeWidth={3} />
-              </button>
-              <span className="text-white font-bold min-w-[20px] text-center">
-                {item.quantity}
-              </span>
-              <button
-                onClick={() => onUpdateQuantity(item.id, 1, item.variantSku)}
-                className="text-white p-1 hover:bg-white/20 rounded transition-colors">
-                <Plus size={14} strokeWidth={3} />
-              </button>
-            </div>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2 bg-primary rounded-lg px-2 py-1">
+                <button
+                  onClick={() => {
+                    const productId = item.id || item._id;
+                    return item.quantity > 1
+                      ? onUpdateQuantity(productId, -1, item.variantSku)
+                      : onRemoveFromCart(productId, item.variantSku);
+                  }}
+                  className="text-white p-1 hover:bg-white/20 rounded transition-colors">
+                  <Minus size={14} strokeWidth={3} />
+                </button>
+                <span className="text-white font-bold min-w-[20px] text-center">
+                  {item.quantity}
+                </span>
+                <button
+                  onClick={() => onUpdateQuantity(item.id || item._id, 1, item.variantSku)}
+                  className="text-white p-1 hover:bg-white/20 rounded transition-colors">
+                  <Plus size={14} strokeWidth={3} />
+                </button>
+              </div>
             {(() => {
               const mrp = Number(item.price || 0);
               const sale = Number(item.salePrice || 0);

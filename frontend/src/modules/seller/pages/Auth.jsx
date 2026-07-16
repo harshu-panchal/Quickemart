@@ -39,6 +39,7 @@ const createInitialVerificationState = () => ({
   isSending: false,
   isVerifying: false,
   verifiedValue: "",
+  exists: false,
 });
 
 const REQUIRED_DOCUMENT_CONFIG = [
@@ -56,12 +57,32 @@ const Auth = () => {
   const { login } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    import('@core/auth/activeRoleStore').then(({ setActiveRole, ROLES }) => {
+        setActiveRole(ROLES.SELLER);
+    });
+  }, []);
+
   const appName = settings?.appName || "App";
   const logoUrl = settings?.logoUrl || "";
   const [verifications, setVerifications] = useState({
     email: createInitialVerificationState(),
     phone: createInitialVerificationState(),
   });
+  const [forgotPasswordStep, setForgotPasswordStep] = useState(0);
+  const [resetData, setResetData] = useState({
+    channel: "email",
+    rawValue: "",
+    otp: "",
+    newPassword: "",
+    confirmPassword: "",
+    token: "",
+    isSending: false,
+    isVerifying: false,
+    isResetting: false,
+  });
+
 
   const [formData, setFormData] = useState({
     email: "",
@@ -163,6 +184,26 @@ const Auth = () => {
     }
   };
 
+  const handleBlur = async (e) => {
+    if (isLogin) return;
+    const { name, value } = e.target;
+    
+    if ((name === "email" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) || 
+        (name === "phone" && /^\d{10}$/.test(value))) {
+      try {
+        const res = await sellerApi.checkExists({ [name]: value });
+        if (res.data?.result?.exists) {
+          updateVerificationState(name, { exists: true });
+          toast.error(`A seller with this ${name} already exists.`);
+        } else {
+          updateVerificationState(name, { exists: false });
+        }
+      } catch (err) {
+        // ignore errors on blur
+      }
+    }
+  };
+
   const handleDocumentChange = (e, docName) => {
     setDocuments({ ...documents, [docName]: e.target.files[0] });
   };
@@ -207,6 +248,7 @@ const Auth = () => {
     } catch (error) {
       updateVerificationState(field, {
         isSending: false,
+        isOtpVisible: false,
         status: "idle",
       });
       toast.error(error.response?.data?.message || "Failed to send OTP");
@@ -261,6 +303,68 @@ const Auth = () => {
 
     e.preventDefault();
     panel.scrollTop += e.deltaY;
+  };
+
+
+  // --- Forgot Password Handlers ---
+  const handleSendResetOtp = async (e) => {
+    e.preventDefault();
+    if (!resetData.rawValue) return;
+    setResetData(prev => ({ ...prev, isSending: true }));
+    try {
+      await sellerApi.sendResetOtp({ channel: resetData.channel, rawValue: resetData.rawValue });
+      toast.success(`OTP sent to ${resetData.rawValue}`);
+      setForgotPasswordStep(2);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to send OTP");
+    } finally {
+      setResetData(prev => ({ ...prev, isSending: false }));
+    }
+  };
+
+  const handleVerifyResetOtp = async (e) => {
+    e.preventDefault();
+    if (resetData.otp.length !== 4) return;
+    setResetData(prev => ({ ...prev, isVerifying: true }));
+    try {
+      const payload = {
+        channel: resetData.channel,
+        rawValue: resetData.rawValue,
+        otp: resetData.otp
+      };
+      const response = await sellerApi.verifyResetOtp(payload);
+      setResetData(prev => ({ ...prev, token: response.data?.result?.verificationToken || response.data?.result?.token || response.data?.verificationToken }));
+      toast.success("OTP verified successfully");
+      setForgotPasswordStep(3);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Invalid OTP");
+    } finally {
+      setResetData(prev => ({ ...prev, isVerifying: false }));
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (resetData.newPassword !== resetData.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    setResetData(prev => ({ ...prev, isResetting: true }));
+    try {
+      await sellerApi.resetPassword({
+        channel: resetData.channel,
+        rawValue: resetData.rawValue,
+        token: resetData.token,
+        newPassword: resetData.newPassword
+      });
+      toast.success("Password reset successfully. Please login.");
+      setForgotPasswordStep(0);
+      setResetData({ channel: "email", rawValue: "", otp: "", newPassword: "", confirmPassword: "", token: "", isSending: false, isVerifying: false, isResetting: false });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to reset password");
+    } finally {
+      setResetData(prev => ({ ...prev, isResetting: false }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -330,7 +434,7 @@ const Auth = () => {
 
       const response = isLogin
         ? await sellerApi.login({
-          email: formData.email,
+          emailOrPhone: formData.email,
           password: formData.password,
         })
         : await (() => {
@@ -523,6 +627,121 @@ const Auth = () => {
                 </p>
               </div>
 
+                            {forgotPasswordStep > 0 ? (
+                <div className="space-y-4">
+                  {forgotPasswordStep === 1 && (
+                    <form onSubmit={handleSendResetOtp} className="space-y-4">
+                      <div className="relative group">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                          <User size={18} />
+                        </div>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Email or Phone Number"
+                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                          value={resetData.rawValue}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const isPhone = /^\d/.test(val);
+                            setResetData({ ...resetData, rawValue: val, channel: isPhone ? 'phone' : 'email' });
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={resetData.isSending || !resetData.rawValue}
+                        className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {resetData.isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Send OTP"}
+                        <ArrowRight size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForgotPasswordStep(0)}
+                        className="w-full flex items-center justify-center bg-slate-100 text-slate-700 p-4 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-slate-200 transition-colors"
+                      >
+                        Back to Login
+                      </button>
+                    </form>
+                  )}
+                  {forgotPasswordStep === 2 && (
+                    <form onSubmit={handleVerifyResetOtp} className="space-y-4">
+                      <div className="relative group">
+                        <input
+                          type="text"
+                          required
+                          maxLength={4}
+                          placeholder="Enter 4-digit OTP"
+                          className="w-full px-6 py-4 text-center tracking-[0.5em] bg-slate-50 border-2 border-transparent rounded-lg text-xl font-black text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 placeholder:tracking-normal placeholder:font-bold placeholder:text-sm"
+                          value={resetData.otp}
+                          onChange={(e) => setResetData({ ...resetData, otp: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={resetData.isVerifying || resetData.otp.length !== 4}
+                        className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {resetData.isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify OTP"}
+                        <ArrowRight size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForgotPasswordStep(1)}
+                        className="w-full flex items-center justify-center bg-slate-100 text-slate-700 p-4 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-slate-200 transition-colors"
+                      >
+                        Change Contact Info
+                      </button>
+                    </form>
+                  )}
+                  {forgotPasswordStep === 3 && (
+                    <form onSubmit={handleResetPassword} className="space-y-4">
+                      <div className="relative group">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                          <Lock size={18} />
+                        </div>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="New Password"
+                          className="w-full pl-12 pr-14 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                          value={resetData.newPassword}
+                          onChange={(e) => setResetData({ ...resetData, newPassword: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors px-2"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      <div className="relative group">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                          <Lock size={18} />
+                        </div>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="Confirm New Password"
+                          className="w-full pl-12 pr-14 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                          value={resetData.confirmPassword}
+                          onChange={(e) => setResetData({ ...resetData, confirmPassword: e.target.value })}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={resetData.isResetting}
+                        className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {resetData.isResetting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Reset Password"}
+                        <ArrowRight size={18} />
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* LOGIN OR SIGNUP STEP 1 */}
                 {(isLogin || signupStep === 1) && (
@@ -537,10 +756,15 @@ const Auth = () => {
                             type="text"
                             name="name"
                             required
+                            maxLength={50}
+                            pattern="[a-zA-Z\s]*"
                             placeholder="Owner Name"
                             className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
                             value={formData.name}
-                            onChange={handleChange}
+                            onChange={(e) => {
+                                e.target.value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                                handleChange(e);
+                            }}
                           />
                         </div>
                         <div className="relative group">
@@ -565,15 +789,16 @@ const Auth = () => {
                         <Mail size={18} />
                       </div>
                       <input
-                        type="email"
+                        type={isLogin ? "text" : "email"}
                         name="email"
                         required
-                        inputMode="email"
+                        inputMode={isLogin ? "text" : "email"}
                         autoComplete="email"
-                        placeholder="Business Email"
+                        placeholder={isLogin ? "Email or Phone Number" : "Business Email"}
                         className="w-full pl-12 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
                         value={formData.email}
                         onChange={handleChange}
+                        onBlur={handleBlur}
                       />
                       {!isLogin && (
                         <button
@@ -582,6 +807,7 @@ const Auth = () => {
                           disabled={
                             verifications.email.isSending ||
                             verifications.email.status === "verified" ||
+                            verifications.email.exists ||
                             !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email || "")
                           }
                           className={`absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${verifications.email.status === "verified"
@@ -646,6 +872,7 @@ const Auth = () => {
                             className="w-full pl-12 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
                             value={formData.phone}
                             onChange={handleChange}
+                            onBlur={handleBlur}
                           />
                           <button
                             type="button"
@@ -653,7 +880,8 @@ const Auth = () => {
                             disabled={
                               verifications.phone.isSending ||
                               verifications.phone.status === "verified" ||
-                              !/^[0-9]{10}$/.test(formData.phone || "")
+                              verifications.phone.exists ||
+                              !/^\d{10}$/.test(formData.phone || "")
                             }
                             className={`absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${verifications.phone.status === "verified"
                               ? "bg-brand-100 text-brand-700 cursor-default"
@@ -719,6 +947,7 @@ const Auth = () => {
                         value={formData.password}
                         onChange={handleChange}
                       />
+
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -727,6 +956,17 @@ const Auth = () => {
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
+                    {isLogin && (
+                      <div className="flex justify-end mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setForgotPasswordStep(1)}
+                          className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                        >
+                          Forgot Password?
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -930,6 +1170,7 @@ const Auth = () => {
                   </button>
                 </div>
               </form>
+              )}
 
               <div className="pt-1 border-t border-slate-50 flex flex-col items-center gap-1">
                 <p className="text-slate-600 font-bold text-sm">

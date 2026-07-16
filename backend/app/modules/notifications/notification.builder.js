@@ -343,6 +343,14 @@ function eventDefinition(eventType) {
           },
         ],
       };
+    case NOTIFICATION_EVENTS.PRODUCT_MODERATION_REQUEST:
+      return {
+        role: NOTIFICATION_ROLES.ADMIN,
+        recipientIds: (payload) => normalizeIdList(payload.adminIds),
+        title: () => "Product Moderation Request",
+        body: (payload) =>
+          `Seller requested ${payload.action === 'update' ? 'an update to' : 'to create'} product: ${truncateText(payload.productName)}. Pending admin approval.`,
+      };
     case NOTIFICATION_EVENTS.LOW_STOCK_ALERT:
       return {
         role: NOTIFICATION_ROLES.SELLER,

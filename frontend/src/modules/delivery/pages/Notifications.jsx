@@ -162,7 +162,7 @@ const Notifications = () => {
                         </p>
                         <div className="flex items-center text-[10px] text-gray-400 font-bold uppercase tracking-wider">
                           <Clock size={10} className="mr-1" />
-                          {new Date(notification.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(notification.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
                     </div>

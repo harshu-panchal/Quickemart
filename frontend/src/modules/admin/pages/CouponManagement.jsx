@@ -141,9 +141,9 @@ const CouponManagement = () => {
                 ...formData,
                 discountValue: Number(formData.discountValue),
                 minOrderValue: formData.minOrderValue ? Number(formData.minOrderValue) : 0,
-                maxDiscount: formData.maxDiscount ? Number(formData.maxDiscount) : undefined,
-                usageLimit: formData.usageLimit ? Number(formData.usageLimit) : undefined,
-                perUserLimit: formData.perUserLimit ? Number(formData.perUserLimit) : 1,
+                maxDiscount: formData.maxDiscount ? Number(formData.maxDiscount) : null,
+                usageLimit: formData.usageLimit ? Number(formData.usageLimit) : null,
+                perUserLimit: formData.perUserLimit ? Number(formData.perUserLimit) : null,
                 validFrom: formData.validFrom,
                 validTill: formData.validTill,
             };
@@ -319,14 +319,42 @@ const CouponManagement = () => {
                                         <div className="flex items-center gap-2 text-slate-500">
                                             <HiOutlineCalendarDays className="h-4 w-4" />
                                             <span className="text-[10px] font-bold uppercase tracking-tighter">
-                                                {c.validFrom ? new Date(c.validFrom).toLocaleDateString() : '—'} - {c.validTill ? new Date(c.validTill).toLocaleDateString() : '—'}
+                                                {c.validFrom ? new Date(c.validFrom).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'} - {c.validTill ? new Date(c.validTill).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-6 text-center">
-                                        <Badge variant={c.isActive ? 'success' : 'secondary'} className="text-[9px] font-black uppercase">
-                                            {c.isActive ? 'active' : 'inactive'}
-                                        </Badge>
+                                        {(() => {
+                                            const now = new Date();
+                                            const till = c.validTill ? new Date(c.validTill) : null;
+                                            const from = c.validFrom ? new Date(c.validFrom) : null;
+                                            
+                                            let status = 'inactive';
+                                            let variant = 'gray';
+                                            
+                                            if (!c.isActive) {
+                                                status = 'inactive';
+                                                variant = 'gray';
+                                            } else if (till && till < now) {
+                                                status = 'expired';
+                                                variant = 'error';
+                                            } else if (from && from > now) {
+                                                status = 'scheduled';
+                                                variant = 'warning';
+                                            } else if (c.usageLimit && (c.usedCount || 0) >= c.usageLimit) {
+                                                status = 'exhausted';
+                                                variant = 'gray';
+                                            } else {
+                                                status = 'active';
+                                                variant = 'success';
+                                            }
+                                            
+                                            return (
+                                                <Badge variant={variant} className="text-[9px] font-black uppercase">
+                                                    {status}
+                                                </Badge>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="px-4 py-6">
                                         <div className="flex items-center justify-end gap-2">
@@ -388,7 +416,7 @@ const CouponManagement = () => {
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={() => handleDelete(deleteTarget.id)}
+                                        onClick={() => handleDelete(deleteTarget._id)}
                                         className="px-4 py-2.5 bg-rose-600 text-white rounded-xl font-medium hover:bg-rose-700 transition-colors"
                                     >
                                         Delete
@@ -422,7 +450,14 @@ const CouponManagement = () => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Discount Kind</label>
                             <select
                                 value={formData.discountType}
-                                onChange={(e) => setFormData({ ...formData, discountType: e.target.value })}
+                                onChange={(e) => {
+                                    const newType = e.target.value;
+                                    let currentVal = formData.discountValue;
+                                    if (newType === 'percentage' && Number(currentVal) > 100) {
+                                        currentVal = '100';
+                                    }
+                                    setFormData({ ...formData, discountType: newType, discountValue: currentVal });
+                                }}
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none"
                             >
                                 <option value="percentage">Percentage (%)</option>
@@ -457,9 +492,18 @@ const CouponManagement = () => {
                             <input
                                 required
                                 type="number"
+                                min={0}
+                                max={formData.discountType === 'percentage' ? 100 : undefined}
                                 onWheel={(e) => e.target.blur()}
+                                onKeyDown={(e) => { if (['-', 'e', 'E', '+'].includes(e.key)) e.preventDefault(); }}
                                 value={formData.discountValue}
-                                onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
+                                onChange={(e) => {
+                                    let val = e.target.value;
+                                    if (formData.discountType === 'percentage' && Number(val) > 100) {
+                                        val = '100';
+                                    }
+                                    setFormData({ ...formData, discountValue: val });
+                                }}
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none"
                             />
                         </div>
@@ -468,7 +512,9 @@ const CouponManagement = () => {
                             <input
                                 required
                                 type="number"
+                                min={0}
                                 onWheel={(e) => e.target.blur()}
+                                onKeyDown={(e) => { if (['-', 'e', 'E', '+'].includes(e.key)) e.preventDefault(); }}
                                 value={formData.minOrderValue}
                                 onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none"
@@ -481,7 +527,9 @@ const CouponManagement = () => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Discount (optional)</label>
                             <input
                                 type="number"
+                                min={0}
                                 onWheel={(e) => e.target.blur()}
+                                onKeyDown={(e) => { if (['-', 'e', 'E', '+'].includes(e.key)) e.preventDefault(); }}
                                 value={formData.maxDiscount}
                                 onChange={(e) => setFormData({ ...formData, maxDiscount: e.target.value })}
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none"
@@ -491,7 +539,9 @@ const CouponManagement = () => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Uses (optional)</label>
                             <input
                                 type="number"
+                                min={0}
                                 onWheel={(e) => e.target.blur()}
+                                onKeyDown={(e) => { if (['-', 'e', 'E', '+'].includes(e.key)) e.preventDefault(); }}
                                 value={formData.usageLimit}
                                 onChange={(e) => setFormData({ ...formData, usageLimit: e.target.value })}
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none"
@@ -506,6 +556,7 @@ const CouponManagement = () => {
                                 type="number"
                                 min={1}
                                 onWheel={(e) => e.target.blur()}
+                                onKeyDown={(e) => { if (['-', 'e', 'E', '+'].includes(e.key)) e.preventDefault(); }}
                                 value={formData.perUserLimit}
                                 onChange={(e) => setFormData({ ...formData, perUserLimit: e.target.value })}
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none"

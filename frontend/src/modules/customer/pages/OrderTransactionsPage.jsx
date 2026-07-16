@@ -98,7 +98,7 @@ const OrderTransactionsPage = () => {
                                                 </p>
                                                 {createdAt && (
                                                     <p className="text-[11px] text-slate-500 mt-0.5">
-                                                        {createdAt.toLocaleDateString()},{' '}
+                                                        {createdAt.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })},{' '}
                                                         {createdAt.toLocaleTimeString([], {
                                                             hour: '2-digit',
                                                             minute: '2-digit',

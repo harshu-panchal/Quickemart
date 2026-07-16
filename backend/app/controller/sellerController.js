@@ -3,6 +3,7 @@ import Transaction from "../models/transaction.js";
 import { handleResponse, calculateDistance } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
+import { buildKey, invalidate } from "../services/cacheService.js";
 
 /* ===============================
    GET NEARBY SELLERS
@@ -153,7 +154,7 @@ export const getSellerProfile = async (req, res) => {
 ================================ */
 export const updateSellerProfile = async (req, res) => {
   try {
-    const { name, shopName, phone, address, locality, pincode, city, state, lat, lng, radius } = req.body;
+    const { name, shopName, phone, address, locality, pincode, city, state, lat, lng, radius, isActive } = req.body;
 
     // Find seller
     const seller = await Seller.findById(req.user.id);
@@ -170,6 +171,7 @@ export const updateSellerProfile = async (req, res) => {
     if (pincode !== undefined) seller.pincode = pincode;
     if (city !== undefined) seller.city = city;
     if (state !== undefined) seller.state = state;
+    if (isActive !== undefined) seller.isActive = isActive;
 
     // Validate and update geo data
     if (lat !== undefined && lng !== undefined) {
@@ -196,6 +198,17 @@ export const updateSellerProfile = async (req, res) => {
     invalidateSellerName(req.user.id).catch((err) => {
       console.warn("[Seller] Name cache invalidation failed:", err.message);
     });
+
+    if (isActive !== undefined) {
+      Promise.all([
+        invalidate(buildKey("sellers", "nearby", "*")),
+        invalidate(buildKey("catalog", "productList", "*")),
+        invalidate(buildKey("experience", "public", "*")),
+        invalidate(buildKey("offersections", "public", "*")),
+      ]).catch((err) => {
+        console.warn("[Seller] Nearby/catalog/homepage cache invalidation failed:", err.message);
+      });
+    }
 
     return handleResponse(
       res,

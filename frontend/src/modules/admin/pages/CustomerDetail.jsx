@@ -207,7 +207,7 @@ const CustomerDetail = () => {
                             <div>
                                 <h3 className="text-3xl font-black text-slate-900">{customer.name}</h3>
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                                    Customer since {new Date(customer.joinedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    Customer since {new Date(customer.joinedDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                 </p>
                             </div>
 
@@ -360,7 +360,7 @@ const CustomerDetail = () => {
                                             </td>
                                             <td className="py-5">
                                                 <p className="text-[10px] font-black text-slate-400 uppercase">
-                                                    {new Date(order.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                    {new Date(order.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                                 </p>
                                             </td>
                                             <td className="py-5 text-center">

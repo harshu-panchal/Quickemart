@@ -521,11 +521,13 @@ export async function createPaymentOrderForOrderRef({
 
   const provider = getActivePaymentProvider();
   const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}`;
+  const callbackUrl = `${process.env.FRONTEND_URL.replace('5173', process.env.PORT || '7000')}/api/payment/webhook/phonepe`;
 
   const initResult = await provider.initiatePayment({
     merchantOrderId,
     amountPaise,
     redirectUrl,
+    callbackUrl,
   });
 
   const paymentData = {

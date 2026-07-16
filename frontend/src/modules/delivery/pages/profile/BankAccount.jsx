@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Landmark, CreditCard, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Button from "@/shared/components/ui/Button";
@@ -7,6 +7,58 @@ import Input from "@/shared/components/ui/Input";
 
 const BankAccount = () => {
   const navigate = useNavigate();
+
+  const [newAccount, setNewAccount] = useState("");
+  const [confirmAccount, setConfirmAccount] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  
+  const [accountError, setAccountError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+  const [ifscError, setIfscError] = useState("");
+
+  const handleNewAccountChange = (e) => {
+    // Only allow numbers
+    const value = e.target.value.replace(/\D/g, "");
+    setNewAccount(value);
+    
+    if (value.length > 0 && (value.length < 9 || value.length > 18)) {
+      setAccountError("Account number must be between 9 and 18 digits");
+    } else {
+      setAccountError("");
+    }
+    
+    if (confirmAccount && value !== confirmAccount) {
+      setConfirmError("Account numbers do not match");
+    } else if (confirmAccount) {
+      setConfirmError("");
+    }
+  };
+
+  const handleConfirmAccountChange = (e) => {
+    // Only allow numbers
+    const value = e.target.value.replace(/\D/g, "");
+    setConfirmAccount(value);
+    
+    if (value && value !== newAccount) {
+      setConfirmError("Account numbers do not match");
+    } else {
+      setConfirmError("");
+    }
+  };
+
+  const handleIfscChange = (e) => {
+    // Only allow alphanumeric, auto-capitalize
+    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    setIfscCode(value);
+    
+    // IFSC Regex: 4 letters, 1 zero, 6 alphanumeric
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (value.length > 0 && !ifscRegex.test(value)) {
+      setIfscError("Invalid IFSC format (e.g. HDFC0001234)");
+    } else {
+      setIfscError("");
+    }
+  };
 
   const bankDetails = {
     accountHolder: "RAHUL KUMAR",
@@ -34,29 +86,29 @@ const BankAccount = () => {
 
       <div className="p-4 max-w-lg mx-auto space-y-6">
         {/* Bank Card Visual */}
-        <div className="bg-gradient-to-br from-brand-900 to-brand-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
           
           <div className="flex justify-between items-start mb-8 relative z-10">
             <Landmark size={32} className="text-white/80" />
-            <span className="bg-brand-500/20 text-brand-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-brand-500/30 flex items-center">
+            <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-green-500/30 flex items-center">
               <CheckCircle2 size={12} className="mr-1" /> Active
             </span>
           </div>
 
           <div className="space-y-1 relative z-10">
-            <p className="text-brand-200 text-xs uppercase tracking-wider">Account Number</p>
+            <p className="text-gray-400 text-xs uppercase tracking-wider">Account Number</p>
             <p className="font-mono text-2xl tracking-widest">{bankDetails.accountNumber}</p>
           </div>
 
           <div className="flex justify-between items-end mt-8 relative z-10">
             <div>
-              <p className="text-brand-200 text-xs uppercase tracking-wider mb-1">Account Holder</p>
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Account Holder</p>
               <p className="font-bold text-lg">{bankDetails.accountHolder}</p>
             </div>
             <div className="text-right">
               <p className="text-white font-bold">{bankDetails.bankName}</p>
-              <p className="text-brand-200 text-xs">{bankDetails.ifsc}</p>
+              <p className="text-gray-400 text-xs">{bankDetails.ifsc}</p>
             </div>
           </div>
         </div>
@@ -81,18 +133,35 @@ const BankAccount = () => {
               label="New Account Number" 
               placeholder="Enter account number" 
               icon={CreditCard}
+              value={newAccount}
+              onChange={handleNewAccountChange}
+              helperText={accountError}
+              error={!!accountError}
             />
             <Input 
               label="Confirm Account Number" 
               placeholder="Re-enter account number" 
               icon={CreditCard}
+              value={confirmAccount}
+              onChange={handleConfirmAccountChange}
+              helperText={confirmError}
+              error={!!confirmError}
             />
             <Input 
               label="IFSC Code" 
               placeholder="Enter IFSC code" 
               icon={Landmark}
+              value={ifscCode}
+              onChange={handleIfscChange}
+              helperText={ifscError}
+              error={!!ifscError}
+              maxLength={11}
             />
-            <Button className="w-full mt-2" variant="outline">
+            <Button 
+              className="w-full mt-2" 
+              variant="outline"
+              disabled={!!accountError || !!confirmError || !!ifscError || !newAccount || !confirmAccount || !ifscCode}
+            >
               Verify & Update
             </Button>
           </div>

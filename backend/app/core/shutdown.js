@@ -309,16 +309,6 @@ function registerShutdownHandlers() {
   
   // Handle uncaught exceptions
   process.on('uncaughtException', (error) => {
-    // Redis ECONNREFUSED errors are handled by ioredis's own retry/error system.
-    // Letting them reach uncaughtException causes a cascade of shutdown loops.
-    // Log and continue — ioredis will retry or give up gracefully on its own.
-    if (
-      error.code === 'ECONNREFUSED' &&
-      (error.syscall === 'connect' || String(error.message).includes('ECONNREFUSED'))
-    ) {
-      console.warn('[Shutdown] Suppressed Redis ECONNREFUSED — ioredis will handle retries:', error.message);
-      return;
-    }
     console.error('[Shutdown] Uncaught Exception:', error);
     gracefulShutdown('uncaughtException');
   });

@@ -72,7 +72,7 @@ const ActiveDeliveryBoys = () => {
                 todayEarnings: 0, // Mock earnings
                 location: r.currentArea || 'Unknown',
                 lastSync: 'Now',
-                joinDate: new Date(r.createdAt).toLocaleDateString()
+                joinDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
             }));
 
             setRiders(mappedRiders);
@@ -118,8 +118,30 @@ const handleAction = (type, rider) => {
     }
 };
 
+const validateForm = () => {
+    if (!/^[a-zA-Z\s]+$/.test(formState.name.trim())) {
+        toast.error("Name should contain only alphabets and spaces (no special characters or numbers).");
+        return false;
+    }
+    if (!/^[6-9][0-9]{9}$/.test(formState.phone.trim())) {
+        toast.error("Mobile number must be exactly 10 digits and start with 6, 7, 8, or 9.");
+        return false;
+    }
+    if (formState.vehicle !== 'Cycle' && !/^[A-Za-z]{2} [0-9]{2} [A-Za-z]{1,2} [0-9]{4}$/.test(formState.vehicleNum.trim())) {
+        toast.error("Vehicle registration number must follow the format 'AA 00 AA 0000' with spaces (e.g., MH 12 AB 1234).");
+        return false;
+    }
+    if (formState.location.trim().length < 3) {
+        toast.error("Please enter a valid operational area (min 3 chars).");
+        return false;
+    }
+    return true;
+};
+
 const handleOnboardSubmit = (e) => {
     e.preventDefault();
+    if (!validateForm()) return;
+
     const newRider = {
         ...formState,
         id: 'r' + (riders.length + 1),
@@ -128,18 +150,22 @@ const handleOnboardSubmit = (e) => {
         totalOrders: 0,
         todayEarnings: 0,
         lastSync: 'Just now',
-        joinDate: new Date().toLocaleDateString()
+        joinDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
     };
     setRiders([newRider, ...riders]);
     setIsOnboardModalOpen(false);
     setFormState({ name: '', phone: '', email: '', vehicle: '', vehicleNum: '', location: '' });
+    toast.success("New rider added successfully");
 };
 
 const handleEditSubmit = (e) => {
     e.preventDefault();
+    if (!validateForm()) return;
+    
     setRiders(riders.map(r => r.id === selectedRider.id ? { ...r, ...formState } : r));
     setIsEditModalOpen(false);
     setSelectedRider(null);
+    toast.success("Rider details updated successfully");
 };
 
 const stats = [
@@ -532,17 +558,19 @@ return (
                                         </select>
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Registration Vehicle No.</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={formState.vehicleNum}
-                                        onChange={(e) => setFormState({ ...formState, vehicleNum: e.target.value })}
-                                        className="w-full px-5 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10 transition-all"
-                                        placeholder="e.g. MH-12-AB-0000"
-                                    />
-                                </div>
+                                {formState.vehicle !== 'Cycle' && (
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Registration Vehicle No.</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={formState.vehicleNum}
+                                            onChange={(e) => setFormState({ ...formState, vehicleNum: e.target.value.toUpperCase() })}
+                                            className="w-full px-5 py-3.5 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10 transition-all"
+                                            placeholder="e.g. MH 12 AB 0000"
+                                        />
+                                    </div>
+                                )}
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assigned Operational Area</label>
                                     <input

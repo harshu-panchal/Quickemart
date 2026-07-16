@@ -1,5 +1,6 @@
 import Product from "../../models/product.js";
 import Category from "../../models/category.js";
+import Seller from "../../models/seller.js";
 import {
   PRODUCT_APPROVAL_STATUS,
   resolveProductApprovalStatus,
@@ -327,12 +328,20 @@ export async function hydrateOrderItems(
   const products = await productQuery;
 
   const productMap = new Map(products.map((product) => [String(product._id), product]));
+  
+  const sellerIds = [...new Set(products.map((p) => String(p.sellerId)).filter(Boolean))];
+  const sellers = await Seller.find({ _id: { $in: sellerIds } }).select("_id isActive shopName").lean();
+  const sellerMap = new Map(sellers.map((s) => [String(s._id), s]));
 
   return orderItems.map((item) => {
     const productId = String(item.product || item.productId || item._id || item.id);
     const product = productMap.get(productId);
     if (!product) {
       throw new Error(`Product not found for line item: ${productId}`);
+    }
+    const seller = sellerMap.get(String(product.sellerId));
+    if (!seller || !seller.isActive) {
+      throw new Error(`The shop "${seller?.shopName || "Seller"}" is currently closed and not accepting orders.`);
     }
     if (product.status !== "active") {
       throw new Error(`Product is not available for purchase: ${product.name}`);
@@ -384,6 +393,7 @@ export async function generateOrderPaymentBreakdown({
   items = [],
   preHydratedItems = null,
   distanceKm = 0,
+  distanceSource = "haversine",
   discountTotal = 0,
   taxTotal = 0,
   tipTotal = 0,
@@ -511,6 +521,7 @@ export async function generateOrderPaymentBreakdown({
   const snapshots = {
     deliverySettings: {
       ...effectiveSettings,
+      distanceSource,
     },
     categoryCommissionSettings: categories.map((category) => ({
       headerCategoryId: String(category._id),

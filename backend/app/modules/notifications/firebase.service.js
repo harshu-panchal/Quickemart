@@ -88,6 +88,12 @@ export async function sendFCM(tokens = [], payload = {}) {
         ...(image ? { image } : {}),
       },
       data,
+      android: {
+        notification: {
+          sound: (data.eventType === "NEW_ORDER" || data.eventType === "order") ? "order_alert" : "default",
+          channelId: (data.eventType === "NEW_ORDER" || data.eventType === "order") ? "order_alert" : "default",
+        }
+      },
       webpush: {
         headers: {
           Urgency: "high",

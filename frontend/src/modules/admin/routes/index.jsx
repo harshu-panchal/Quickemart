@@ -21,6 +21,7 @@ import {
   Terminal,
   Sparkles,
   User,
+  Store,
 } from "lucide-react";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -137,7 +138,7 @@ const navItems = [
   },
   {
     label: "Sellers",
-    icon: Building2,
+    icon: Store,
     color: "blue",
     children: [
       { label: "Active Sellers", path: "/admin/sellers/active" },

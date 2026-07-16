@@ -191,6 +191,15 @@ const SellerProfile = () => {
             <p className="text-white/60 font-black tracking-[1px] text-lg">
               {profile?.shopName}
             </p>
+            {/* Seller ID badge */}
+            {profile?.sellerId && (
+              <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 bg-white/10 border border-white/20 rounded-full backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-[2px] text-white/80">
+                  ID: {profile.sellerId}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Action Button */}
@@ -236,6 +245,24 @@ const SellerProfile = () => {
             </h3>
 
             <form className="space-y-8">
+              {/* Seller ID — read-only display */}
+              {profile?.sellerId && (
+                <div className="flex items-center gap-3 px-5 py-3 bg-slate-900 rounded-xl">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[2px] text-slate-500">Unique Seller ID</p>
+                    <p className="text-base font-black text-white tracking-wider">{profile.sellerId}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(profile.sellerId); toast.success("Seller ID copied!"); }}
+                    className="ml-auto text-[9px] font-black uppercase tracking-wider text-slate-400 hover:text-white transition-colors border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded-lg"
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-3">
                   <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1">
@@ -248,8 +275,13 @@ const SellerProfile = () => {
                     <input
                       type="text"
                       name="name"
+                      maxLength={50}
+                      pattern="[a-zA-Z\s]*"
                       value={formData.name}
-                      onChange={handleChange}
+                      onChange={(e) => {
+                          e.target.value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                          handleChange(e);
+                      }}
                       disabled={!isEditing}
                       className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-100 transition-all disabled:opacity-70"
                     />

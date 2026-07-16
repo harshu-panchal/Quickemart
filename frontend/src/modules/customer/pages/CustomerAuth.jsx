@@ -203,7 +203,7 @@ const CustomerAuth = () => {
                     <motion.div
                         animate={{ backgroundColor: activeCategory.theme }}
                         transition={{ duration: 1 }}
-                        className="relative h-[35%] w-full overflow-hidden"
+                        className="relative h-[35%] min-h-[240px] shrink-0 w-full overflow-hidden"
                     >
                         <AnimatePresence mode="wait">
                             <motion.div
@@ -335,11 +335,18 @@ const CustomerAuth = () => {
                                                 <input
                                                     required
                                                     name="name"
+                                                    value={formData.name || ''}
+                                                    maxLength={50}
+                                                    pattern="[a-zA-Z\s]*"
                                                     placeholder="Full Name"
                                                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
                                                     style={{ '--theme-color': activeCategory.theme }}
-                                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                    onChange={(e) => setFormData({ ...formData, name: e.target.value.replace(/[^a-zA-Z\s]/g, '') })}
+                                                    onFocus={(e) => {
+                                                        e.target.style.borderColor = activeCategory.theme;
+                                                        const target = e.target;
+                                                        setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+                                                    }}
                                                     onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
                                                 />
                                             </div>
@@ -353,12 +360,21 @@ const CustomerAuth = () => {
                                             </div>
                                             <input
                                                 required
+                                                type="tel"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                autoComplete="tel"
                                                 name="phone"
+                                                value={formData.phone || ''}
                                                 maxLength={10}
                                                 placeholder="Mobile Number"
                                                 className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-20 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
                                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '') })}
-                                                onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                onFocus={(e) => {
+                                                    e.target.style.borderColor = activeCategory.theme;
+                                                    const target = e.target;
+                                                    setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+                                                }}
                                                 onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
                                             />
                                         </div>
@@ -439,7 +455,11 @@ const CustomerAuth = () => {
                                                         otpArr[i] = val;
                                                         setFormData({ ...formData, otp: otpArr.join('') });
                                                     }}
-                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                    onFocus={(e) => {
+                                                        e.target.style.borderColor = activeCategory.theme;
+                                                        const target = e.target;
+                                                        setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+                                                    }}
                                                     onBlur={(e) => e.target.style.borderColor = ''}
                                                 />
                                             ))}

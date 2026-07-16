@@ -737,7 +737,7 @@ export async function placeOrderAtomic({
         customerId,
         userId: customerId,
       });
-      if (order.seller) {
+      if (order.seller && shouldStartSellerWorkflow) {
         emitNotificationEvent(NOTIFICATION_EVENTS.NEW_ORDER, {
           orderId: order.orderId,
           checkoutGroupId,

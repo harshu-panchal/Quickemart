@@ -65,7 +65,7 @@ const ExperienceBannerCarousel = ({ section, items, fullWidth = false, slideGap 
   const getBannerOptimizedSrc = React.useCallback((url) => {
     if (!url) return url;
     if (!isCloudinaryUrl(url)) return url;
-    return applyCloudinaryTransform(url, "f_auto,q_auto,c_fill,g_auto,w_824,h_380");
+    return applyCloudinaryTransform(url, "f_auto,q_auto,c_scale,w_824");
   }, []);
 
   return (
@@ -86,7 +86,7 @@ const ExperienceBannerCarousel = ({ section, items, fullWidth = false, slideGap 
             key={idx}
             className={cn(
               "relative shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center box-border",
-              fullWidth ? "h-[190px] rounded-none px-0" : "h-[190px] px-4 md:px-8"
+              fullWidth ? "aspect-[2/1] sm:aspect-[21/9] rounded-none px-0" : "aspect-[2/1] sm:aspect-[21/9] px-4 md:px-8 py-2"
             )}
             style={{ width: `${100 / totalItems}%` }}
           >
@@ -95,18 +95,16 @@ const ExperienceBannerCarousel = ({ section, items, fullWidth = false, slideGap 
                 src={getBannerOptimizedSrc(banner.imageUrl)}
                 srcSet={
                   isCloudinaryUrl(banner.imageUrl)
-                    ? buildCloudinarySrcSet(banner.imageUrl, [
-                        { w: 412, h: 190 },
-                        { w: 824, h: 380 },
-                        { w: 1248, h: 570 },
-                      ])
+                    ? buildCloudinarySrcSet(
+                        banner.imageUrl,
+                        [{ w: 412 }, { w: 824 }, { w: 1248 }],
+                        "f_auto,q_auto,c_scale"
+                      )
                     : undefined
                 }
                 sizes="100vw"
                 alt={banner.title || section?.title || "Banner"}
-                className="w-full h-full object-cover object-center pointer-events-none"
-                width={412}
-                height={190}
+                className="w-full h-full object-contain object-center pointer-events-none"
                 loading={idx === 0 ? "eager" : "lazy"}
                 fetchPriority={idx === 0 ? "high" : "low"}
                 decoding="async"
@@ -117,17 +115,16 @@ const ExperienceBannerCarousel = ({ section, items, fullWidth = false, slideGap 
                   src={getBannerOptimizedSrc(banner.imageUrl)}
                   srcSet={
                     isCloudinaryUrl(banner.imageUrl)
-                      ? buildCloudinarySrcSet(banner.imageUrl, [
-                          { w: 560, h: 190 },
-                          { w: 1120, h: 380 },
-                        ])
+                      ? buildCloudinarySrcSet(
+                          banner.imageUrl,
+                          [{ w: 560 }, { w: 1120 }],
+                          "f_auto,q_auto,c_scale"
+                        )
                       : undefined
                   }
                   sizes="(max-width: 768px) 100vw, 560px"
                   alt={banner.title || section?.title || "Banner"}
                   className="w-full h-full object-cover object-center pointer-events-none"
-                  width={560}
-                  height={190}
                   loading={idx === 0 ? "eager" : "lazy"}
                   fetchPriority={idx === 0 ? "high" : "low"}
                   decoding="async"

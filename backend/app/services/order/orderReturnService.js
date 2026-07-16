@@ -39,6 +39,8 @@ import { cancelPendingPayoutForOrder } from "../finance/payoutService.js";
 import { LEDGER_TRANSACTION_TYPE, OWNER_TYPE } from "../../constants/finance.js";
 import { clearOrderTracking } from "../firebaseService.js";
 import logger from "../logger.js";
+import { calculateRiderPayout } from "../finance/pricingService.js";
+import { distanceMeters } from "../../utils/geoUtils.js";
 
 function err(message, statusCode) {
   const error = new Error(message);
@@ -80,22 +82,7 @@ export class OrderReturnService {
     }
 
     const now = new Date();
-    const { eligibleAt, windowExpiresAt, eligibleDelay, windowMinutes } =
-      computeReturnWindowForOrder(order);
-
-    if (now < eligibleAt) {
-      throw err(
-        `Return is available after ${eligibleDelay} minutes from delivery. Please try again later.`,
-        400,
-      );
-    }
-
-    if (windowExpiresAt && now > windowExpiresAt) {
-      throw err(
-        `Return window has expired. You can only request a return within ${windowMinutes} minutes of delivery.`,
-        400,
-      );
-    }
+    // Timer validations removed as per request
 
     const selectedItems = [];
     for (const entry of items) {
@@ -131,9 +118,9 @@ export class OrderReturnService {
     order.returnImages = Array.isArray(images) ? images.slice(0, 5) : [];
     order.returnItems = selectedItems;
     order.returnRequestedAt = now;
-    order.returnEligibleAt = eligibleAt;
-    order.returnWindowExpiresAt = windowExpiresAt;
-    order.returnDeadline = windowExpiresAt;
+    order.returnEligibleAt = now;
+    order.returnWindowExpiresAt = null;
+    order.returnDeadline = null;
 
     await order.save();
 
@@ -286,8 +273,27 @@ export class OrderReturnService {
       0,
     );
 
-    const settings = await Setting.findOne({});
-    const returnCommission = settings?.returnDeliveryCommission ?? 0;
+    const settings = await Setting.findOne({}).lean();
+    
+    // Calculate return commission based on distance (similar to forward delivery)
+    let distanceKm = order.distanceSnapshot?.distanceKmActual || order.paymentBreakdown?.distanceKmActual || 0;
+    
+    // If distance wasn't captured, estimate using Haversine
+    if (!distanceKm && order.address?.location && order.seller) {
+      try {
+        const sellerDoc = await Seller.findById(order.seller).lean();
+        if (sellerDoc?.location?.coordinates) {
+          const [lng, lat] = sellerDoc.location.coordinates;
+          const distMeters = distanceMeters(order.address.location.lat, order.address.location.lng, lat, lng);
+          distanceKm = distMeters / 1000;
+        }
+      } catch (err) {
+        logger.error("Failed to estimate return distance", { err });
+      }
+    }
+    
+    const riderPayout = calculateRiderPayout(distanceKm, settings || {});
+    const returnCommission = riderPayout.riderPayoutTotal || 0;
 
     order.returnItems = order.returnItems.map((item) => ({
       ...(item.toObject?.() ?? item),

@@ -31,6 +31,14 @@ const OfferSections = ({ sections, noServiceData }) => {
               deliveryTime: p.deliveryTime,
             }));
 
+          const sectionSellers = (section.sellerIds || [])
+            .filter((s) => typeof s === "object" && s !== null)
+            .map((s) => ({
+              id: s._id,
+              name: s.shopName || s.name,
+              image: s.logo || "",
+            }));
+
           return (
             <motion.div
               key={section._id}
@@ -69,10 +77,10 @@ const OfferSections = ({ sections, noServiceData }) => {
                   )}
                 </div>
                 <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl flex-shrink-0 shadow-[0_16px_30px_rgba(0,0,0,0.25)] border border-black/10 overflow-hidden relative bg-black/10 transition-transform hover:-translate-y-1 hover:rotate-[-4deg] hover:scale-105">
-                  {sectionProducts[0]?.image ? (
+                  {(sectionProducts[0]?.image || sectionSellers[0]?.image) ? (
                     <>
                       <img
-                        src={applyCloudinaryTransform(sectionProducts[0].image, "f_auto,q_auto,w_150")}
+                        src={applyCloudinaryTransform(sectionProducts[0]?.image || sectionSellers[0]?.image, "f_auto,q_auto,w_150")}
                         alt={section.title}
                         loading="lazy"
                         className="absolute inset-0 w-full h-full object-cover scale-110"
@@ -84,10 +92,10 @@ const OfferSections = ({ sections, noServiceData }) => {
                     <div className="absolute inset-0 bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500" />
                   )}
 
-                  {sectionProducts.length > 0 && (
+                  {(sectionProducts.length > 0 || sectionSellers.length > 0) && (
                     <div className="absolute top-1 left-1 px-2 py-0.5 rounded-full bg-black/70 text-[9px] font-semibold text-white/90 tracking-wide flex items-center gap-1">
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-400" />
-                      {sectionProducts.length} items
+                      {sectionProducts.length + sectionSellers.length} items
                     </div>
                   )}
 
@@ -101,7 +109,7 @@ const OfferSections = ({ sections, noServiceData }) => {
               </div>
               <div className="px-4 pt-4 md:px-5 md:pt-5 pb-1">
                 <div className="flex overflow-x-auto gap-3 md:gap-4 pb-0 no-scrollbar snap-x snap-mandatory">
-                  {sectionProducts.length === 0 ? (
+                  {sectionProducts.length === 0 && sectionSellers.length === 0 ? (
                     <div className="w-full py-10 flex flex-col items-center justify-center text-center">
                       <div className="w-32 h-32 mb-3">
                         {noServiceData ? (
@@ -115,15 +123,30 @@ const OfferSections = ({ sections, noServiceData }) => {
                       </p>
                     </div>
                   ) : (
-                    sectionProducts.map((product) => (
-                      <div key={product.id} className="w-[126px] sm:w-[136px] md:w-[148px] flex-shrink-0 snap-start">
-                        <ProductCard
-                          product={product}
-                          className="bg-white border border-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
-                          compact
-                        />
-                      </div>
-                    ))
+                    <>
+                      {sectionSellers.map((seller) => (
+                        <div key={`seller-${seller.id}`} className="w-[110px] sm:w-[120px] md:w-[130px] flex-shrink-0 snap-start bg-white rounded-xl border border-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.08)] flex flex-col items-center justify-center p-3 text-center transition-transform hover:-translate-y-1">
+                          <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-slate-50 mb-2 overflow-hidden border border-slate-100 flex items-center justify-center shadow-sm">
+                            {seller.image ? (
+                              <img src={applyCloudinaryTransform(seller.image, "f_auto,q_auto,w_100")} alt={seller.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-xl font-bold text-slate-300">{seller.name.charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-800 line-clamp-2 leading-tight px-1">{seller.name}</h4>
+                          <p className="text-[9px] text-brand-600 mt-1 font-extrabold uppercase tracking-widest bg-brand-50 px-2 py-0.5 rounded-full">Store</p>
+                        </div>
+                      ))}
+                      {sectionProducts.map((product) => (
+                        <div key={`product-${product.id}`} className="w-[126px] sm:w-[136px] md:w-[148px] flex-shrink-0 snap-start">
+                          <ProductCard
+                            product={product}
+                            className="bg-white border border-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+                            compact
+                          />
+                        </div>
+                      ))}
+                    </>
                   )}
                 </div>
               </div>

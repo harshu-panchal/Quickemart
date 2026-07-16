@@ -5,6 +5,8 @@ import {
     issueSellerVerificationOtp,
     verifySellerOtpCode,
     verifySellerVerificationToken,
+    issueSellerResetOtp,
+    verifySellerResetOtpCode,
 } from "../services/sellerVerificationService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
 
@@ -273,14 +275,19 @@ export const verifySellerSignupOtp = async (req, res) => {
 ================================ */
 export const loginSeller = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, phone, emailOrPhone, password } = req.body;
+        const identifier = emailOrPhone || email || phone;
 
-        if (!email || !password) {
-            return handleResponse(res, 400, "Email and password are required");
+        if (!identifier || !password) {
+            return handleResponse(res, 400, "Email/Phone and password are required");
         }
 
         // Include password for comparison
-        const seller = await Seller.findOne({ email }).select("+password");
+        const query = identifier.includes("@") 
+            ? { email: identifier.toLowerCase() } 
+            : { phone: identifier.replace(/\D/g, "") };
+
+        const seller = await Seller.findOne(query).select("+password");
 
         if (!seller) {
             return handleResponse(res, 404, "Seller not found");
@@ -322,6 +329,94 @@ export const loginSeller = async (req, res) => {
             token,
             seller,
         });
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
+    }
+};
+
+
+/* ===============================
+   SELLER FORGOT PASSWORD
+================================ */
+
+export const sendSellerResetOtp = async (req, res) => {
+    try {
+        const { channel, rawValue } = req.body;
+        if (!channel || !rawValue) {
+            return handleResponse(res, 400, "Channel and target value are required");
+        }
+
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const result = await issueSellerResetOtp({ channel, rawValue, ipAddress });
+        
+        return handleResponse(res, 200, "Reset OTP sent successfully", result);
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+export const verifySellerResetOtp = async (req, res) => {
+    try {
+        const { channel, rawValue, otp } = req.body;
+        if (!channel || !rawValue || !otp) {
+            return handleResponse(res, 400, "Channel, target, and OTP are required");
+        }
+
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const result = await verifySellerResetOtpCode({ channel, rawValue, otp, ipAddress });
+        
+        return handleResponse(res, 200, "OTP verified successfully", result);
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+export const resetSellerPassword = async (req, res) => {
+    try {
+        const { channel, rawValue, token, newPassword } = req.body;
+        
+        if (!newPassword || newPassword.length < 8) {
+            return handleResponse(res, 400, "Password must be at least 8 characters long");
+        }
+
+        // Verify the token
+        verifySellerVerificationToken({ channel, rawValue, token, purpose: "seller_reset" });
+
+        // Find the seller
+        const query = channel === "email" ? { email: rawValue.toLowerCase() } : { phone: rawValue };
+        const seller = await Seller.findOne(query);
+
+        if (!seller) {
+            return handleResponse(res, 404, "Seller not found");
+        }
+
+        // Update password (pre-save hook will hash it)
+        seller.password = newPassword;
+        await seller.save();
+
+        return handleResponse(res, 200, "Password reset successfully");
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+/* ===============================
+   SELLER CHECK EXISTS
+================================ */
+export const checkSellerExists = async (req, res) => {
+    try {
+        const { email, phone } = req.body;
+        const query = [];
+        if (email) query.push({ email: email.toLowerCase() });
+        if (phone) query.push({ phone: phone.replace(/\D/g, "") });
+
+        if (query.length === 0) {
+            return handleResponse(res, 400, "Email or phone is required");
+        }
+
+        const seller = await Seller.findOne({ $or: query }).select("_id").lean();
+        
+        return handleResponse(res, 200, "Check completed", { exists: !!seller });
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }

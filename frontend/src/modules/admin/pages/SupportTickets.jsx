@@ -330,7 +330,8 @@ const SupportTickets = () => {
     };
 
     const handleResolve = async (id) => {
-        return handleSetStatus(id, 'closed');
+        const newStatus = selectedTicket?.status === 'closed' ? 'open' : 'closed';
+        return handleSetStatus(id, newStatus);
     };
 
     const filteredTickets = tickets.filter(t =>
@@ -446,7 +447,7 @@ const SupportTickets = () => {
                                 <div>
                                     <h3 className="text-sm font-black text-slate-900 leading-none mb-1">{selectedTicket.subject}</h3>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                                        Ticket ID: {selectedTicket.id} • USER: {selectedTicket.user} • STATUS: {selectedTicket.status}
+                                        Ticket ID: {selectedTicket.ticketCode} • USER: {selectedTicket.user} • STATUS: {selectedTicket.status}
                                     </p>
                                 </div>
                             </div>
@@ -457,7 +458,7 @@ const SupportTickets = () => {
                                         "p-2.5 ring-1 ring-slate-200 rounded-xl transition-all",
                                         selectedTicket.status === 'closed' ? "bg-brand-50 text-brand-500 ring-brand-100" : "bg-white text-slate-400 hover:text-brand-500"
                                     )}
-                                    title="Mark as Resolved"
+                                    title={selectedTicket.status === 'closed' ? "Reopen Ticket" : "Mark as Resolved"}
                                 >
                                     <HiOutlineCheckCircle className="h-5 w-5" />
                                 </button>

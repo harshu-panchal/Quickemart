@@ -18,7 +18,7 @@ const roundCurrency = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 
 function payoutTypeToOwnerType(payoutType) {
   if (payoutType === PAYOUT_TYPE.SELLER) return OWNER_TYPE.SELLER;
-  if (payoutType === PAYOUT_TYPE.DELIVERY_PARTNER) return OWNER_TYPE.RIDER;
+  if (payoutType === PAYOUT_TYPE.DELIVERY_PARTNER) return OWNER_TYPE.DELIVERY_PARTNER;
   throw new Error(`Unsupported payout type: ${payoutType}`);
 }
 
@@ -83,7 +83,7 @@ export async function createPendingPayoutForOrder({
         walletId: wallet._id,
         actorType: ownerType,
         actorId: beneficiaryId,
-        type: LEDGER_TRANSACTION_TYPE.PAYOUT_QUEUED,
+        type: payoutType === PAYOUT_TYPE.SELLER ? LEDGER_TRANSACTION_TYPE.SELLER_PAYOUT_PENDING : LEDGER_TRANSACTION_TYPE.RIDER_PAYOUT_PENDING,
         direction: LEDGER_DIRECTION.CREDIT,
         amount: roundCurrency(amount),
         description: `${payoutType} payout queued for order ${order.orderId}`,

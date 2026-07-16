@@ -12,7 +12,13 @@ const PrivacyPage = () => {
             {/* Header */}
             <div className="bg-white sticky top-0 z-30 px-4 py-3 flex items-center gap-1 shadow-sm">
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={() => {
+                        if (window.history.state && window.history.state.idx > 0) {
+                            navigate(-1);
+                        } else {
+                            navigate('/');
+                        }
+                    }}
                     className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors"
                 >
                     <ChevronLeft size={24} className="text-slate-600" />

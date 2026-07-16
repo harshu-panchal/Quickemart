@@ -36,9 +36,10 @@ import { Loader2 } from 'lucide-react';
 import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 import { getOrderStatusVariant } from '../components/orders';
-
+import { useSellerOrders } from '../context/SellerOrdersContext';
 
 const Orders = () => {
+    const { orders: ordersFromContext } = useSellerOrders();
     const [orders, setOrders] = useState([]);
     const [summary, setSummary] = useState({
         totalOrders: 0,
@@ -81,6 +82,13 @@ const Orders = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, startDate, endDate]);
 
+    // Real-time updates: when global context detects new orders, refresh current page silently
+    useEffect(() => {
+        if (!hasMountedRef.current) return;
+        fetchOrders(page, false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ordersFromContext?.length, ordersFromContext?.[0]?.orderId]);
+
     const fetchOrders = async (requestedPage = 1, showPageLoader = false) => {
         try {
             if (showPageLoader) {
@@ -117,7 +125,7 @@ const Orders = () => {
                 workflowStatus: order.workflowStatus,
                 workflowVersion: order.workflowVersion,
                 date: order.createdAt
-                    ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                    ? new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
                     : '',
                 time: order.createdAt
                     ? new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
@@ -219,7 +227,7 @@ const Orders = () => {
         try {
             await sellerApi.updateOrderStatus(orderId, { status: newStatus.toLowerCase() });
             showToast(`Order status updated to ${newStatus}`, "success");
-            fetchOrders(); // Refresh orders
+            fetchOrders(page, false); // Refresh orders without resetting page
             if (selectedOrder && selectedOrder.id === orderId) {
                 setSelectedOrder({ ...selectedOrder, status: newStatus });
             }
@@ -452,7 +460,6 @@ const Orders = () => {
                                 ) : (
                                 <AnimatePresence mode="popLayout">
                                     {filteredOrders
-                                        .slice((page - 1) * pageSize, page * pageSize)
                                         .map((order) => (
                                         <motion.div
                                             key={order.id}
@@ -514,10 +521,10 @@ const Orders = () => {
 
                             {/* Desktop: Table */}
                             <div className="hidden md:block overflow-x-auto">
-                                <table className="w-full text-left border-collapse min-w-[640px]">
-                                    <thead>
-                                        <tr className="bg-slate-50/50 border-b border-slate-100">
-                                            <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Order Details</th>
+                                <table className="w-full text-left border-collapse min-w-[640px] relative">
+                                    <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
+                                        <tr className="border-b border-slate-200">
+                                            <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-700 uppercase tracking-widest">Order Details</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Customer</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Total</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Status</th>
@@ -527,7 +534,6 @@ const Orders = () => {
                                     <tbody className="divide-y divide-slate-50">
                                         <AnimatePresence mode="popLayout">
                                             {filteredOrders
-                                                .slice((page - 1) * pageSize, page * pageSize)
                                                 .map((order) => (
                                                 <motion.tr
                                                     layout
@@ -581,11 +587,11 @@ const Orders = () => {
                                                                                             "bg-slate-100 text-slate-700 focus:ring-slate-200"
                                                                 )}
                                                             >
-                                                                <option value="pending">Pending</option>
-                                                                <option value="confirmed">Confirmed</option>
-                                                                <option value="packed">Packed</option>
-                                                                <option value="out_for_delivery">Out for Delivery</option>
-                                                                <option value="delivered">Delivered</option>
+                                                                <option value="pending" disabled={['confirmed','packed','out_for_delivery','delivered','cancelled'].includes(order.status)}>Pending</option>
+                                                                <option value="confirmed" disabled={['packed','out_for_delivery','delivered','cancelled'].includes(order.status)}>Confirmed</option>
+                                                                <option value="packed" disabled={['out_for_delivery','delivered','cancelled'].includes(order.status)}>Packed</option>
+                                                                <option value="out_for_delivery" disabled={['delivered','cancelled'].includes(order.status)}>Out for Delivery</option>
+                                                                <option value="delivered" disabled={order.status === 'cancelled'}>Delivered</option>
                                                                 <option value="cancelled">Cancelled</option>
                                                             </select>
                                                             <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />
@@ -889,11 +895,11 @@ const Orders = () => {
                                                                                 "bg-slate-100 text-slate-700 focus:ring-slate-200"
                                                     )}
                                                 >
-                                                    <option value="pending">Pending</option>
-                                                    <option value="confirmed">Confirmed</option>
-                                                    <option value="packed">Packed</option>
-                                                    <option value="out_for_delivery">Out for Delivery</option>
-                                                    <option value="delivered">Delivered</option>
+                                                    <option value="pending" disabled={['confirmed','packed','out_for_delivery','delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Pending</option>
+                                                    <option value="confirmed" disabled={['packed','out_for_delivery','delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Confirmed</option>
+                                                    <option value="packed" disabled={['out_for_delivery','delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Packed</option>
+                                                    <option value="out_for_delivery" disabled={['delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Out for Delivery</option>
+                                                    <option value="delivered" disabled={selectedOrder.status.toLowerCase() === 'cancelled'}>Delivered</option>
                                                     <option value="cancelled">Cancelled</option>
                                                 </select>
                                                 <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />

@@ -3,14 +3,19 @@ import axiosInstance from '@core/api/axios';
 export const sellerApi = {
     login: (data) => axiosInstance.post('/seller/login', data),
     signup: (data) => axiosInstance.post('/seller/signup', data),
+    checkExists: (data) => axiosInstance.post('/seller/check-exists', data),
     sendVerificationOtp: (data) => axiosInstance.post('/seller/verification/send-otp', data),
     verifyVerificationOtp: (data) => axiosInstance.post('/seller/verification/verify-otp', data),
+    sendResetOtp: (data) => axiosInstance.post('/seller/forgot-password/send-otp', data),
+    verifyResetOtp: (data) => axiosInstance.post('/seller/forgot-password/verify-otp', data),
+    resetPassword: (data) => axiosInstance.post('/seller/reset-password', data),
     // Products
     getProducts: (params) => axiosInstance.get('/products/seller/me', { params }),
     getProductById: (id) => axiosInstance.get(`/products/${id}`),
     createProduct: (data) => axiosInstance.post('/products', data),
     updateProduct: (id, data) => axiosInstance.put(`/products/${id}`, data),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
+    bulkImportProducts: (data) => axiosInstance.post('/products/bulk', data),
 
     // Categories (Public)
     getCategories: () => axiosInstance.get('/admin/categories'),

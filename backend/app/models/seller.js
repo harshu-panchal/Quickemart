@@ -3,6 +3,13 @@ import bcrypt from "bcrypt";
 
 const sellerSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: String,
+      unique: true,
+      sparse: true, // allows multiple null values (unapproved sellers)
+      trim: true,
+    },
+
     name: {
       type: String,
       required: true,

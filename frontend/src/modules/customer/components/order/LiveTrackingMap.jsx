@@ -52,6 +52,7 @@ const LiveTrackingMap = memo(({
   status = "out for delivery",
   eta = "8 mins",
   riderName = "Ramesh Kumar",
+  riderPhone,
   riderLocation,
   sellerLocation,
   destinationLocation,
@@ -470,12 +471,12 @@ const LiveTrackingMap = memo(({
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
-                <button className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-primary hover:bg-brand-100 transition-colors">
+                <a href={`tel:${riderPhone || ''}`} className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-primary hover:bg-brand-100 transition-colors">
                   <Phone size={14} />
-                </button>
-                <button className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 hover:bg-brand-100 transition-colors">
+                </a>
+                <a href={`sms:${riderPhone || ''}`} className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 hover:bg-brand-100 transition-colors">
                   <MessageSquare size={14} />
-                </button>
+                </a>
               </div>
             </div>
           </motion.div>

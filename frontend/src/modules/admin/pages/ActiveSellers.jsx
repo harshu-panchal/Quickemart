@@ -16,6 +16,7 @@ import {
   HiOutlineClock,
   HiOutlineArrowPath,
   HiOutlineDocumentText,
+  HiOutlineTrash,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -73,18 +74,10 @@ const normalizeSeller = (seller) => {
     fulfillmentRate: safeNumber(seller.fulfillmentRate),
     serviceRadius: safeNumber(seller.serviceRadius) || 5,
     joinedDate: joinedAt
-      ? new Date(joinedAt).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
+      ? new Date(joinedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : "N/A",
     lastOrderLabel: seller.lastOrderAt
-      ? new Date(seller.lastOrderAt).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
+      ? new Date(seller.lastOrderAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : "No orders yet",
     location: seller.location || "Location not set",
     avatar:
@@ -112,6 +105,7 @@ const ActiveSellers = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedSeller, setSelectedSeller] = useState(null);
 
@@ -181,6 +175,21 @@ const ActiveSellers = () => {
 
     loadSellers();
   }, [debouncedSearch, categoryFilter, sortBy, page, pageSize, refreshTick]);
+
+  const handleDeleteSeller = async (sellerId) => {
+    if (!window.confirm("Are you sure you want to delete this store? This action cannot be undone.")) return;
+    setIsDeleting(true);
+    try {
+      await adminApi.rejectSeller(sellerId, { reason: "Deleted by Admin" });
+      toast.success("Store deleted successfully");
+      setSelectedSeller(null);
+      setRefreshTick((t) => t + 1);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete store");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const summaryCards = useMemo(
     () => [
@@ -293,7 +302,7 @@ const ActiveSellers = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
             <select
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
@@ -318,14 +327,6 @@ const ActiveSellers = () => {
                 </option>
               ))}
             </select>
-
-            <button
-              onClick={() => setRefreshTick((value) => value + 1)}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-white ring-1 ring-slate-200 rounded-2xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
-            >
-              <HiOutlineFunnel className="h-4 w-4" />
-              Filter
-            </button>
           </div>
         </div>
       </Card>
@@ -391,6 +392,11 @@ const ActiveSellers = () => {
                             {seller.shopName}
                           </p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {seller.sellerId && (
+                              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[9px] font-bold font-mono tracking-wider">
+                                {seller.sellerId}
+                              </span>
+                            )}
                             <span className="text-[10px] font-semibold text-slate-400">
                               {seller.ownerName}
                             </span>
@@ -538,9 +544,16 @@ const ActiveSellers = () => {
                     />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900">
-                      {selectedSeller.shopName}
-                    </h3>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-2xl font-black text-slate-900">
+                        {selectedSeller.shopName}
+                      </h3>
+                      {selectedSeller.sellerId && (
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-black tracking-widest font-mono">
+                          {selectedSeller.sellerId}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm font-semibold text-slate-500">
                       Owned by {selectedSeller.ownerName}
                     </p>
@@ -681,6 +694,18 @@ const ActiveSellers = () => {
                   </div>
 
                   <div className="mt-6 flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => handleDeleteSeller(selectedSeller.id)}
+                      disabled={isDeleting}
+                      className="px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl text-xs font-bold hover:bg-rose-100 hover:border-rose-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isDeleting ? (
+                        <HiOutlineArrowPath className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <HiOutlineTrash className="h-4 w-4" />
+                      )}
+                      Delete Store
+                    </button>
                     <button
                       onClick={() => setSelectedSeller(null)}
                       className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"

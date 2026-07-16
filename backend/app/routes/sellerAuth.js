@@ -4,6 +4,10 @@ import {
     loginSeller,
     sendSellerSignupOtp,
     verifySellerSignupOtp,
+    sendSellerResetOtp,
+    verifySellerResetOtp,
+    resetSellerPassword,
+    checkSellerExists,
 } from "../controller/sellerAuthController.js";
 import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
@@ -38,11 +42,34 @@ router.post(
     verifySellerSignupOtp
 );
 
+// Forgot / Reset Password
+router.post(
+    "/forgot-password/send-otp",
+    authRouteRateLimiter,
+    otpRouteRateLimiter,
+    sellerOtpPayloadGuard,
+    sendSellerResetOtp
+);
+router.post(
+    "/forgot-password/verify-otp",
+    authRouteRateLimiter,
+    otpRouteRateLimiter,
+    sellerOtpPayloadGuard,
+    verifySellerResetOtp
+);
+router.post(
+    "/reset-password",
+    authRouteRateLimiter,
+    sellerOtpPayloadGuard,
+    resetSellerPassword
+);
+
 router.post(
     "/signup",
     upload.any(),
     signupSeller
 );
+router.post("/check-exists", checkSellerExists);
 router.post("/login", loginSeller);
 router.get("/nearby", getNearbySellers);
 

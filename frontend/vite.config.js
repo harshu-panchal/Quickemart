@@ -61,8 +61,6 @@ export default defineConfig({
       '@core': path.resolve(__dirname, './src/core'),
       '@shared': path.resolve(__dirname, './src/shared'),
       '@modules': path.resolve(__dirname, './src/modules'),
-      'react': path.resolve(__dirname, 'node_modules/react'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
     },
   },
   build: {

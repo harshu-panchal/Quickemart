@@ -38,6 +38,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@shared/components/ui/Toast";
 import { useSettings } from "@core/context/SettingsContext";
 import SlideToPay from "../components/shared/SlideToPay";
+import { Autocomplete, useLoadScript } from "@react-google-maps/api";
 import { getCachedGeocode, setCachedGeocode } from "@/core/utils/geocodeCache";
 import { getJSON, setJSON, STORAGE_KEYS } from "@core/utils/storage";
 import { createSocketTokenReader } from "@core/utils/authStorage";
@@ -70,7 +71,15 @@ import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommend
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
 
+const placesLibrary = ["places"];
+
 const CheckoutPage = () => {
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: placesLibrary,
+  });
+  
+  const autocompleteRef = useRef(null);
   const {
     cart,
     addToCart,
@@ -148,20 +157,39 @@ const CheckoutPage = () => {
   const previewDebounceRef = useRef(null);
   const [currentAddress, setCurrentAddress] = useState({
     type: "Home",
-    name: "Harshvardhan Panchal",
-    address: "81 Pipliyahana Road, Near 214",
+    name: "",
+    address: "",
     landmark: "",
-    city: "Indore - 452018",
-    phone: "6268423925",
+    city: "",
+    phone: "",
   });
+
+  // Hydrate currentAddress from currentLocation on initial load
+  useEffect(() => {
+    if (currentLocation?.name && !currentAddress.address) {
+      setCurrentAddress((prev) => ({
+        ...prev,
+        name: user?.name || "Customer",
+        phone: user?.phone || "",
+        address: currentLocation.name,
+        city: [currentLocation.city, currentLocation.state, currentLocation.pincode]
+          .filter(Boolean)
+          .join(", "),
+        ...(typeof currentLocation.latitude === "number" &&
+        typeof currentLocation.longitude === "number"
+          ? { location: { lat: currentLocation.latitude, lng: currentLocation.longitude } }
+          : {}),
+      }));
+    }
+  }, [currentLocation, user, currentAddress.address]);
   const [isEditAddressOpen, setIsEditAddressOpen] = useState(false);
   const [editAddressForm, setEditAddressForm] = useState({
     type: "Home",
-    name: "Harshvardhan Panchal",
-    address: "81 Pipliyahana Road, Near 214",
+    name: "",
+    address: "",
     landmark: "",
-    city: "Indore - 452018",
-    phone: "6268423925",
+    city: "",
+    phone: "",
   });
   const [showRecipientForm, setShowRecipientForm] = useState(false);
   const [recipientData, setRecipientData] = useState({
@@ -297,7 +325,7 @@ const CheckoutPage = () => {
 
   const handleMoveToWishlist = (item) => {
     addToWishlist(item);
-    removeFromCart(item.id, item.variantSku);
+    removeFromCart(item.id || item._id, item.variantSku);
     showToast(`${item.name} moved to wishlist`, "success");
   };
 
@@ -702,11 +730,16 @@ const CheckoutPage = () => {
       return;
     }
     const categoryId = cart[0]?.categoryId?._id || cart[0]?.categoryId;
-    if (!categoryId) return;
+    if (!categoryId || !currentLocation?.latitude || !currentLocation?.longitude) return;
 
     const cartIds = new Set(cart.map((i) => i.id || i._id));
     customerApi
-      .getProducts({ categoryId, limit: 10 })
+      .getProducts({ 
+        categoryId, 
+        limit: 10,
+        lat: currentLocation.latitude,
+        lng: currentLocation.longitude
+      })
       .then((res) => {
         if (res.data?.success) {
           const items = (res.data.result?.items || [])
@@ -716,7 +749,7 @@ const CheckoutPage = () => {
         }
       })
       .catch(() => {});
-  }, [cartProductIdKey]);
+  }, [cartProductIdKey, currentLocation?.latitude, currentLocation?.longitude]);
 
   const handlePlaceOrder = async () => {
     setIsPlacingOrder(true);
@@ -1137,13 +1170,40 @@ const CheckoutPage = () => {
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-address" className="text-xs font-semibold text-slate-700">Address</Label>
-                <Input
-                  id="edit-address"
-                  value={editAddressForm.address}
-                  onChange={(e) => setEditAddressForm((prev) => ({ ...prev, address: e.target.value }))}
-                  className="h-10"
-                  placeholder="House, street, area"
-                />
+                {isLoaded ? (
+                  <Autocomplete
+                    onLoad={(autocomplete) => {
+                      autocompleteRef.current = autocomplete;
+                    }}
+                    onPlaceChanged={() => {
+                      if (autocompleteRef.current !== null) {
+                        const place = autocompleteRef.current.getPlace();
+                        if (place && place.formatted_address) {
+                          setEditAddressForm((prev) => ({ 
+                            ...prev, 
+                            address: place.formatted_address,
+                          }));
+                        }
+                      }
+                    }}
+                  >
+                    <Input
+                      id="edit-address"
+                      value={editAddressForm.address}
+                      onChange={(e) => setEditAddressForm((prev) => ({ ...prev, address: e.target.value }))}
+                      className="h-10"
+                      placeholder="Search for your address..."
+                    />
+                  </Autocomplete>
+                ) : (
+                  <Input
+                    id="edit-address"
+                    value={editAddressForm.address}
+                    onChange={(e) => setEditAddressForm((prev) => ({ ...prev, address: e.target.value }))}
+                    className="h-10"
+                    placeholder="House, street, area"
+                  />
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-landmark" className="text-xs font-semibold text-slate-700">Nearest Landmark (optional)</Label>

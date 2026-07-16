@@ -5,6 +5,26 @@ import {
   formatSellerDocuments,
 } from "./shared/sellerAdminUtils.js";
 
+/**
+ * Generates the next sequential Seller ID in the format SLR-XXXXX.
+ * Finds the current maximum numeric suffix in the DB and increments by 1.
+ */
+async function generateSellerId() {
+  // Find the seller with the highest numeric sellerId
+  const last = await Seller.findOne(
+    { sellerId: { $regex: /^SLR-\d{5}$/ } },
+    { sellerId: 1 },
+  ).sort({ sellerId: -1 }).lean();
+
+  let nextNum = 1;
+  if (last?.sellerId) {
+    const current = parseInt(last.sellerId.replace("SLR-", ""), 10);
+    if (!isNaN(current)) nextNum = current + 1;
+  }
+
+  return `SLR-${String(nextNum).padStart(5, "0")}`;
+}
+
 export async function getPendingSellerApplications({
   q = "",
   status = "pending",
@@ -96,10 +116,17 @@ export async function getPendingSellerApplications({
 }
 
 export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
+  const existing = await Seller.findById(sellerId).select("sellerId").lean();
+  if (!existing) return null;
+
+  // Generate a new unique Seller ID only if not already assigned
+  const newSellerId = existing.sellerId || (await generateSellerId());
+
   const seller = await Seller.findByIdAndUpdate(
     sellerId,
     {
       $set: {
+        sellerId: newSellerId,
         isVerified: true,
         isActive: true,
         applicationStatus: "approved",

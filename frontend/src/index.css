@@ -393,3 +393,17 @@ body {
     -webkit-touch-callout: none;
   }
 }
+
+/* Remove focus outline from Recharts */
+.recharts-wrapper,
+.recharts-surface,
+.recharts-layer,
+.recharts-cartesian-grid {
+  outline: none !important;
+}
+
+.recharts-wrapper:focus,
+.recharts-surface:focus,
+.recharts-layer:focus {
+  outline: none !important;
+}

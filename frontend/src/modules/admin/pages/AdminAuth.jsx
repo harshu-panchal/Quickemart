@@ -22,9 +22,21 @@ const AdminAuth = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const { login } = useAuth();
+    const { login, isAuthenticated, role } = useAuth();
     const { settings } = useSettings();
     const navigate = useNavigate();
+
+    React.useEffect(() => {
+        import('@core/auth/activeRoleStore').then(({ setActiveRole, ROLES }) => {
+            setActiveRole(ROLES.ADMIN);
+        });
+    }, []);
+
+    React.useEffect(() => {
+        if (isAuthenticated && role === 'admin') {
+            navigate('/admin', { replace: true });
+        }
+    }, [isAuthenticated, role, navigate]);
     const appName = settings?.appName || 'App';
     const logoUrl = settings?.logoUrl || '';
 
@@ -165,8 +177,13 @@ const AdminAuth = () => {
                                                 type="text"
                                                 name="name"
                                                 required
+                                                maxLength={50}
+                                                pattern="[a-zA-Z\s]*"
                                                 value={formData.name}
-                                                onChange={handleChange}
+                                                onChange={(e) => {
+                                                    e.target.value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                                                    handleChange(e);
+                                                }}
                                                 placeholder="Full Name"
                                                 className="w-full pl-14 pr-5 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-bold text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-8 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
                                             />

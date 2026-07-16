@@ -25,6 +25,7 @@ import ChevronDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined";
+import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 
 /** Full-width bottom stroke + tab curve; l/r are 0–100% of column where the inner bump sits. */
 function buildActiveTabPath(l, r) {
@@ -254,31 +255,25 @@ const MainLocationHeader = ({
   }, [typingState]);
 
   // Smooth scroll interpolations
-  const headerTopPadding = useTransform(scrollY, [0, 160], [16, 12]);
-  const headerBottomPadding = useTransform(scrollY, [0, 160], [4, 3]);
-  const headerRoundness = useTransform(scrollY, [0, 160], [0, 24]);
-  const bgOpacity = useTransform(scrollY, [0, 160], [1, 0.98]);
+  const headerTopPadding = useTransform(scrollY, [0, 160], [16, 16]);
+  const headerBottomPadding = useTransform(scrollY, [0, 160], [4, 4]);
+  const headerRoundness = useTransform(scrollY, [0, 160], [0, 0]);
+  const bgOpacity = useTransform(scrollY, [0, 160], [1, 1]);
 
   // Content animations
-  const contentHeight = useTransform(scrollY, [0, 160], ["64px", "0px"]);
-  const contentOpacity = useTransform(scrollY, [0, 160], [1, 0]);
-  const navHeight = useTransform(scrollY, [0, 200], ["60px", "0px"]);
-  const navOpacity = useTransform(scrollY, [0, 200], [1, 0]);
-  const navMargin = useTransform(scrollY, [0, 200], [4, 0]);
-  const categorySpacing = useTransform(scrollY, [0, 200], [3, 0]);
-  const cartOpacity = useTransform(scrollY, [0, 110, 150], [1, 0.7, 0]);
-  const cartScale = useTransform(scrollY, [0, 110, 150], [1, 0.9, 0.75]);
+  const contentHeight = useTransform(scrollY, [0, 160], ["64px", "64px"]);
+  const contentOpacity = useTransform(scrollY, [0, 160], [1, 1]);
+  const navHeight = useTransform(scrollY, [0, 200], ["60px", "60px"]);
+  const navOpacity = useTransform(scrollY, [0, 200], [1, 1]);
+  const navMargin = useTransform(scrollY, [0, 200], [4, 4]);
+  const categorySpacing = useTransform(scrollY, [0, 200], [3, 3]);
+  const cartOpacity = useTransform(scrollY, [0, 110, 150], [1, 1, 1]);
+  const cartScale = useTransform(scrollY, [0, 110, 150], [1, 1, 1]);
 
   // Helper to hide elements completely when collapsed to prevent clicks
-  const displayContent = useTransform(scrollY, (value) =>
-    value > 160 ? "none" : "block",
-  );
-  const displayNav = useTransform(scrollY, (value) =>
-    value > 200 ? "none" : "flex",
-  );
-  const displayCart = useTransform(scrollY, (value) =>
-    value > 150 ? "none" : "block",
-  );
+  const displayContent = useTransform(scrollY, (value) => "block");
+  const displayNav = useTransform(scrollY, (value) => "flex");
+  const displayCart = useTransform(scrollY, (value) => "block");
 
   const baseHeaderColor = activeCategory?.headerColor || "var(--primary)";
   const headerFontColor = activeCategory?.headerFontColor || "#111827";
@@ -302,7 +297,7 @@ const MainLocationHeader = ({
     <>
       <div
         className={cn(
-          "fixed top-0 left-0 right-0 z-200",
+          "fixed top-0 left-0 right-0 z-[200]",
           isProductDetailOpen && "hidden md:block",
         )}>
         <motion.div
@@ -342,6 +337,17 @@ const MainLocationHeader = ({
             ) : (
               <div className="w-full h-full" />
             )}
+          </motion.button>
+
+          {/* Notification Icon (Mobile) */}
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate("/notifications")}
+            className="absolute top-5 right-20 sm:top-6 sm:right-24 md:hidden z-20 cursor-pointer"
+            style={{ color: headerFontColor }}
+          >
+            <NotificationsNoneOutlinedIcon sx={{ fontSize: 28 }} />
           </motion.button>
 
           {/* Desktop/Tablet Header Layout (md and above) */}
@@ -430,6 +436,16 @@ const MainLocationHeader = ({
               </motion.button>
 
               <motion.button
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => navigate("/notifications")}
+                className="transition-all hover:text-slate-700 relative group"
+                style={{ color: headerFontColor }}
+              >
+                <NotificationsNoneOutlinedIcon sx={{ fontSize: 24 }} />
+              </motion.button>
+
+              <motion.button
                 whileHover={{ scale: 1.15, rotate: -5 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => navigate("/checkout")}
@@ -457,14 +473,7 @@ const MainLocationHeader = ({
           {/* Collapsible Delivery Info & Location (MOBILE ONLY) */}
           <div className="md:hidden">
             <motion.div
-              style={{
-                height: contentHeight,
-                opacity: contentOpacity,
-                marginBottom: navMargin,
-                display: displayContent,
-                overflow: "hidden",
-              }}
-              className="relative z-10">
+              className="relative z-10 mb-4">
               <div className="mb-1">
                 <span 
                   className="inline-flex items-center rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"
@@ -542,15 +551,8 @@ const MainLocationHeader = ({
                   mass: 0.6,
                 },
               }}
-              style={{
-                height: navHeight,
-                opacity: navOpacity,
-                marginTop: categorySpacing,
-                display: displayNav,
-                overflowY: "hidden",
-              }}
-              className="relative flex items-end md:justify-center gap-0 overflow-x-auto no-scrollbar -mx-2 px-2 md:mx-0 md:px-0 z-10 snap-x pt-1 min-h-[68px] md:min-h-[76px] pb-0.5">
-              {categories.slice(0, 10).map((cat) => {
+              className="relative flex items-end md:justify-center gap-0 overflow-x-auto no-scrollbar -mx-2 px-2 md:mx-0 md:px-0 z-10 snap-x pt-1 min-h-[68px] md:min-h-[76px] pb-0.5 mt-3">
+              {categories.map((cat) => {
                 const isActive = activeCategory?.id === cat.id;
                 return (
                   <CategoryNavColumn

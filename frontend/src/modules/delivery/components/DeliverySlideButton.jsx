@@ -84,14 +84,18 @@ const DeliverySlideButton = ({
 
       // Display user-friendly error messages
       if (errorCode === "PROXIMITY_OUT_OF_RANGE") {
-        const details = error.response?.data?.error?.details;
+        const details = error.response?.data?.error?.details || error.response?.data?.result?.error?.details;
         const distance = details?.currentDistance;
         const range = details?.requiredRange || "0-120m";
 
-        toast.error(
-          `You are too ${distance > 120 ? "far" : "close"}. You must be within ${range} of the delivery location.`,
-          { duration: 5000 }
-        );
+        if (distance !== undefined) {
+          toast.error(
+            `You are too ${distance > 120 ? "far" : "close"}. You must be within ${range} of the delivery location.`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.error(errorMessage, { duration: 5000 });
+        }
       } else if (errorCode === "LOCATION_REQUIRED" || errorCode === "LOCATION_STALE") {
         toast.error(errorMessage || "Location data is not available. Please ensure location tracking is enabled.");
       } else if (errorCode === "ORDER_NOT_FOUND") {

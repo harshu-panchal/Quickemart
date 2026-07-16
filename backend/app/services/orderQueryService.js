@@ -110,7 +110,7 @@ export async function fetchSellerOrdersPage({
       .limit(limit)
       .populate("customer", "name phone")
       .populate("items.product", "name mainImage price salePrice")
-      .populate("deliveryBoy", "name phone")
+      .populate("deliveryBoy", "name phone vehicleNumber profileImage vehicleType")
       .populate("seller", "shopName name")
       .lean(),
     Order.countDocuments(query),
@@ -449,8 +449,9 @@ export async function getOrderWithAccess(orderId, userId, role) {
   let order = await Order.findOne(orderKey)
     .populate("customer", "name email phone")
     .populate("items.product", "name mainImage price salePrice")
-    .populate("deliveryBoy", "name phone")
-    .populate("returnDeliveryBoy", "name phone")
+    .populate("returnItems.product", "name mainImage price salePrice")
+    .populate("deliveryBoy", "name phone vehicleNumber profileImage vehicleType")
+    .populate("returnDeliveryBoy", "name phone vehicleNumber profileImage vehicleType")
     .populate("seller", "shopName name address phone location")
     .lean();
 

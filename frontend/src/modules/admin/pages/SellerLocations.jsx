@@ -45,7 +45,7 @@ const SORT_OPTIONS = [
 const mapContainerStyle = {
   width: "100%",
   height: "100%",
-  minHeight: "680px",
+  minHeight: "600px",
 };
 
 const lifecycleClassMap = {
@@ -185,7 +185,7 @@ const ActiveSellerMap = ({
 
   if (!mapLoaded) {
     return (
-      <div className="h-full min-h-[680px] flex items-center justify-center text-slate-500 font-bold">
+      <div className="h-full flex items-center justify-center text-slate-500 font-bold">
         Loading map...
       </div>
     );
@@ -423,7 +423,7 @@ const SellerLocations = () => {
   };
 
   return (
-    <div className="h-[calc(100vh-84px)] min-h-[820px] flex flex-col gap-5 animate-in fade-in duration-700 overflow-hidden">
+    <div className="min-h-[calc(100vh-84px)] flex flex-col gap-5 animate-in fade-in duration-700">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <h1 className="ds-h1 flex items-center gap-2">
@@ -524,7 +524,7 @@ const SellerLocations = () => {
         </Card>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-5 min-h-[600px]">
         <Card className="border-none shadow-xl ring-1 ring-slate-100 rounded-2xl overflow-hidden flex flex-col min-h-0">
           <div className="p-4 border-b border-slate-100 space-y-3">
             <div className="relative">
@@ -705,7 +705,7 @@ const SellerLocations = () => {
 
         <Card className="border-none shadow-xl ring-1 ring-slate-100 rounded-2xl overflow-hidden relative min-h-0">
           {!mapUnlocked ? (
-            <div className="h-full min-h-[680px] bg-gradient-to-br from-slate-100 via-slate-50 to-white p-6 flex items-center justify-center">
+            <div className="h-full bg-gradient-to-br from-slate-100 via-slate-50 to-white p-6 flex items-center justify-center">
               <div className="max-w-xl text-center space-y-4">
                 <div className="mx-auto h-12 w-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center">
                   <HiOutlineMap className="h-6 w-6" />
@@ -740,14 +740,14 @@ const SellerLocations = () => {
             />
           )}
 
-          <div className="absolute bottom-5 left-5 z-20">
-            <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-[10px] font-bold text-slate-700 flex items-center gap-2 shadow-lg ring-1 ring-slate-200">
-              <HiOutlineInformationCircle className="h-4 w-4 text-slate-500" />
-              {mapUnlocked
-                ? "Circles represent seller service radius. Density colors indicate live order load."
-                : "Map is locked by default to reduce Google Maps API usage."}
+          {mapUnlocked && (
+            <div className="absolute bottom-5 left-5 z-20">
+              <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-[10px] font-bold text-slate-700 flex items-center gap-2 shadow-lg ring-1 ring-slate-200">
+                <HiOutlineInformationCircle className="h-4 w-4 text-slate-500" />
+                Circles represent seller service radius. Density colors indicate live order load.
+              </div>
             </div>
-          </div>
+          )}
         </Card>
       </div>
     </div>

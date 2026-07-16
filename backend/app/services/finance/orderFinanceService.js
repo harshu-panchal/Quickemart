@@ -473,16 +473,13 @@ export async function handleCodOrderFinance(
       session,
     });
 
+    const pb = order.paymentBreakdown?.toObject?.() || order.paymentBreakdown || {};
     order.paymentBreakdown = {
-      ...(order.paymentBreakdown || {}),
-      codCollectedAmount: roundCurrency(
-        (order.paymentBreakdown?.codCollectedAmount || 0) + codAmountNet,
-      ),
-      codRemittedAmount: roundCurrency(order.paymentBreakdown?.codRemittedAmount || 0),
+      ...pb,
+      codCollectedAmount: roundCurrency((pb.codCollectedAmount || 0) + codAmountNet),
+      codRemittedAmount: roundCurrency(pb.codRemittedAmount || 0),
       codPendingAmount: roundCurrency(
-        (order.paymentBreakdown?.codCollectedAmount || 0) +
-          codAmountNet -
-          (order.paymentBreakdown?.codRemittedAmount || 0),
+        (pb.codCollectedAmount || 0) + codAmountNet - (pb.codRemittedAmount || 0),
       ),
     };
 

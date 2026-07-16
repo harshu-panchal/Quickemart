@@ -304,7 +304,7 @@ const Earnings = () => {
                     <div>
                       <p className="font-bold text-gray-900">{txn.type}</p>
                       <p className="text-xs text-gray-500">
-                        {txn.date || new Date(txn.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} • {txn.id || (txn._id ? txn._id.toString().slice(-6).toUpperCase() : 'N/A')}
+                        {txn.date || new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {txn.id || (txn._id ? txn._id.toString().slice(-6).toUpperCase() : 'N/A')}
                       </p>
                     </div>
                   </div>

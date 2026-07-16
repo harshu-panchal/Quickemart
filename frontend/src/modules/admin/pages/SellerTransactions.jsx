@@ -27,6 +27,7 @@ import {
     Info,
     RotateCw,
     ExternalLink,
+    Share2,
     ShoppingBag,
     Landmark,
     Clock,
@@ -34,8 +35,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 const SellerTransactions = () => {
+    const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterType, setFilterType] = useState('all');
@@ -70,7 +73,7 @@ const SellerTransactions = () => {
                 const payload = res.data.result || {};
                 const data = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
                 const mapped = data.map(t => ({
-                    id: t.reference || t._id,
+                    id: (t.reference || t._id || '').toString().substring(0, 10).toUpperCase(),
                     orderId: t.order?.orderId || null,
                     date: new Date(t.createdAt).toLocaleString('en-IN', {
                         day: '2-digit',
@@ -136,12 +139,68 @@ const SellerTransactions = () => {
         });
     }, [transactions, searchTerm, filterStatus, filterType, selectedSeller]);
 
-    const handleExport = () => {
-        setIsExporting(true);
-        setTimeout(() => {
+    const handleExport = async () => {
+        try {
+            setIsExporting(true);
+            toast.loading("Generating Master Ledger...", { id: "export-ledger" });
+            
+            const params = { page: 1, limit: 5000 };
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+            if (filterStatus !== 'all') params.status = filterStatus;
+            if (filterType !== 'all') params.type = filterType;
+            if (selectedSeller !== 'all') params.sellerId = selectedSeller;
+            
+            const res = await adminApi.getSellerTransactions(params);
+            if (!res.data.success) throw new Error("Failed to fetch data");
+            
+            const payload = res.data.result || {};
+            const items = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
+            
+            if (!items.length) {
+                toast.error("No transactions found to export", { id: "export-ledger" });
+                return;
+            }
+
+            const csvRows = [];
+            csvRows.push(['Date', 'Time', 'Shop Name', 'Transaction Type', 'Amount (INR)', 'Commission (INR)', 'Net Payable (INR)', 'Status', 'Reference ID', 'Order ID', 'Payment Method'].join(','));
+            
+            items.forEach(t => {
+                const dt = new Date(t.createdAt);
+                const date = dt.toLocaleDateString('en-IN');
+                const time = dt.toLocaleTimeString('en-IN');
+                const seller = `"${(t.user?.shopName || t.user?.name || 'Unknown').replace(/"/g, '""')}"`;
+                
+                const rawType = t.type || '';
+                const type = rawType === 'Seller Earning' ? 'Sale' : (rawType === 'Withdrawal' || rawType === 'Payout') ? 'Payout' : rawType;
+                
+                const amount = t.amount || 0;
+                const commission = t.order?.pricing?.platformFee || 0;
+                const netPayable = amount;
+                
+                const status = (t.status || 'Unknown').toUpperCase();
+                const ref = t.reference || t._id || 'N/A';
+                const orderId = t.order?.orderId || 'N/A';
+                const method = t.paymentMethod || 'Wallet';
+                
+                csvRows.push([date, time, seller, type, amount, commission, netPayable, status, ref, orderId, method].join(','));
+            });
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `master_ledger_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            toast.success("Master Ledger downloaded successfully", { id: "export-ledger" });
+        } catch (error) {
+            console.error("Export error:", error);
+            toast.error("Failed to generate ledger", { id: "export-ledger" });
+        } finally {
             setIsExporting(false);
-            alert('Financial ledger exported successfully.');
-        }, 1500);
+        }
     };
 
     if (loading) {
@@ -180,7 +239,9 @@ const SellerTransactions = () => {
                         {isExporting ? <RotateCw className="h-4 w-4 animate-spin text-orange-500" /> : <Download className="h-4 w-4" />}
                         {isExporting ? 'Generating Report...' : 'Download Master Ledger'}
                     </button>
-                    <button className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95 group">
+                    <button 
+                        onClick={() => navigate('/admin/wallet')}
+                        className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95 group">
                         <TrendingUp className="h-4 w-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                         Revenue Insights
                     </button>
@@ -395,7 +456,7 @@ const SellerTransactions = () => {
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">
                                 {selectedTxn.amount > 0 ? '' : '-'}₹{Math.abs(selectedTxn.amount).toLocaleString()}
                             </h2>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-2">{selectedTxn.id}</p>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-2">{(selectedTxn.id || '').substring(0, 10)}</p>
                         </div>
 
                         <div className="space-y-6">
@@ -481,7 +542,7 @@ const SellerTransactions = () => {
                                         try {
                                             const { default: jsPDF } = await import('jspdf');
                                             const doc = new jsPDF();
-                                            const safeId = (selectedTxn.id || 'txn').replace(/[/\\?%*:|"<>]/g, '-');
+                                            const safeId = (selectedTxn.id || 'txn').substring(0, 10).replace(/[/\\?%*:|"<>]/g, '-');
                                             const margin = 25;
                                             const pageWidth = doc.internal.pageSize.getWidth();
                                             let y = 28;
@@ -509,11 +570,14 @@ const SellerTransactions = () => {
                                                 y += 8;
                                             };
 
+                                            doc.setFontSize(10);
                                             doc.setFont(undefined, 'bold');
                                             doc.text('Transaction ID:', margin, y);
                                             doc.setFont(undefined, 'normal');
-                                            doc.text(selectedTxn.id || 'N/A', margin + 55, y);
-                                            y += 10;
+                                            const displayId = (selectedTxn.id || 'N/A').substring(0, 10);
+                                            const splitId = doc.splitTextToSize(displayId, pageWidth - margin - 60);
+                                            doc.text(splitId, margin + 55, y);
+                                            y += (splitId.length * 5) + 5;
 
                                             row('Amount:', `Rs. ${Math.abs(selectedTxn.amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`);
                                             row('Date:', selectedTxn.date || 'N/A');
@@ -556,8 +620,26 @@ const SellerTransactions = () => {
                                 >
                                     Download Voucher
                                 </button>
-                                <button className="p-4 bg-slate-100 text-slate-900 rounded-2xl flex items-center justify-center hover:bg-slate-200 transition-all">
-                                    <ExternalLink className="h-5 w-5" />
+                                <button 
+                                    onClick={async () => {
+                                        const shareData = {
+                                            title: 'Transaction Details',
+                                            text: `Transaction ID: ${selectedTxn.id}\nAmount: ₹${Math.abs(selectedTxn.amount)}\nType: ${selectedTxn.type.toUpperCase()}\nStatus: ${selectedTxn.status.toUpperCase()}`
+                                        };
+                                        if (navigator.share) {
+                                            try {
+                                                await navigator.share(shareData);
+                                            } catch (err) {
+                                                if (err.name !== 'AbortError') console.error('Share failed:', err);
+                                            }
+                                        } else {
+                                            navigator.clipboard.writeText(shareData.text);
+                                            toast.success('Transaction details copied to clipboard!');
+                                        }
+                                    }}
+                                    className="p-4 bg-slate-100 text-slate-900 rounded-2xl flex items-center justify-center hover:bg-slate-200 transition-all"
+                                >
+                                    <Share2 className="h-5 w-5" />
                                 </button>
                             </div>
                         </div>

@@ -1,4 +1,5 @@
 import Review from "../models/review.js";
+import Order from "../models/order.js";
 import handleResponse from "../utils/helper.js";
 import getPagination from "../utils/pagination.js";
 
@@ -7,6 +8,20 @@ export const submitReview = async (req, res) => {
     try {
         const { productId, rating, comment } = req.body;
         const userId = req.user.id;
+
+        // Check if the user has purchased and received the product
+        const hasPurchased = await Order.findOne({
+            customer: userId,
+            "items.product": productId,
+            $or: [
+                { orderStatus: { $regex: /^delivered$/i } },
+                { status: { $regex: /^delivered$/i } }
+            ]
+        });
+
+        if (!hasPurchased) {
+            return handleResponse(res, 403, "You can only review products you have purchased and received");
+        }
 
         // Check if user already reviewed this product
         const existingReview = await Review.findOne({ userId, productId });
@@ -33,7 +48,16 @@ export const submitReview = async (req, res) => {
 export const getProductReviews = async (req, res) => {
     try {
         const { productId } = req.params;
-        const reviews = await Review.find({ productId, status: "approved" })
+        const query = { productId, status: "approved" };
+        if (req.user && req.user.id) {
+            query.$or = [
+                { status: "approved" },
+                { userId: req.user.id }
+            ];
+            delete query.status;
+        }
+
+        const reviews = await Review.find(query)
             .populate("userId", "name image")
             .sort({ createdAt: -1 });
 

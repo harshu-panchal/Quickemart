@@ -100,7 +100,10 @@ export const customerApi = {
   // Support & Reviews
   getProductReviews: (productId) =>
     getWithDedupe(`/reviews/product/${productId}`),
-  submitReview: (data) => axiosInstance.post("/reviews/submit", data),
+  submitReview: (data) => {
+    invalidateCache("/reviews/product");
+    return axiosInstance.post("/reviews/submit", data);
+  },
   createTicket: (data) => axiosInstance.post("/tickets/create", data),
   getMyTickets: () => getWithDedupe("/tickets/my-tickets"),
   replyTicket: (ticketId, text, options = {}) => {
@@ -145,4 +148,8 @@ export const customerApi = {
   testPushNotification: () => axiosInstance.post("/push/test"),
   getTestPushNotificationStatus: (orderId) =>
     axiosInstance.get(`/push/test-status/${encodeURIComponent(String(orderId || "").trim())}`),
+
+  // Notifications
+  getNotifications: (params) => axiosInstance.get("/notifications", { params }),
+  markNotificationsRead: () => axiosInstance.patch("/notifications/read"),
 };

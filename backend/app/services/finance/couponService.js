@@ -91,10 +91,10 @@ function buildCouponSnapshot(coupon, { cartSubtotal, discountAmount, freeDeliver
     couponType: coupon?.couponType || null,
     minOrderValue: Number(coupon?.minOrderValue || 0),
     minItems: Number(coupon?.minItems || 0),
-    perUserLimit: Number.isFinite(Number(coupon?.perUserLimit))
+    perUserLimit: coupon?.perUserLimit != null && Number.isFinite(Number(coupon?.perUserLimit))
       ? Number(coupon.perUserLimit)
       : null,
-    usageLimit: Number.isFinite(Number(coupon?.usageLimit))
+    usageLimit: coupon?.usageLimit != null && Number.isFinite(Number(coupon?.usageLimit))
       ? Number(coupon.usageLimit)
       : null,
     validFrom: coupon?.validFrom || null,
@@ -194,13 +194,14 @@ export async function computeOrderDiscount({
   }
 
   if (
+    coupon.usageLimit != null &&
     Number.isFinite(Number(coupon.usageLimit)) &&
     Number(coupon.usedCount || 0) >= Number(coupon.usageLimit)
   ) {
     throw makeError(400, "This coupon has reached its usage limit");
   }
 
-  if (customerId && Number.isFinite(Number(coupon.perUserLimit)) && Number(coupon.perUserLimit) > 0) {
+  if (customerId && coupon.perUserLimit != null && Number.isFinite(Number(coupon.perUserLimit)) && Number(coupon.perUserLimit) > 0) {
     const userUsage = await getUserCouponUsageCount({
       customerId,
       couponObjectId: coupon._id,

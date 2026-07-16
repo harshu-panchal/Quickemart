@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { MessageCircle, Phone, Mail, ChevronDown, ChevronUp, FileText, ChevronLeft, PlusCircle, X, Send } from 'lucide-react';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
@@ -15,10 +15,13 @@ const FAQ_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const SupportPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showToast } = useToast();
     const { settings } = useSettings();
-    const supportEmail = settings?.supportEmail || '';
+    const supportEmail = settings?.supportEmail || 'support@orangebasket.com';
     const supportEmailShort = supportEmail ? (supportEmail.length > 12 ? supportEmail.slice(0, 12) + '...' : supportEmail) : 'support@...';
+    const supportPhone = settings?.supportPhone || '+919876543210';
+    const supportPhoneShort = supportPhone ? (supportPhone.length > 12 ? supportPhone.slice(0, 12) + '...' : supportPhone) : '+91 98765...';
     const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
     const [ticketLoading, setTicketLoading] = useState(false);
     const [ticketData, setTicketData] = useState({
@@ -27,6 +30,21 @@ const SupportPage = () => {
         priority: 'medium'
     });
     const [faqs, setFaqs] = useState([]);
+
+    useEffect(() => {
+        if (location.state?.autoOpenTicket) {
+            setIsTicketModalOpen(true);
+            if (location.state.subject) {
+                setTicketData(prev => ({
+                    ...prev,
+                    subject: location.state.subject
+                }));
+            }
+            
+            // Clear the state so refreshing doesn't keep opening it
+            navigate('.', { replace: true, state: {} });
+        }
+    }, [location.state, navigate]);
 
     useEffect(() => {
         const fetchFaqs = async () => {
@@ -98,8 +116,8 @@ const SupportPage = () => {
                         sub="Formal Request"
                         onClick={() => setIsTicketModalOpen(true)}
                     />
-                    <ContactCard icon={Phone} label="Call Us" sub="+91 98765..." />
-                    <ContactCard icon={Mail} label="Email Us" sub={supportEmailShort} />
+                    <ContactCard icon={Phone} label="Call Us" sub={supportPhoneShort} onClick={() => window.location.href = `tel:${supportPhone}`} />
+                    <ContactCard icon={Mail} label="Email Us" sub={supportEmailShort} onClick={() => window.location.href = `mailto:${supportEmail}`} />
                 </div>
 
                 {/* FAQ Section */}

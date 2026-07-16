@@ -167,7 +167,7 @@ const OrderDetailPage = () => {
   const routeOriginRef = useRef(null);
   const routeRequestRef = useRef({ phase: "", startedAt: 0 });
   const [returnCountdown, setReturnCountdown] = useState(null);
-  const refreshRef = useRef({ inFlight: false, lastAt: 0 });
+  const refreshRef = useRef({ inFlight: false, lastAt: 0, timer: null });
   const extraRoomRef = useRef("");
 
   // Single source of truth for the various ids that may refer to this
@@ -257,27 +257,22 @@ const OrderDetailPage = () => {
     }
 
     const refresh = () => {
-      const now = Date.now();
-      if (refreshRef.current.inFlight) return;
-      if (now - refreshRef.current.lastAt < 2000) return;
-      refreshRef.current.lastAt = now;
-      refreshRef.current.inFlight = true;
-      customerApi
-        .getOrderDetails(orderId)
-        .then(async (r) => {
-          const ord = r.data.result;
-          setOrder(ord);
-          try {
-            const retRes = await customerApi.getReturnDetails(resolveOrderLookupId(ord));
-            setReturnDetails(retRes.data.result);
-          } catch {
-            setReturnDetails(null);
-          }
-        })
-        .catch(() => { })
-        .finally(() => {
-          refreshRef.current.inFlight = false;
-        });
+      if (refreshRef.current.timer) clearTimeout(refreshRef.current.timer);
+      refreshRef.current.timer = setTimeout(() => {
+        customerApi
+          .getOrderDetails(orderId)
+          .then(async (r) => {
+            const ord = r.data.result;
+            setOrder(ord);
+            try {
+              const retRes = await customerApi.getReturnDetails(resolveOrderLookupId(ord));
+              setReturnDetails(retRes.data.result);
+            } catch {
+              setReturnDetails(null);
+            }
+          })
+          .catch(() => { });
+      }, 500);
     };
 
     const offStatus = onOrderStatusUpdate(getToken, (payload) => {
@@ -383,35 +378,8 @@ const OrderDetailPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!order) {
-      setReturnCountdown(null);
-      return;
-    }
-
-    const calculateCountdown = () => {
-      if (order.status !== "delivered") {
-        setReturnCountdown(null);
-        return;
-      }
-      const windowStart = new Date(order.deliveredAt || order.createdAt).getTime();
-      const now = Date.now();
-      const windowMs = returnWindowMinutes * 60 * 1000;
-      const remaining = Math.max(0, (windowStart + windowMs) - now);
-
-      if (remaining <= 0) {
-        setReturnCountdown(0);
-        return;
-      }
-
-      const mins = Math.floor(remaining / 60000);
-      const secs = Math.floor((remaining % 60000) / 1000);
-      setReturnCountdown(`${mins}:${secs.toString().padStart(2, "0")}`);
-    };
-
-    calculateCountdown();
-    const iv = setInterval(calculateCountdown, 1000);
-    return () => clearInterval(iv);
-  }, [order, returnWindowMinutes]);
+    // Timer removed
+  }, [order]);
 
   const handleOpenInMaps = () => {
     const loc = order?.address?.location;
@@ -602,10 +570,7 @@ const OrderDetailPage = () => {
       return false;
     }
 
-    const windowStart = new Date(order.deliveredAt || order.createdAt).getTime();
-    const now = Date.now();
-    const windowMs = returnWindowMinutes * 60 * 1000;
-    return now - windowStart <= windowMs;
+    return true;
   };
 
   const toggleItemSelection = (index) => {
@@ -820,6 +785,7 @@ const OrderDetailPage = () => {
               status={order.workflowStatus || order.status}
               eta={estimatedArrival.arrivingInText}
               riderName={order.deliveryBoy?.name || "Delivery Partner"}
+              riderPhone={order.deliveryBoy?.phone || ""}
               riderLocation={liveLocation}
               sellerLocation={sellerLocation}
               destinationLocation={
@@ -845,44 +811,64 @@ const OrderDetailPage = () => {
         )}
 
         {/* Proximity-based Delivery OTP Display */}
-        <DeliveryOtpDisplay
-          orderId={order?.orderId || orderId}
-          checkoutGroupId={order?.checkoutGroupId || orderId}
-        />
+        {status !== "delivered" && status !== "cancelled" && (
+          <DeliveryOtpDisplay
+            orderId={order?.orderId || orderId}
+            checkoutGroupId={order?.checkoutGroupId || orderId}
+          />
+        )}
 
         {/* Delivery Partner Card - Redesigned */}
-        {order.deliveryBoy && status !== "delivered" && status !== "cancelled" && (
+        {(order.deliveryBoy || (status !== "delivered" && status !== "cancelled" && status !== "pending")) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-gradient-to-br from-brand-500 to-brand-600 rounded-3xl p-5 shadow-lg text-white"
+            className="bg-primary rounded-3xl p-5 shadow-lg text-primary-foreground"
           >
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="h-14 w-14 rounded-full bg-white/20 backdrop-blur-sm overflow-hidden border-2 border-white/40 shadow-lg">
-                  <img
-                    src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=100&auto=format&fit=crop&q=60"
-                    alt="Rider"
-                    className="h-full w-full object-cover"
-                  />
+                <div className="h-14 w-14 rounded-full bg-white/20 backdrop-blur-sm overflow-hidden border-2 border-white/40 shadow-lg flex items-center justify-center">
+                  {order.deliveryBoy ? (
+                    <img
+                      src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=100&auto=format&fit=crop&q=60"
+                      alt="Rider"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <User size={24} className="text-white" />
+                  )}
                 </div>
-                <div className="absolute -bottom-1 -right-1 bg-white text-brand-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-md">
-                  4.8 ★
-                </div>
+                {order.deliveryBoy && (
+                  <div className="absolute -bottom-1 -right-1 bg-white text-primary text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-md">
+                    4.8 ★
+                  </div>
+                )}
               </div>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-white/80 uppercase tracking-wider">Your Courier</p>
-                <h3 className="font-bold text-white text-lg">{order.deliveryBoy?.name || "Delivery Partner"}</h3>
-                <p className="text-xs text-white/90 mt-0.5">On the way to you</p>
+                <p className="text-xs font-semibold text-primary-foreground/80 uppercase tracking-wider">Your Courier</p>
+                <h3 className="font-bold text-primary-foreground text-lg">{order.deliveryBoy?.name || "Assigning Partner..."}</h3>
+                <p className="text-xs text-primary-foreground/90 mt-0.5">
+                  {order.deliveryBoy 
+                    ? (status === "delivered" ? "Order Delivered" : "On the way to you") 
+                    : "Searching for nearby rider"}
+                </p>
               </div>
               <div className="flex items-center gap-2">
-                <button className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30">
-                  <MessageSquare size={20} className="text-white" />
-                </button>
-                <button className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30">
-                  <Phone size={20} className="text-white" />
-                </button>
+                {order.deliveryBoy?.phone ? (
+                  <>
+                    <a href={`sms:${order.deliveryBoy.phone}`} className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30">
+                      <MessageSquare size={20} className="text-primary-foreground" />
+                    </a>
+                    <a href={`tel:${order.deliveryBoy.phone}`} className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30">
+                      <Phone size={20} className="text-primary-foreground" />
+                    </a>
+                  </>
+                ) : (
+                  <button onClick={() => toast.error(order.deliveryBoy ? "Phone number not available for this delivery partner" : "Partner not assigned yet")} className="h-11 w-auto px-4 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors border border-white/20 text-xs font-semibold">
+                    No Contact Info
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
@@ -1077,7 +1063,7 @@ const OrderDetailPage = () => {
         </motion.div>
 
         {/* Return Section - Only if applicable */}
-        {(canRequestReturn() || (returnDetails && returnDetails.returnStatus && returnDetails.returnStatus !== "none")) && (
+        {order?.status !== "cancelled" && (canRequestReturn() || (returnDetails && returnDetails.returnStatus && returnDetails.returnStatus !== "none")) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1088,12 +1074,6 @@ const OrderDetailPage = () => {
               <h3 className="text-base font-bold text-slate-800">
                 Return & Refund
               </h3>
-              {canRequestReturn() && returnCountdown !== 0 && (
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold ring-1 ring-amber-200">
-                  <Clock size={12} />
-                  Ends in {returnCountdown}
-                </div>
-              )}
             </div>
 
             {returnDetails &&
@@ -1147,17 +1127,18 @@ const OrderDetailPage = () => {
                   )}
               </div>
             ) : (
-              <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                You can request a return within the first {returnWindowMinutes} minutes after delivery.
-              </p>
-            )}
-
-            {canRequestReturn() && (
-              <button
-                onClick={() => setShowReturnModal(true)}
-                className="w-full py-4 rounded-2xl bg-slate-900 text-white text-sm font-bold shadow-lg shadow-slate-900/10 hover:bg-slate-800 transition-all active:scale-[0.98]">
-                Request Return
-              </button>
+              canRequestReturn() ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                    You can request a return for this delivered order.
+                  </p>
+                  <button
+                    onClick={() => setShowReturnModal(true)}
+                    className="w-full py-4 rounded-2xl bg-slate-900 text-white text-sm font-bold shadow-lg shadow-slate-900/10 hover:bg-slate-800 transition-all active:scale-[0.98]">
+                    Request Return
+                  </button>
+                </div>
+              ) : null
             )}
           </motion.div>
         )}

@@ -9,8 +9,8 @@ import {
   NOTIFICATION_QUEUE_BACKOFF_MS,
 } from "./notification.constants.js";
 
+const redisOpts = getRedisOptionsForBull();
 
-// const redisOpts = getRedisOptionsForBull();
 function createNoopQueue(name) {
   return {
     name,
@@ -47,7 +47,7 @@ const defaultJobOptions = {
 
 export const notificationQueue = isRedisEnabled()
   ? new Bull("notifications", {
-      redis: getRedisOptionsForBull(),
+      redis: redisOpts,
       createClient: createBullRedisClient,
       settings: queueSettings,
       defaultJobOptions,
@@ -56,7 +56,7 @@ export const notificationQueue = isRedisEnabled()
 
 export const notificationDeadQueue = isRedisEnabled()
   ? new Bull("notifications-dead", {
-      redis: getRedisOptionsForBull(),
+      redis: redisOpts,
       createClient: createBullRedisClient,
       settings: queueSettings,
       defaultJobOptions: {

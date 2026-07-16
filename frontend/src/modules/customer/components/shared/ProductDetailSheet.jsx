@@ -1,24 +1,75 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence, useAnimation, useDragControls } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { X, ChevronDown, Share2, Heart, Search, Clock, Minus, Plus, ShoppingBag, Star, MessageSquare, ArrowLeft, ChevronRight } from 'lucide-react';
 import { useProductDetail } from '../../context/ProductDetailContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
+import { useLocation as useAppLocation } from '../../context/LocationContext';
 import { cn } from '@/lib/utils';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { customerApi } from '../../services/customerApi';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
+const AccordionItem = ({ title, children, id, icon, expandedSections, toggleSection }) => {
+    const isOpen = expandedSections.includes(id);
+    return (
+        <div className="border-b border-slate-100 last:border-0">
+            <button
+                onClick={() => toggleSection(id)}
+                className="w-full py-4 flex items-center justify-between transition-all hover:bg-slate-50/50 rounded-lg group px-2"
+            >
+                <div className="flex items-center gap-3">
+                    <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                        isOpen ? "bg-brand-50 text-primary" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
+                    )}>
+                        {icon}
+                    </div>
+                    <span className={cn(
+                        "font-bold text-[13px] uppercase tracking-wider",
+                        isOpen ? "text-[#1A1A1A]" : "text-slate-500"
+                    )}>{title}</span>
+                </div>
+                <motion.div
+                    animate={{ rotate: isOpen ? 180 : 0 }}
+                    className={cn("transition-colors", isOpen ? "text-primary" : "text-slate-300")}
+                >
+                    <ChevronDown size={18} strokeWidth={3} />
+                </motion.div>
+            </button>
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="pt-2 pb-6 px-2">
+                            {children}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
 const ProductDetailSheet = () => {
     const { selectedProduct, isOpen, closeProduct } = useProductDetail();
-    const { cart, cartCount, addToCart, updateQuantity, removeFromCart } = useCart();
+    const { cart, cartCount, addToCart, updateQuantity, removeFromCart, cartTotal } = useCart();
     const { toggleWishlist: toggleWishlistGlobal, isInWishlist } = useWishlist();
+
+    const location = useLocation();
+    const isWishlistPage = location.pathname === '/wishlist';
     const { showToast } = useToast();
     const { settings } = useSettings();
+    const { currentLocation } = useAppLocation();
     const supportEmail = settings?.supportEmail || 'support@example.com';
 
     // Controls for sheet animation
@@ -31,6 +82,8 @@ const ProductDetailSheet = () => {
     const [reviewLoading, setReviewLoading] = useState(true);
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+    const [localHasReviewed, setLocalHasReviewed] = useState(false);
+    const [extendedProduct, setExtendedProduct] = useState(null);
     const [expandedSections, setExpandedSections] = useState(['description']); // Start with description open
 
     const toggleSection = (section) => {
@@ -61,6 +114,10 @@ const ProductDetailSheet = () => {
 
     // Update variant when product changes
     useEffect(() => {
+        setNewReview({ rating: 5, comment: '' });
+        setLocalHasReviewed(false);
+        setReviews([]);
+
         if (selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0) {
             setSelectedVariant(selectedProduct.variants[0]);
         } else {
@@ -68,10 +125,32 @@ const ProductDetailSheet = () => {
         }
         setActiveImageIndex(0);
 
-        if (selectedProduct?.id) {
-            fetchReviews(selectedProduct.id);
+        if (selectedProduct?.id || selectedProduct?._id) {
+            const pid = selectedProduct.id || selectedProduct._id;
+            fetchReviews(pid);
+            fetchExtendedProduct(pid);
         }
     }, [selectedProduct]);
+
+    const fetchExtendedProduct = async (productId) => {
+        try {
+            const hasValidLocation =
+                Number.isFinite(currentLocation?.latitude) &&
+                Number.isFinite(currentLocation?.longitude);
+
+            const params = hasValidLocation ? {
+                lat: currentLocation.latitude,
+                lng: currentLocation.longitude
+            } : {};
+
+            const res = await customerApi.getProductById(productId, params);
+            if (res.data.success) {
+                setExtendedProduct(res.data.result);
+            }
+        } catch (error) {
+            console.error("Fetch extended product error:", error);
+        }
+    };
 
     const fetchReviews = async (productId) => {
         try {
@@ -99,8 +178,17 @@ const ProductDetailSheet = () => {
                 comment: newReview.comment
             });
             if (res.data.success) {
-                showToast("Review submitted for moderation", "success");
+                showToast("Review submitted successfully", "success");
                 setNewReview({ rating: 5, comment: '' });
+                setLocalHasReviewed(true);
+                setReviews(prev => [{
+                    _id: 'temp-' + Date.now(),
+                    rating: newReview.rating,
+                    comment: newReview.comment,
+                    createdAt: new Date().toISOString(),
+                    userId: { name: 'You' },
+                    status: 'pending'
+                }, ...prev]);
             }
         } catch (error) {
             showToast(error.response?.data?.message || "Failed to submit review", "error");
@@ -193,6 +281,13 @@ const ProductDetailSheet = () => {
             variantSku: String(selectedVariant?.sku || selectedVariant?.name || "").trim(),
         });
         showToast(`${selectedProduct.name} added to cart`, 'success');
+        
+        if (isWishlistPage) {
+            const isWishlisted = isInWishlist(selectedProduct.id || selectedProduct._id);
+            if (isWishlisted) {
+                toggleWishlistGlobal(selectedProduct);
+            }
+        }
     };
 
     const handleIncrement = () =>
@@ -227,52 +322,6 @@ const ProductDetailSheet = () => {
     if (!selectedProduct) return null;
 
     const cleanDesc = cleanDescription(selectedProduct?.description);
-
-    const AccordionItem = ({ title, children, id, icon }) => {
-        const isOpen = expandedSections.includes(id);
-        return (
-            <div className="border-b border-slate-100 last:border-0">
-                <button
-                    onClick={() => toggleSection(id)}
-                    className="w-full py-4 flex items-center justify-between transition-all hover:bg-slate-50/50 rounded-lg group px-2"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                            isOpen ? "bg-brand-50 text-primary" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
-                        )}>
-                            {icon}
-                        </div>
-                        <span className={cn(
-                            "font-bold text-[13px] uppercase tracking-wider",
-                            isOpen ? "text-[#1A1A1A]" : "text-slate-500"
-                        )}>{title}</span>
-                    </div>
-                    <motion.div
-                        animate={{ rotate: isOpen ? 180 : 0 }}
-                        className={cn("transition-colors", isOpen ? "text-primary" : "text-slate-300")}
-                    >
-                        <ChevronDown size={18} strokeWidth={3} />
-                    </motion.div>
-                </button>
-                <AnimatePresence initial={false}>
-                    {isOpen && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3, ease: "easeInOut" }}
-                            className="overflow-hidden"
-                        >
-                            <div className="pt-2 pb-6 px-2">
-                                {children}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-        );
-    };
 
     return (
         <AnimatePresence>
@@ -463,19 +512,31 @@ const ProductDetailSheet = () => {
 
                                             <div className="relative flex items-center justify-between py-4 px-5">
                                                 <div className="flex flex-col gap-1">
-                                                    <div className="flex items-baseline gap-2">
-                                                        <span className="text-[28px] lg:text-[32px] font-[800] text-primary tracking-tight leading-none">
-                                                            ₹{selectedProduct.price}
-                                                        </span>
-                                                        {selectedProduct.originalPrice > selectedProduct.price && (
-                                                            <span className="text-[14px] text-gray-400 line-through font-[600]">₹{selectedProduct.originalPrice}</span>
-                                                        )}
-                                                    </div>
-                                                    {selectedProduct.originalPrice > selectedProduct.price && (
-                                                        <span className="inline-flex w-fit items-center text-[10px] font-[800] text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md uppercase tracking-wide">
-                                                            {Math.round(((selectedProduct.originalPrice - selectedProduct.price) / selectedProduct.originalPrice) * 100)}% off
-                                                        </span>
-                                                    )}
+                                                    {/* Use selected variant price if available, fall back to product price */}
+                                                    {(() => {
+                                                        const variantPrice = selectedVariant?.price ?? selectedProduct.price;
+                                                        const variantSalePrice = selectedVariant?.salePrice ?? selectedProduct.salePrice ?? null;
+                                                        const displayPrice = (variantSalePrice && variantSalePrice < variantPrice) ? variantSalePrice : variantPrice;
+                                                        const hasDiscount = variantSalePrice && variantSalePrice < variantPrice;
+                                                        const discountPct = hasDiscount ? Math.round(((variantPrice - variantSalePrice) / variantPrice) * 100) : 0;
+                                                        return (
+                                                            <>
+                                                                <div className="flex items-baseline gap-2">
+                                                                    <span className="text-[28px] lg:text-[32px] font-[800] text-primary tracking-tight leading-none">
+                                                                        ₹{displayPrice}
+                                                                    </span>
+                                                                    {hasDiscount && (
+                                                                        <span className="text-[14px] text-gray-400 line-through font-[600]">₹{variantPrice}</span>
+                                                                    )}
+                                                                </div>
+                                                                {hasDiscount && (
+                                                                    <span className="inline-flex w-fit items-center text-[10px] font-[800] text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md uppercase tracking-wide">
+                                                                        {discountPct}% off
+                                                                    </span>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <div>
                                                     {quantity > 0 ? (
@@ -520,12 +581,7 @@ const ProductDetailSheet = () => {
                                                         <span className="text-[12px] font-[700] uppercase tracking-wider">View Cart</span>
                                                     </div>
                                                     <div className="flex items-center justify-center gap-1.5 bg-white/10 px-2 py-1 rounded-lg">
-                                                        <span className="text-[13px] font-[800] tracking-tight">₹{cart.reduce((total, item) => {
-                                                            const mrp = Number(item.price || 0);
-                                                            const sale = Number(item.salePrice || 0);
-                                                            const unit = sale > 0 && sale < mrp ? sale : mrp;
-                                                            return total + (unit * Number(item.quantity || 0));
-                                                        }, 0)}</span>
+                                                        <span className="text-[13px] font-[800] tracking-tight">₹{cartTotal}</span>
                                                         <ChevronRight size={14} strokeWidth={2.5} />
                                                     </div>
                                                 </Link>
@@ -568,36 +624,11 @@ const ProductDetailSheet = () => {
                                             <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 bg-white border border-gray-200 rounded-full" />
                                         </div>
 
-                                        {/* Variants Selection (Desktop) */}
-                                        {selectedProduct.variants && selectedProduct.variants.length > 0 && (
-                                            <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50 mt-4">
-                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Select Variant</h4>
-                                                <div className="flex gap-2.5 flex-wrap">
-                                                    {selectedProduct.variants.map((v, idx) => (
-                                                        <motion.button
-                                                            key={idx}
-                                                            whileHover={{ scale: 1.02 }}
-                                                            whileTap={{ scale: 0.98 }}
-                                                            onClick={() => setSelectedVariant(v)}
-                                                            className={cn(
-                                                                'px-4 py-2 font-black rounded-xl text-xs transition-all border-2',
-                                                                selectedVariant?.sku === v.sku
-                                                                    ? 'bg-white border-primary text-primary shadow-sm shadow-brand-100'
-                                                                    : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'
-                                                            )}
-                                                        >
-                                                            {v.name}
-                                                        </motion.button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
                                         {/* Product Information Accordion (Desktop) */}
                                         <div className="mt-8 border-t border-slate-100">
                                             {/* Description */}
                                             {cleanDesc && (
-                                                <AccordionItem 
+                                                <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                                     id="description" 
                                                     title="Product Description" 
                                                     icon={<Clock size={16} />}
@@ -610,7 +641,7 @@ const ProductDetailSheet = () => {
                                             )}
 
                                             {/* Product Details */}
-                                            <AccordionItem 
+                                            <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                                 id="details" 
                                                 title="Product Details" 
                                                 icon={<Search size={16} />}
@@ -624,14 +655,14 @@ const ProductDetailSheet = () => {
                                                     ].map((d) => (
                                                         <div key={d.label} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 group hover:bg-white hover:shadow-sm transition-all">
                                                             <span className="text-[10px] text-slate-400 block mb-0.5 font-bold uppercase tracking-wider">{d.label}</span>
-                                                            <span className="font-black text-slate-800 text-[12px]">{d.value}</span>
+                                                            <span className="font-black text-slate-800 text-[12px] break-all">{d.value}</span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </AccordionItem>
 
                                             {/* Customer Reviews */}
-                                            <AccordionItem 
+                                            <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                                 id="reviews" 
                                                 title={`Customer Reviews (${reviews.length > 0 ? reviews.length : '120+'})`}
                                                 icon={<Star size={16} />}
@@ -645,35 +676,45 @@ const ProductDetailSheet = () => {
                                                     </div>
 
                                                     {/* Review Form */}
-                                                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6">
-                                                        <h4 className="font-black text-slate-800 text-xs mb-3 flex items-center gap-2">
-                                                            <MessageSquare size={13} className="text-primary" />
-                                                            Rate this product
-                                                        </h4>
-                                                        <form onSubmit={handleReviewSubmit} className="space-y-3">
-                                                            <div className="flex gap-1.5">
-                                                                {[1, 2, 3, 4, 5].map((s) => (
-                                                                    <motion.button
-                                                                        key={s}
-                                                                        type="button"
-                                                                        whileHover={{ scale: 1.1 }}
-                                                                        whileTap={{ scale: 0.9 }}
-                                                                        onClick={() => setNewReview({ ...newReview, rating: s })}
-                                                                        className={cn(
-                                                                            'h-9 w-9 rounded-xl flex items-center justify-center transition-all shadow-sm',
-                                                                            newReview.rating >= s ? 'bg-brand-50 text-primary border border-brand-100' : 'bg-white text-slate-300 border border-slate-100'
-                                                                        )}
-                                                                    >
-                                                                        <Star size={15} className={cn(newReview.rating >= s && 'fill-current')} />
-                                                                    </motion.button>
-                                                                ))}
-                                                            </div>
-                                                            <textarea value={newReview.comment} onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })} placeholder="Share your experience..." className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-medium min-h-[80px] outline-none focus:border-primary transition-all resize-none shadow-sm" />
-                                                            <Button type="submit" disabled={isSubmittingReview} className="w-full h-10 bg-primary hover:opacity-90 text-white font-black rounded-xl text-[11px] uppercase tracking-[0.1em] transition-all shadow-lg shadow-brand-100">
-                                                                {isSubmittingReview ? 'Submitting...' : 'Post Review'}
-                                                                </Button>
-                                                        </form>
-                                                    </div>
+                                                    {selectedProduct?.hasReviewed || extendedProduct?.hasReviewed || localHasReviewed ? (
+                                                        <div className="bg-brand-50 p-4 rounded-2xl border border-brand-100 mb-6 text-center">
+                                                            <p className="text-[11px] font-bold text-primary uppercase tracking-wide">You have already reviewed this product. Thank you!</p>
+                                                        </div>
+                                                    ) : (selectedProduct?.hasPurchased || extendedProduct?.hasPurchased) ? (
+                                                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6">
+                                                            <h4 className="font-black text-slate-800 text-xs mb-3 flex items-center gap-2">
+                                                                <MessageSquare size={13} className="text-primary" />
+                                                                Rate this product
+                                                            </h4>
+                                                            <form onSubmit={handleReviewSubmit} className="space-y-3">
+                                                                <div className="flex gap-1.5">
+                                                                    {[1, 2, 3, 4, 5].map((s) => (
+                                                                        <motion.button
+                                                                            key={s}
+                                                                            type="button"
+                                                                            whileHover={{ scale: 1.1 }}
+                                                                            whileTap={{ scale: 0.9 }}
+                                                                            onClick={() => setNewReview({ ...newReview, rating: s })}
+                                                                            className={cn(
+                                                                                'h-9 w-9 rounded-xl flex items-center justify-center transition-all shadow-sm',
+                                                                                newReview.rating >= s ? 'bg-brand-50 text-primary border border-brand-100' : 'bg-white text-slate-300 border border-slate-100'
+                                                                            )}
+                                                                        >
+                                                                            <Star size={15} className={cn(newReview.rating >= s && 'fill-current')} />
+                                                                        </motion.button>
+                                                                    ))}
+                                                                </div>
+                                                                <textarea value={newReview.comment} onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })} placeholder="Share your experience..." className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-medium min-h-[80px] outline-none focus:border-primary transition-all resize-none shadow-sm" />
+                                                                <Button type="submit" disabled={isSubmittingReview} className="w-full h-10 bg-primary hover:opacity-90 text-white font-black rounded-xl text-[11px] uppercase tracking-[0.1em] transition-all shadow-lg shadow-brand-100">
+                                                                    {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+                                                                    </Button>
+                                                            </form>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 text-center">
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">You must purchase this product to rate it</p>
+                                                        </div>
+                                                    )}
 
                                                     {/* Reviews List */}
                                                     <div className="space-y-3">
@@ -686,11 +727,14 @@ const ProductDetailSheet = () => {
                                                                         <div className="flex items-center gap-2">
                                                                             <div className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-[11px] font-black text-primary border border-brand-100">{r.userId?.name?.[0] || 'A'}</div>
                                                                             <div>
-                                                                                <p className="text-[12px] font-black text-slate-800">{r.userId?.name || 'Anonymous'}</p>
-                                                                                <div className="flex gap-0.5">{[...Array(5)].map((_, i) => <Star key={i} size={9} className={cn(i < r.rating ? 'text-primary fill-primary' : 'text-slate-200')} />)}</div>
+                                                                                <p className="text-[12px] font-black text-slate-800">
+                                                                                    {r.userId?.name || 'Anonymous'}
+                                                                                    {r.status === 'pending' && <span className="ml-2 text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded uppercase">Pending</span>}
+                                                                                </p>
+                                                                                <div className="flex gap-0.5 mt-0.5">{[...Array(5)].map((_, i) => <Star key={i} size={9} className={cn(i < r.rating ? 'text-primary fill-primary' : 'text-slate-200')} />)}</div>
                                                                             </div>
                                                                         </div>
-                                                                        <span className="text-[10px] font-bold text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</span>
+                                                                        <span className="text-[10px] font-bold text-slate-400">{new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                                                     </div>
                                                                     <p className="text-[12px] text-slate-600 font-medium leading-relaxed pl-10">{r.comment}</p>
                                                                 </div>
@@ -869,7 +913,7 @@ const ProductDetailSheet = () => {
                                 <div className="mt-4 border-t border-slate-100">
                                     {/* Description */}
                                     {cleanDesc && (
-                                        <AccordionItem 
+                                        <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                             id="description" 
                                             title="Product Description" 
                                             icon={<Clock size={18} strokeWidth={2.5} />}
@@ -882,7 +926,7 @@ const ProductDetailSheet = () => {
                                     )}
 
                                     {/* Product Details */}
-                                    <AccordionItem 
+                                    <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                         id="details" 
                                         title="Product Details" 
                                         icon={<Search size={18} strokeWidth={2.5} />}
@@ -896,14 +940,14 @@ const ProductDetailSheet = () => {
                                             ].map((d) => (
                                                 <div key={d.label} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                                                     <span className="text-gray-400 block mb-0.5 text-[10px] font-bold uppercase tracking-wider">{d.label}</span>
-                                                    <span className="font-black text-slate-800 text-xs">{d.value}</span>
+                                                    <span className="font-black text-slate-800 text-xs break-all">{d.value}</span>
                                                 </div>
                                             ))}
                                         </div>
                                     </AccordionItem>
 
                                     {/* Customer Reviews */}
-                                    <AccordionItem 
+                                    <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                         id="reviews" 
                                         title={`Customer Reviews (${reviews.length > 0 ? reviews.length : '120+'})`}
                                         icon={<Star size={18} strokeWidth={2.5} />}
@@ -917,31 +961,41 @@ const ProductDetailSheet = () => {
                                             </div>
 
                                             {/* Review Form */}
-                                            <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 mb-6">
-                                                <h4 className="font-black text-slate-800 text-sm mb-1">Rate this product</h4>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-4">Reviews are moderated</p>
-                                                <form onSubmit={handleReviewSubmit} className="space-y-4">
-                                                    <div className="flex gap-2">
-                                                        {[1, 2, 3, 4, 5].map((s) => (
-                                                            <button
-                                                                key={s}
-                                                                type="button"
-                                                                onClick={() => setNewReview({ ...newReview, rating: s })}
-                                                                className={cn(
-                                                                    "h-10 w-10 rounded-xl flex items-center justify-center transition-all shadow-sm",
-                                                                    newReview.rating >= s ? "bg-brand-50 text-primary border border-brand-100" : "bg-white text-slate-300 border border-slate-100"
-                                                                )}
-                                                            >
-                                                                <Star size={18} className={cn(newReview.rating >= s && "fill-current")} />
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <textarea value={newReview.comment} onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })} placeholder="Write your experience..." className="w-full bg-white border border-slate-100 rounded-2xl p-4 text-sm font-medium min-h-[100px] outline-none focus:border-primary transition-all resize-none shadow-sm" />
-                                                    <Button type="submit" disabled={isSubmittingReview} className="w-full h-12 bg-primary hover:opacity-90 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-brand-100">
-                                                        {isSubmittingReview ? "Submitting..." : "Post Review"}
-                                                    </Button>
-                                                </form>
-                                            </div>
+                                            {(selectedProduct?.hasReviewed || extendedProduct?.hasReviewed || localHasReviewed) ? (
+                                                <div className="bg-brand-50 p-5 rounded-3xl border border-brand-100 mb-6 text-center">
+                                                    <p className="text-[12px] font-bold text-primary uppercase tracking-wide">You have already reviewed this product. Thank you!</p>
+                                                </div>
+                                            ) : (selectedProduct?.hasPurchased || extendedProduct?.hasPurchased) ? (
+                                                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 mb-6">
+                                                    <h4 className="font-black text-slate-800 text-sm mb-1">Rate this product</h4>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-4">Reviews are moderated</p>
+                                                    <form onSubmit={handleReviewSubmit} className="space-y-4">
+                                                        <div className="flex gap-2">
+                                                            {[1, 2, 3, 4, 5].map((s) => (
+                                                                <button
+                                                                    key={s}
+                                                                    type="button"
+                                                                    onClick={() => setNewReview({ ...newReview, rating: s })}
+                                                                    className={cn(
+                                                                        "h-10 w-10 rounded-xl flex items-center justify-center transition-all shadow-sm",
+                                                                        newReview.rating >= s ? "bg-brand-50 text-primary border border-brand-100" : "bg-white text-slate-300 border border-slate-100"
+                                                                    )}
+                                                                >
+                                                                    <Star size={18} className={cn(newReview.rating >= s && "fill-current")} />
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <textarea value={newReview.comment} onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })} placeholder="Write your experience..." className="w-full bg-white border border-slate-100 rounded-2xl p-4 text-sm font-medium min-h-[100px] outline-none focus:border-primary transition-all resize-none shadow-sm" />
+                                                        <Button type="submit" disabled={isSubmittingReview} className="w-full h-12 bg-primary hover:opacity-90 text-white font-black rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-brand-100">
+                                                            {isSubmittingReview ? "Submitting..." : "Post Review"}
+                                                        </Button>
+                                                    </form>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 mb-6 text-center">
+                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">You must purchase this product to rate it</p>
+                                                </div>
+                                            )}
 
                                             {/* Reviews List */}
                                             <div className="space-y-4">
@@ -958,7 +1012,7 @@ const ProductDetailSheet = () => {
                                                                         <div className="flex gap-0.5">{[...Array(5)].map((_, i) => <Star key={i} size={10} className={cn(i < r.rating ? 'text-primary fill-primary' : 'text-slate-200')} />)}</div>
                                                                     </div>
                                                                 </div>
-                                                                <span className="text-[10px] font-bold text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</span>
+                                                                <span className="text-[10px] font-bold text-slate-400">{new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                                             </div>
                                                             <p className="text-xs text-slate-600 font-medium leading-relaxed pl-10">{r.comment}</p>
                                                         </div>
@@ -1049,7 +1103,7 @@ const ProductDetailSheet = () => {
                                                 <span className="text-[11px] font-bold opacity-90 mt-1">{cartCount} {cartCount === 1 ? 'item' : 'items'} in cart</span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[16px] font-[1000] tracking-tight">₹{cart.reduce((total, item) => total + (item.price * item.quantity), 0)}</span>
+                                                <span className="text-[16px] font-[1000] tracking-tight">₹{cartTotal}</span>
                                                 <ChevronRight size={18} strokeWidth={4} />
                                             </div>
                                         </Link>

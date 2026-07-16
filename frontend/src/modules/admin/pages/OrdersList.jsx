@@ -54,6 +54,8 @@ const OrdersList = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
+    const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+    const [paymentFilter, setPaymentFilter] = useState('All');
 
     const handleCSVExport = () => {
         setIsExporting(true);
@@ -110,7 +112,7 @@ const OrdersList = () => {
                     workflowStatus: o.workflowStatus,
                     workflowVersion: o.workflowVersion,
                     returnStatus: o.returnStatus,
-                    date: new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+                    date: new Date(o.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                     payment: o.payment?.method === 'cod' ? 'COD' : 'Digital',
                 }));
                 setOrders(formatted);
@@ -190,10 +192,11 @@ const OrdersList = () => {
                 safeLower(order.seller).includes(query);
 
             const matchesStatus = adminRouteMatchesOrder(status, order);
+            const matchesPayment = paymentFilter === 'All' || order.payment === paymentFilter;
 
-            return matchesSearch && matchesStatus;
+            return matchesSearch && matchesStatus && matchesPayment;
         });
-    }, [safeOrders, searchTerm, status]);
+    }, [safeOrders, searchTerm, status, paymentFilter]);
 
     const getStatusStyles = (status) => {
         switch (String(status || '').toLowerCase()) {
@@ -354,9 +357,43 @@ const OrdersList = () => {
                                 {isExporting ? 'Exporting...' : 'Export CSV'}
                             </button>
                         )}
-                        <button className="p-3 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all">
-                            <Filter className="h-4 w-4" />
-                        </button>
+                        <div className="relative">
+                            <button 
+                                onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                                className="p-3 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-95">
+                                <Filter className="h-4 w-4" />
+                            </button>
+                            <AnimatePresence>
+                                {isFilterMenuOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setIsFilterMenuOpen(false)} />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl ring-1 ring-slate-100 p-2 z-20"
+                                        >
+                                            <p className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Payment Method</p>
+                                            {['All', 'COD', 'Digital'].map((method) => (
+                                                <button
+                                                    key={method}
+                                                    onClick={() => {
+                                                        setPaymentFilter(method);
+                                                        setIsFilterMenuOpen(false);
+                                                    }}
+                                                    className={cn(
+                                                        "w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                                                        paymentFilter === method ? "bg-fuchsia-50 text-fuchsia-600" : "text-slate-500 hover:bg-slate-50"
+                                                    )}
+                                                >
+                                                    {method}
+                                                </button>
+                                            ))}
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </div>
                 </div>
 

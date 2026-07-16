@@ -46,4 +46,6 @@ export const updateProfileSchema = Joi.object({
     .valid("bike", "scooter", "bicycle", "car", "other")
     .optional(),
   vehicleNumber: trimmedString.max(20).optional(),
+  dob: trimmedString.optional(),
+  bloodGroup: trimmedString.optional(),
 });

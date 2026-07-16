@@ -215,10 +215,7 @@ const EarningsPage = () => {
                         <p className="font-bold text-gray-900">{txn.type}</p>
                         <p className="text-xs text-gray-500">
                           {txn.date ||
-                            new Date(txn.createdAt).toLocaleDateString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                            })}{" "}
+                            new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}{" "}
                           {DOT}{" "}
                           {txn.id ||
                             (txn._id ? txn._id.toString().slice(-6).toUpperCase() : "N/A")}

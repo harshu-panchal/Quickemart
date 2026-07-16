@@ -100,6 +100,7 @@ const Dashboard = () => {
       iconBg: "bg-brand-50",
       iconColor: "text-brand-600",
       description: "vs last month",
+      path: "/seller/earnings",
     },
     {
       label: "Total Orders",
@@ -110,6 +111,7 @@ const Dashboard = () => {
       iconBg: "bg-brand-50",
       iconColor: "text-brand-600",
       description: "vs last month",
+      path: "/seller/orders",
     },
     {
       label: "Avg Order Value",
@@ -120,6 +122,7 @@ const Dashboard = () => {
       iconBg: "bg-purple-50",
       iconColor: "text-purple-600",
       description: "per order",
+      path: "/seller/analytics",
     },
     {
       label: "Pending Orders",
@@ -130,6 +133,7 @@ const Dashboard = () => {
       iconBg: "bg-orange-50",
       iconColor: "text-orange-600",
       description: "need attention",
+      path: "/seller/orders",
     },
   ];
 
@@ -248,7 +252,11 @@ const Dashboard = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
-          <Card key={stat.label} className="hover:shadow-lg transition-shadow">
+          <Card 
+            key={stat.label} 
+            className={cn("hover:shadow-lg transition-all hover:-translate-y-1", stat.path && "cursor-pointer")}
+            onClick={() => stat.path && navigate(stat.path)}
+          >
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="text-base font-medium text-slate-600">{stat.label}</p>
@@ -459,7 +467,7 @@ const Dashboard = () => {
                     </div>
                   </td>
                   <td className="py-4 px-4 align-middle">
-                    <span className="text-sm text-slate-600">{new Date(order.createdAt).toLocaleDateString()}</span>
+                    <span className="text-sm text-slate-600">{new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                   </td>
                   <td className="py-4 px-4 align-middle">
                     <span className="text-sm font-semibold text-slate-900">₹{order.pricing?.total || 0}</span>
@@ -685,11 +693,11 @@ const Dashboard = () => {
                                     : "bg-slate-100 text-slate-700 focus:ring-slate-200"
                       )}
                     >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="packed">Packed</option>
-                      <option value="out_for_delivery">Out for Delivery</option>
-                      <option value="delivered">Delivered</option>
+                      <option value="pending" disabled={['confirmed','packed','out_for_delivery','delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Pending</option>
+                      <option value="confirmed" disabled={['packed','out_for_delivery','delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Confirmed</option>
+                      <option value="packed" disabled={['out_for_delivery','delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Packed</option>
+                      <option value="out_for_delivery" disabled={['delivered','cancelled'].includes(selectedOrder.status.toLowerCase())}>Out for Delivery</option>
+                      <option value="delivered" disabled={selectedOrder.status.toLowerCase() === 'cancelled'}>Delivered</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
                     <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />

@@ -29,6 +29,7 @@ const Transactions = React.lazy(() => import("../pages/Transactions"));
 const DeliveryTracking = React.lazy(() => import("../pages/DeliveryTracking"));
 const Profile = React.lazy(() => import("../pages/Profile"));
 const Withdrawals = React.lazy(() => import("../pages/Withdrawals"));
+const BulkUpload = React.lazy(() => import("../pages/BulkUpload"));
 
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
@@ -71,6 +72,7 @@ const SellerRoutes = () => {
         <Route path="/" element={<Dashboard />} />
         <Route path="/products" element={<ProductManagement />} />
         <Route path="/products/add" element={<AddProduct />} />
+        <Route path="/products/bulk-upload" element={<BulkUpload />} />
         <Route path="/inventory" element={<StockManagement />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/returns" element={<Returns />} />

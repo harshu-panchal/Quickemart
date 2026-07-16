@@ -10,6 +10,7 @@ import {
   HiOutlineCheckCircle,
   HiOutlineUser,
   HiOutlineInformationCircle,
+  HiOutlineXMark,
 } from "react-icons/hi2";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const DeliveryTracking = () => {
   const { showToast } = useToast();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [activeTrackingDetail, setActiveTrackingDetail] = useState(null);
 
   useEffect(() => {
     fetchDeliveries();
@@ -79,20 +81,24 @@ const DeliveryTracking = () => {
               name: order.deliveryBoy.name,
               phone: order.deliveryBoy.phone,
               avatar: order.deliveryBoy.name?.charAt(0) || "?",
-              image: order.deliveryBoy.image || "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
+              image: order.deliveryBoy.profileImage || "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
               rating: order.deliveryBoy.rating || 4.5,
+              vehicleNumber: order.deliveryBoy.vehicleNumber || "N/A",
+              vehicleType: order.deliveryBoy.vehicleType || "bike",
             } : {
               name: "Not Assigned",
               phone: "N/A",
               avatar: "?",
               image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
               rating: 0,
+              vehicleNumber: "N/A",
+              vehicleType: "N/A",
             },
             location: order.status === 'delivered' && order.updatedAt
               ? `Delivered at ${new Date(order.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
               : "In Progress",
             orderDate: order.createdAt
-              ? new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+              ? new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
               : "",
             startTime: order.createdAt
               ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -299,7 +305,13 @@ const DeliveryTracking = () => {
                       className="group relative bg-white rounded-lg border border-slate-100 p-1.5 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 transition-all duration-300 min-w-0">
                       <div className="flex flex-col lg:flex-row items-stretch gap-1">
                         {/* Partner Info Section */}
-                        <div className="lg:w-48 p-2 bg-slate-50/50 rounded-lg border border-transparent group-hover:bg-primary/[0.02] group-hover:border-primary/5 transition-all min-w-0">
+                        <div
+                          onClick={() => dlv.deliveryBoy.name !== "Not Assigned" && setActiveTrackingDetail(dlv)}
+                          className={cn(
+                            "lg:w-48 p-2 bg-slate-50/50 rounded-lg border border-transparent transition-all min-w-0",
+                            dlv.deliveryBoy.name !== "Not Assigned" ? "cursor-pointer hover:bg-slate-100/50 hover:border-slate-200" : ""
+                          )}
+                        >
                           <div className="flex items-center gap-2.5">
                             <div className="relative shrink-0">
                               <div className="h-10 w-10 rounded-md overflow-hidden ring-2 ring-white shadow-sm">
@@ -322,6 +334,7 @@ const DeliveryTracking = () => {
                               </h3>
                               <a
                                 href={`tel:${dlv.deliveryBoy.phone}`}
+                                onClick={(e) => e.stopPropagation()}
                                 className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-slate-500 hover:text-primary transition-colors"
                               >
                                 <HiOutlinePhone className="h-2.5 w-2.5 shrink-0" />
@@ -416,6 +429,122 @@ const DeliveryTracking = () => {
           </BlurFade>
         </>
       )}
+      {/* Delivery Boy Information Modal */}
+      <AnimatePresence>
+        {activeTrackingDetail && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-950/40 backdrop-blur-md"
+              onClick={() => setActiveTrackingDetail(null)}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 font-['Outfit']"
+            >
+              {/* Header card with gradient background */}
+              <div className="bg-linear-to-r from-slate-900 via-slate-950 to-black p-6 text-white relative">
+                <button
+                  onClick={() => setActiveTrackingDetail(null)}
+                  className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                >
+                  <HiOutlineXMark className="h-5 w-5" />
+                </button>
+                
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-primary">
+                  Delivery Partner Profile
+                </p>
+                <h3 className="text-xl font-black mt-1">
+                  {activeTrackingDetail.deliveryBoy.name}
+                </h3>
+              </div>
+
+              {/* Profile body */}
+              <div className="p-6 space-y-6">
+                <div className="flex items-center gap-5">
+                  <div className="h-24 w-24 rounded-2xl overflow-hidden bg-slate-100 ring-4 ring-slate-50 shadow-md shrink-0">
+                    <img
+                      src={activeTrackingDetail.deliveryBoy.image}
+                      alt={activeTrackingDetail.deliveryBoy.name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="px-2.5 py-1 bg-brand-50 text-brand-600 text-[8px] font-black uppercase tracking-widest rounded-full">
+                      Assigned Agent
+                    </span>
+                    <h4 className="text-lg font-black text-slate-800 leading-tight">
+                      {activeTrackingDetail.deliveryBoy.name}
+                    </h4>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                      Rating: {activeTrackingDetail.deliveryBoy.rating} ★
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-slate-50">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Contact & Vehicle Information
+                  </h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Phone Number</p>
+                      <a
+                        href={`tel:${activeTrackingDetail.deliveryBoy.phone}`}
+                        className="text-xs font-bold text-slate-800 hover:text-primary transition-colors block mt-1"
+                      >
+                        {activeTrackingDetail.deliveryBoy.phone}
+                      </a>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vehicle Details</p>
+                      <p className="text-xs font-bold text-slate-800 mt-1 capitalize">
+                        {activeTrackingDetail.deliveryBoy.vehicleNumber || "N/A"} ({activeTrackingDetail.deliveryBoy.vehicleType || "N/A"})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-slate-50">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Parcel Status
+                  </h5>
+                  <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-black text-primary uppercase tracking-widest">Order ID</p>
+                      <p className="text-xs font-bold text-slate-800 mt-0.5">#{activeTrackingDetail.orderId}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Current Status</p>
+                      <Badge
+                        variant={getStatusVariant(activeTrackingDetail.status)}
+                        className="text-[8px] font-black mt-1 uppercase tracking-widest inline-block"
+                      >
+                        {activeTrackingDetail.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer action button */}
+              <div className="p-6 bg-slate-50/50 border-t border-slate-100/50 flex gap-3">
+                <button
+                  onClick={() => setActiveTrackingDetail(null)}
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg hover:scale-[1.02]"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

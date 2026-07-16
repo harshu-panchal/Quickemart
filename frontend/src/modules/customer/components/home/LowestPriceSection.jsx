@@ -33,7 +33,7 @@ const LowestPriceSection = ({ products, onSeeAll }) => {
             </button>
           </div>
 
-          <div className="relative z-10 flex overflow-x-auto gap-3 md:gap-6 pb-2 md:pb-3 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scroll-smooth">
+          <div className="relative z-10 flex overflow-x-auto gap-3 md:gap-6 pb-4 md:pb-6 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scroll-smooth scroll-pl-4 md:scroll-pl-0 after:content-[''] after:w-1 after:shrink-0">
             {products.slice(0, 12).map((product) => (
               <div key={product.id} className="w-[126px] sm:w-[136px] md:w-[148px] shrink-0 snap-start smooth-transform">
                 <ProductCard

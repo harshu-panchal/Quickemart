@@ -64,28 +64,27 @@ export default function HeroCategoriesPerPage() {
           },
         ];
 
-        await Promise.all(
+        const headerRows = await Promise.all(
           headerList.map(async (h) => {
             const res = await adminApi.getHeroConfig({
               pageType: "header",
               headerId: h._id,
             });
-            if (cancelled) return;
             const result = res.data?.result || res.data || {};
             const items = result.banners?.items || [];
             const catIds = result.categoryIds || [];
-            rows.push({
+            return {
               id: h._id,
               label: h.name || "Unnamed",
               pageType: "header",
               headerId: h._id,
               bannerCount: items.length,
               categoryCount: catIds.length,
-            });
+            };
           })
         );
 
-        if (!cancelled) setPageData(rows);
+        if (!cancelled) setPageData([...rows, ...headerRows]);
       } catch (e) {
         if (!cancelled) console.error(e);
         showToast("Failed to load hero config", "error");

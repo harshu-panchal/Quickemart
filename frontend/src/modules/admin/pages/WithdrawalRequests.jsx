@@ -145,6 +145,58 @@ const WithdrawalRequests = () => {
         }
     };
 
+    const handleExport = async () => {
+        try {
+            toast.loading(`Exporting ${activeTab} data...`, { id: "export" });
+            const apiMethod = activeTab === 'sellers' ? adminApi.getSellerWithdrawals : adminApi.getDeliveryWithdrawals;
+            
+            const params = { page: 1, limit: 5000 };
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+            if (filterStatus !== 'all') params.status = filterStatus;
+
+            const res = await apiMethod(params).catch(() => ({ data: { success: false } }));
+            
+            if (!res.data.success) throw new Error("Failed to fetch data");
+            
+            const payload = res.data.result || {};
+            const items = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
+            
+            if (!items.length) {
+                toast.error("No data to export", { id: "export" });
+                return;
+            }
+
+            const csvRows = [];
+            csvRows.push(['Date', 'Time', 'Requester Name', 'Requester Phone', 'Amount (INR)', 'Status', 'Reference ID'].join(','));
+            
+            items.forEach(req => {
+                const dt = new Date(req.createdAt);
+                const date = dt.toLocaleDateString();
+                const time = dt.toLocaleTimeString();
+                const name = `"${(req.user?.shopName || req.user?.name || 'Unknown').replace(/"/g, '""')}"`;
+                const phone = req.user?.phone || 'N/A';
+                const amount = Math.abs(req.amount || 0);
+                const status = req.status || 'Unknown';
+                const ref = req.reference || req._id || 'N/A';
+                csvRows.push([date, time, name, phone, amount, status, ref].join(','));
+            });
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `${activeTab}_withdrawals_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            toast.success("Export successful", { id: "export" });
+        } catch (error) {
+            console.error("Export error:", error);
+            toast.error("Export failed", { id: "export" });
+        }
+    };
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header Section */}
@@ -163,7 +215,9 @@ const WithdrawalRequests = () => {
                     >
                         <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
+                    <button 
+                        onClick={handleExport}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
                         <Download className="h-4 w-4" />
                         EXPORT ALL
                     </button>
@@ -284,7 +338,7 @@ const WithdrawalRequests = () => {
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{req.user?.phone}</span>
                                                         <span className="h-1 w-1 rounded-full bg-slate-300" />
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(req.createdAt).toLocaleDateString()}</span>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(req.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                                     </div>
                                                 </div>
                                             </div>

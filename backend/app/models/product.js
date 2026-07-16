@@ -60,6 +60,10 @@ const productSchema = new mongoose.Schema(
         galleryImages: [{
             type: String, // Array of Cloudinary URLs
         }],
+        galleryLabels: [{
+            type: String,
+            trim: true,
+        }],
         headerId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",
@@ -73,7 +77,7 @@ const productSchema = new mongoose.Schema(
         subcategoryId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",
-            required: true,
+            required: false,
         },
         sellerId: {
             type: mongoose.Schema.Types.ObjectId,

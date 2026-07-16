@@ -46,8 +46,37 @@ const Documents = () => {
     },
   ]);
 
+  const fileInputRef = React.useRef(null);
+  const [activeUploadId, setActiveUploadId] = React.useState(null);
+
   const handleUpload = (id) => {
-    toast.info("Upload functionality would open file picker here");
+    setActiveUploadId(id);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && activeUploadId) {
+      toast.success(`${file.name} uploaded successfully!`);
+      
+      // Update local state to reflect the upload
+      setDocs(docs.map(doc => {
+        if (doc.id === activeUploadId) {
+          return {
+            ...doc,
+            status: "Pending", // Reset status to Pending upon re-upload
+            fileName: file.name,
+            uploadedOn: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            reason: undefined, // Clear any rejection reason
+          };
+        }
+        return doc;
+      }));
+    }
+    // Reset input
+    e.target.value = null;
   };
 
   const getStatusBadge = (status) => {
@@ -77,6 +106,13 @@ const Documents = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        className="hidden" 
+        onChange={handleFileChange} 
+        accept="image/*,.pdf" 
+      />
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="flex items-center p-4">
@@ -120,7 +156,7 @@ const Documents = () => {
                   onClick={() => handleUpload(doc.id)}
                 >
                   <UploadCloud size={14} className="mr-1" /> 
-                  {doc.status === "Rejected" ? "Re-upload" : "Update"}
+                  {doc.status === "Rejected" ? "Re-upload" : "Upload"}
                 </Button>
               )}
               {doc.fileName && (

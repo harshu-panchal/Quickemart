@@ -169,7 +169,7 @@ export function isWalletRedemptionReducesPayableEnabled() {
 // ignored at place-order) is preserved bit-for-bit so rollback is an
 // env flip. Default is OFF for production safety.
 export function isServerSideCouponEngineEnabled() {
-  return String(process.env.SERVER_SIDE_COUPON_ENGINE || "").toLowerCase() === "true";
+  return String(process.env.SERVER_SIDE_COUPON_ENGINE || "true").toLowerCase() === "true";
 }
 
 export const ALL_PAYMENT_MODES = Object.values(PAYMENT_MODE);

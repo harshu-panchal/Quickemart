@@ -75,8 +75,13 @@ const EditProfilePage = () => {
                                 <input
                                     type="text"
                                     name="name"
+                                    maxLength={50}
+                                    pattern="[a-zA-Z\s]*"
                                     value={formData.name}
-                                    onChange={handleChange}
+                                    onChange={(e) => {
+                                        e.target.value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                                        handleChange(e);
+                                    }}
                                     className="bg-transparent w-full text-slate-800 font-bold outline-none placeholder:font-medium"
                                     placeholder="Enter your name"
                                 />

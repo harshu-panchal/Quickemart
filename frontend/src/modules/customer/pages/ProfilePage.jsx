@@ -8,21 +8,13 @@ import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
 import { customerApi } from '../services/customerApi';
 import { toast } from 'sonner';
-import {
-    describePushSupport,
-    ensureFcmTokenRegistered,
-    startForegroundPushListener
-} from '@core/firebase/pushClient';
-
-const TEST_PUSH_STATUS_POLL_INTERVAL_MS = 1500;
-const TEST_PUSH_STATUS_MAX_ATTEMPTS = 20;
 
 const ProfilePage = () => {
     const navigate = useNavigate();
     const { user, role, logout } = useAuth();
     const { settings } = useSettings();
     const appName = settings?.appName || 'App';
-    const [isTestingPush, setIsTestingPush] = React.useState(false);
+    const [showLogoutModal, setShowLogoutModal] = React.useState(false);
 
     const formatIndiaPhone = (value) => {
         const raw = String(value || '').trim();
@@ -32,73 +24,10 @@ const ProfilePage = () => {
         return raw;
     };
 
-    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    const waitForTestPushResult = async (orderId) => {
-        for (let attempt = 0; attempt < TEST_PUSH_STATUS_MAX_ATTEMPTS; attempt += 1) {
-            const statusRes = await customerApi.getTestPushNotificationStatus(orderId);
-            const result = statusRes?.data?.result || {};
-            const status = String(result.status || '').trim().toLowerCase();
-
-            if (status === 'sent' || status === 'failed') {
-                return result;
-            }
-
-            if (attempt < TEST_PUSH_STATUS_MAX_ATTEMPTS - 1) {
-                await wait(TEST_PUSH_STATUS_POLL_INTERVAL_MS);
-            }
-        }
-        return null;
-    };
-
-    const handleTestPush = async () => {
-        if (isTestingPush) return;
-        setIsTestingPush(true);
-        try {
-            const support = describePushSupport();
-            if (!support.supported) {
-                throw new Error(support.message || 'Push notifications are not supported on this device/browser setup.');
-            }
-
-            await ensureFcmTokenRegistered({ role, platform: 'web' });
-            await startForegroundPushListener();
-            const res = await customerApi.testPushNotification();
-            const orderId = res?.data?.result?.orderId || '';
-            if (!orderId) {
-                toast.success('Test push triggered');
-                return;
-            }
-
-            const statusResult = await waitForTestPushResult(orderId);
-            if (!statusResult) {
-                toast.message(`Test push processing (${orderId})`, {
-                    description: 'Notification delivery is taking longer than expected.',
-                });
-                return;
-            }
-
-            if (statusResult.status === 'sent') {
-                toast.success(`Test push sent (${orderId})`, {
-                    description: 'MongoDB status is marked as sent.',
-                });
-                return;
-            }
-
-            toast.error(`Test push failed (${orderId})`, {
-                description: String(statusResult.failureReason || 'Notification delivery failed.'),
-            });
-        } catch (error) {
-            const message = error?.response?.data?.message || error?.message || 'Unknown error';
-            toast.error('Failed to trigger test push', {
-                description: message,
-            });
-        } finally {
-            setIsTestingPush(false);
-        }
-    };
 
     return (
-        <div className="min-h-screen bg-slate-50 pb-24 md:pb-8 font-sans">
+        <>
+            <div className="min-h-screen bg-slate-50 pb-20 font-['Outfit',_sans-serif]">
             <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-slate-200/60 mb-4 flex items-center gap-2">
                 <button
                     onClick={() => navigate(-1)}
@@ -110,12 +39,11 @@ const ProfilePage = () => {
                 <div className="ml-auto flex items-center gap-2">
                     <button
                         type="button"
-                        onClick={handleTestPush}
-                        disabled={isTestingPush}
-                        title="Test push notification"
-                        className="w-10 h-10 flex items-center justify-center rounded-full transition-colors border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                        onClick={() => navigate('/notifications')}
+                        title="View notifications"
+                        className="w-10 h-10 flex items-center justify-center rounded-full transition-colors border border-slate-200 bg-white hover:bg-slate-100"
                     >
-                        <Bell size={18} className={isTestingPush ? "text-slate-400" : "text-slate-700"} />
+                        <Bell size={18} className="text-slate-700" />
                     </button>
                 </div>
             </div>
@@ -226,7 +154,7 @@ const ProfilePage = () => {
 
                 {/* Logout Button */}
                 <button
-                    onClick={logout}
+                    onClick={() => setShowLogoutModal(true)}
                     className="w-full py-3 rounded-lg border border-slate-300 text-slate-700 font-semibold bg-white hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mt-2"
                 >
                     <LogOut size={20} />
@@ -239,6 +167,39 @@ const ProfilePage = () => {
 
             </div>
         </div>
+
+        {/* Logout Confirmation Modal */}
+        {showLogoutModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
+                    <div className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-4 mx-auto">
+                        <LogOut size={24} />
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900 text-center mb-2">Sign out?</h3>
+                    <p className="text-sm font-medium text-slate-500 text-center mb-6">
+                        Are you sure you want to sign out from your account? You will need to login again to access your orders.
+                    </p>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setShowLogoutModal(false)}
+                            className="flex-1 py-3.5 rounded-2xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowLogoutModal(false);
+                                logout();
+                            }}
+                            className="flex-1 py-3.5 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30"
+                        >
+                            Yes, Sign out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+    </>
     );
 };
 

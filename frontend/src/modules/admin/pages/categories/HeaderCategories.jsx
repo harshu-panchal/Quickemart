@@ -178,6 +178,20 @@ const HeaderCategories = () => {
       return;
     }
 
+    const hexRegex = /^#([0-9A-F]{3}|[0-9A-F]{6})$/i;
+    if (formData.headerColor && !hexRegex.test(formData.headerColor)) {
+      toast.error("Header Background must be a valid hex code (e.g., #FF1E1E)");
+      return;
+    }
+    if (formData.headerFontColor && !hexRegex.test(formData.headerFontColor)) {
+      toast.error("Title/Text Color must be a valid hex code (e.g., #FFFFFF)");
+      return;
+    }
+    if (formData.headerIconColor && !hexRegex.test(formData.headerIconColor)) {
+      toast.error("Active Tab / Icon Color must be a valid hex code (e.g., #111111)");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const data = new FormData();
@@ -210,7 +224,8 @@ const HeaderCategories = () => {
       fetchCategories(page);
     } catch (error) {
       console.error(error);
-      toast.error(editingItem ? "Failed to update" : "Failed to create");
+      const errorMessage = error.response?.data?.message || (editingItem ? "Failed to update category" : "Failed to create category");
+      toast.error(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -226,7 +241,8 @@ const HeaderCategories = () => {
       setDeleteTarget(null);
       fetchCategories(page);
     } catch (error) {
-      toast.error("Failed to delete category");
+      const errorMessage = error.response?.data?.message || "Failed to delete category";
+      toast.error(errorMessage);
     }
   };
 

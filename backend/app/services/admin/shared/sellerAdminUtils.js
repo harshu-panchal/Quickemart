@@ -63,6 +63,7 @@ export function formatSellerApplication(seller) {
 
   return {
     id: String(seller._id),
+    sellerId: seller.sellerId || null,
     shopName: seller.shopName || "Unnamed Store",
     ownerName: seller.name || "Unnamed Owner",
     email: seller.email || "",

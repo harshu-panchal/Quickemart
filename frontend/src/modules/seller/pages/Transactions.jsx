@@ -107,7 +107,7 @@ const Transactions = () => {
         date:
           txn.date ??
           (txn.createdAt
-            ? new Date(txn.createdAt).toLocaleDateString()
+            ? new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
             : ""),
         time:
           txn.time ??
@@ -169,7 +169,7 @@ const Transactions = () => {
                     type: txn.type ?? "",
                     amount: `₹${Number(txn.amount ?? 0).toLocaleString()}`,
                     status: txn.status ?? "",
-                    date: txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString() : ""),
+                    date: txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ""),
                     time: txn.time ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""),
                     customer: txn.customer ?? "",
                     ref: txn.ref ?? "",
@@ -337,7 +337,7 @@ const Transactions = () => {
                             {txn.ref ?? "—"}
                           </Badge>
                           <span className="text-[10px] sm:text-xs text-slate-600 font-bold uppercase tracking-tighter">
-                            {txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString() : "—")} • {txn.time ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—")}
+                            {txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : "—")} • {txn.time ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—")}
                           </span>
                         </div>
                       </td>
@@ -467,7 +467,7 @@ const Transactions = () => {
                   {selectedTxn.date && selectedTxn.time
                     ? `${selectedTxn.date} at ${selectedTxn.time}`
                     : selectedTxn.createdAt
-                      ? `${new Date(selectedTxn.createdAt).toLocaleDateString()} at ${new Date(selectedTxn.createdAt).toLocaleTimeString()}`
+                      ? `${new Date(selectedTxn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} at ${new Date(selectedTxn.createdAt).toLocaleTimeString()}`
                       : "—"}
                 </span>
               </div>

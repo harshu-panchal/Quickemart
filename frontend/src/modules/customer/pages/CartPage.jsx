@@ -98,7 +98,12 @@ const CartPage = () => {
                                                 <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                                     <div className="flex items-end gap-2">
                                                         <div className="text-2xl font-black tracking-tight text-slate-900">
-                                                            ₹{item.price * item.quantity}
+                                                            ₹{(() => {
+                                                                const mrp = Number(item.price || 0);
+                                                                const sale = Number(item.salePrice || 0);
+                                                                const unit = sale > 0 && sale < mrp ? sale : mrp;
+                                                                return Math.round(unit * Number(item.quantity || 0));
+                                                            })()}
                                                         </div>
                                                         <div className="pb-0.5 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
                                                             total

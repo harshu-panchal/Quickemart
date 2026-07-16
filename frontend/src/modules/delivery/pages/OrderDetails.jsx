@@ -13,6 +13,7 @@ import {
   User,
   AlertTriangle,
   ShieldCheck,
+  IndianRupee,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Button from "@/shared/components/ui/Button";
@@ -319,6 +320,17 @@ const OrderDetails = () => {
   const destinationLocation = order?.address?.location;
 
   const summary = useMemo(() => {
+    const actualDist = order?.distanceSnapshot?.distanceKmActual || order?.paymentBreakdown?.distanceKmActual;
+    const finalDistanceStr = actualDist ? `${actualDist >= 10 ? actualDist.toFixed(1) : actualDist.toFixed(2)} km` : "0 km";
+
+    if (publicStatusStage === 3 || step >= 4) {
+      return {
+        arrivalTimeText: "Arrived",
+        arrivingInText: "Delivered",
+        totalDistanceText: finalDistanceStr,
+      };
+    }
+
     if (!order) {
       return {
         arrivalTimeText: "--",
@@ -327,13 +339,6 @@ const OrderDetails = () => {
       };
     }
 
-    if (publicStatusStage === 3) {
-      return {
-        arrivalTimeText: "Arrived",
-        arrivingInText: isReturn ? "Return Complete" : "Delivered",
-        totalDistanceText: "0 km",
-      };
-    }
 
     const routeDistanceMeters = Number(
       routeStats?.routeDistanceMeters ?? routeStats?.distanceMeters,
@@ -505,7 +510,8 @@ const OrderDetails = () => {
   };
 
   const handleOtpValidationSuccess = (data) => {
-    const updatedOrder = data?.result || data?.data?.result;
+    const responsePayload = data?.result || data?.data?.result;
+    const updatedOrder = responsePayload?.order || responsePayload;
 
     setShowOtpInput(false);
     setPickupProofSubmitted(false);
@@ -716,9 +722,9 @@ const OrderDetails = () => {
 
                 <div className="w-full pt-4">
                   <Button
-                    loading={accepting}
+                    isLoading={accepting}
                     onClick={handleAcceptReturn}
-                    className="w-full bg-white text-brand-700 hover:bg-slate-50 h-14 rounded-2xl font-black text-lg shadow-lg border-none"
+                    className="w-full bg-white text-slate-900 hover:bg-slate-50 h-14 rounded-2xl font-black text-lg shadow-lg border-none"
                   >
                     ACCEPT TASK
                   </Button>
@@ -793,6 +799,32 @@ const OrderDetails = () => {
           </div>
         </motion.div>
 
+        <motion.div
+          className="bg-emerald-50 rounded-3xl p-4 shadow-sm border border-emerald-100 flex items-center justify-between gap-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600">
+              <IndianRupee size={20} />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
+                Expected Earnings
+              </p>
+              <p className="text-xl font-black text-emerald-700 leading-none">
+                ₹{isReturn ? (order.returnDeliveryCommission || 0) : (order.paymentBreakdown?.riderPayoutTotal || 0)}
+              </p>
+            </div>
+          </div>
+          <div className="text-right flex flex-col items-end gap-2">
+            <div className="inline-flex items-center rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-bold text-emerald-600 ring-1 ring-emerald-200">
+              + Tip if applicable
+            </div>
+          </div>
+        </motion.div>
+
         <Card className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
           <div className="flex justify-between items-center px-2 mb-2 relative">
             <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -z-10 rounded-full" />
@@ -860,16 +892,28 @@ const OrderDetails = () => {
                     </div>
                   </div>
                   {(isReturn ? order.address?.phone : order.seller?.phone) && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9"
-                      onClick={() =>
-                        (window.location.href = `tel:${isReturn ? order.address?.phone : order.seller?.phone}`)
-                      }
-                    >
-                      <Phone size={18} />
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() =>
+                          (window.location.href = `sms:${isReturn ? order.address?.phone : order.seller?.phone}`)
+                        }
+                      >
+                        <MessageSquare size={18} />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() =>
+                          (window.location.href = `tel:${isReturn ? order.address?.phone : order.seller?.phone}`)
+                        }
+                      >
+                        <Phone size={18} />
+                      </Button>
+                    </div>
                   )}
                 </div>
                 <div className="p-4">
@@ -931,20 +975,29 @@ const OrderDetails = () => {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="icon" className="h-9 w-9">
-                      <MessageSquare size={18} />
-                    </Button>
                     {(isReturn ? order.seller?.phone : order.address?.phone) && (
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() =>
-                          (window.location.href = `tel:${isReturn ? order.seller?.phone : order.address?.phone}`)
-                        }
-                      >
-                        <Phone size={18} />
-                      </Button>
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="h-9 w-9"
+                          onClick={() =>
+                            (window.location.href = `sms:${isReturn ? order.seller?.phone : order.address?.phone}`)
+                          }
+                        >
+                          <MessageSquare size={18} />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() =>
+                            (window.location.href = `tel:${isReturn ? order.seller?.phone : order.address?.phone}`)
+                          }
+                        >
+                          <Phone size={18} />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -960,7 +1013,7 @@ const OrderDetails = () => {
                   <p className="text-gray-500 text-sm mb-4">
                     {isReturn ? order.seller?.address : order.address?.city}
                   </p>
-                  <Button onClick={handleNavigate} className="w-full bg-black  hover:bg-brand-700 text-primary-foreground border-none">
+                  <Button onClick={handleNavigate} className="w-full bg-black hover:bg-brand-700 text-white border-none">
                     <Navigation size={18} className="mr-2" />{" "}
                     {isReturn ? "Navigate to Seller" : "Navigate to Customer"}
                   </Button>
@@ -1205,6 +1258,52 @@ const OrderDetails = () => {
               </motion.div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Go Back button: shown when step > 1 and order not yet complete */}
+      {!isReturn && step > 1 && step < 4 && (
+        <div
+          className={`fixed ${
+            step <= 2 ? "bottom-24" : "bottom-4"
+          } left-0 right-0 z-39 flex justify-center pointer-events-none`}
+        >
+          <button
+            onClick={() => {
+              setStep((s) => Math.max(1, s - 1));
+              setIsSlideComplete(false);
+              setDragX(0);
+              setShowOtpInput(false);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="pointer-events-auto flex items-center gap-1.5 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-bold shadow-md hover:bg-slate-50 active:scale-95 transition-all"
+          >
+            <ChevronDown className="rotate-90" size={14} />
+            Go Back
+          </button>
+        </div>
+      )}
+
+      {/* Go Back for return flow */}
+      {isReturn && isAssignedRider && (step === 2 || step === 4) && (
+        <div
+          className="fixed bottom-4 left-0 right-0 z-39 flex justify-center pointer-events-none"
+        >
+          <button
+            onClick={() => {
+              setStep((s) => Math.max(1, s - 1));
+              setIsSlideComplete(false);
+              setDragX(0);
+              setShowOtpInput(false);
+              setPickupProofSubmitted(false);
+              setShowDropOtpInput(false);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="pointer-events-auto flex items-center gap-1.5 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-bold shadow-md hover:bg-slate-50 active:scale-95 transition-all"
+          >
+            <ChevronDown className="rotate-90" size={14} />
+            Go Back
+          </button>
         </div>
       )}
     </div>

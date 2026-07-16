@@ -207,7 +207,8 @@ const SubCategories = () => {
       fetchCategories();
     } catch (error) {
       console.error(error);
-      toast.error(editingItem ? "Failed to update" : "Failed to create");
+      const errorMessage = error.response?.data?.message || (editingItem ? "Failed to update subcategory" : "Failed to create subcategory");
+      toast.error(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -223,7 +224,8 @@ const SubCategories = () => {
       setDeleteTarget(null);
       fetchCategories();
     } catch (error) {
-      toast.error("Failed to delete subcategory");
+      const errorMessage = error.response?.data?.message || "Failed to delete subcategory";
+      toast.error(errorMessage);
     }
   };
 
@@ -578,6 +580,7 @@ const SubCategories = () => {
                     }
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     placeholder="e.g., Gaming Laptops"
+                    maxLength={50}
                   />
                 </div>
 

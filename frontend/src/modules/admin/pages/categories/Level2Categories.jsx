@@ -558,6 +558,7 @@ const Level2Categories = () => {
                     }
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     placeholder="e.g., Laptops"
+                    maxLength={50}
                   />
                 </div>
 

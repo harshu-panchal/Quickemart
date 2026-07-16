@@ -355,12 +355,13 @@ const NotificationComposer = () => {
                                     <div className="space-y-2">
                                         <label className="ds-label">Deep Link (Optional)</label>
                                         <div className="relative">
-                                            <HiOutlineLink className="absolute left-3 top-1/2 -translate-y-1/2 ds-icon-sm text-slate-400" />
+                                            <HiOutlineLink className="absolute left-4 top-1/2 -translate-y-1/2 ds-icon-sm text-slate-400" />
                                             <input
                                                 value={deepLink}
                                                 onChange={(e) => setDeepLink(e.target.value)}
-                                                className="ds-input w-full pl-9"
-                                                placeholder="/deals/category"
+                                                className="ds-input w-full"
+                                                style={{ paddingLeft: '2.5rem' }}
+                                                placeholder="e.g. /deals/category"
                                             />
                                         </div>
                                     </div>

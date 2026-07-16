@@ -1,7 +1,17 @@
 import Product from "../models/product.js";
+import Order from "../models/order.js";
+import Review from "../models/review.js";
 import { handleResponse } from "../utils/helper.js";
 import { slugify } from "../utils/slugify.js";
 import getPagination from "../utils/pagination.js";
+import Admin from "../models/admin.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+
+async function getAdminIds() {
+  const admins = await Admin.find().select("_id").lean();
+  return (admins || []).map((a) => a?._id).filter(Boolean);
+}
 import {
   parseCustomerCoordinates,
   getNearbySellerIdsForCustomer,
@@ -73,7 +83,8 @@ function makeProductSku(name, index = 1) {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
     .slice(0, 5) || "item";
-  return `${prefix}-${String(index).padStart(3, "0")}`;
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${prefix}-${String(index).padStart(2, "0")}-${randomSuffix}`;
 }
 
 function parseJsonIfString(value) {
@@ -119,6 +130,9 @@ function applyMediaFields(productData) {
   } else if (mergedGallery.length > 0) {
     productData.mainImage = mergedGallery[0];
     mergedGallery.shift();
+    if (Array.isArray(productData.galleryLabels) && productData.galleryLabels.length > 0) {
+      productData.galleryLabels.shift();
+    }
   } else {
     delete productData.mainImage;
   }
@@ -636,6 +650,13 @@ export const createProduct = async (req, res) => {
         });
       }
     }
+    if (typeof productData.galleryLabels === "string") {
+      try {
+        productData.galleryLabels = JSON.parse(productData.galleryLabels);
+      } catch (e) {
+        // Fallback
+      }
+    }
     if (typeof productData.tags === "string" && productData.tags.startsWith("[")) {
       try {
         productData.tags = JSON.parse(productData.tags);
@@ -647,7 +668,7 @@ export const createProduct = async (req, res) => {
     if (!productData.name) {
       return handleResponse(res, 400, "Product name is required");
     }
-    
+
     // Auto-generate slug
     if (!productData.slug || productData.slug.trim() === "") {
       productData.slug = slugify(productData.name);
@@ -694,6 +715,7 @@ export const createProduct = async (req, res) => {
     let moderationUpdate = {};
     let successMessage = "Product created successfully";
 
+    let isPendingApproval = false;
     if (role === "admin") {
       moderationUpdate = buildAdminApprovedModerationUpdate(req.user?.id || null);
     } else {
@@ -701,6 +723,7 @@ export const createProduct = async (req, res) => {
       if (approvalConfig.sellerCreateRequiresApproval) {
         moderationUpdate = buildSellerPendingModerationUpdate();
         successMessage = "Product submitted for admin approval";
+        isPendingApproval = true;
       } else {
         moderationUpdate = buildSellerApprovedModerationUpdate();
       }
@@ -708,7 +731,22 @@ export const createProduct = async (req, res) => {
     Object.assign(productData, moderationUpdate);
 
     const product = await Product.create(productData);
-    
+
+    if (isPendingApproval && product && product._id) {
+      try {
+        const adminIds = await getAdminIds();
+        emitNotificationEvent(NOTIFICATION_EVENTS.PRODUCT_MODERATION_REQUEST, {
+          productId: product._id,
+          productName: product.name,
+          sellerId: req.user.id,
+          adminIds,
+          action: 'create'
+        });
+      } catch (e) {
+        logger.error("Notification emission failed", { error: e });
+      }
+    }
+
     if (product && product._id) {
       // Enqueue search indexing asynchronously
       await enqueueProductIndex(product._id.toString());
@@ -796,6 +834,13 @@ export const updateProduct = async (req, res) => {
         });
       }
     }
+    if (typeof productData.galleryLabels === "string") {
+      try {
+        productData.galleryLabels = JSON.parse(productData.galleryLabels);
+      } catch (e) {
+        // Fallback
+      }
+    }
     if (typeof productData.tags === "string" && productData.tags.startsWith("[")) {
       try {
         productData.tags = JSON.parse(productData.tags);
@@ -859,6 +904,7 @@ export const updateProduct = async (req, res) => {
     let moderationUpdate = {};
     let successMessage = "Product updated successfully";
 
+    let isPendingApproval = false;
     if (role === "admin") {
       moderationUpdate = buildAdminApprovedModerationUpdate(req.user?.id || null);
     } else {
@@ -866,6 +912,7 @@ export const updateProduct = async (req, res) => {
       if (approvalConfig.sellerEditRequiresApproval) {
         moderationUpdate = buildSellerPendingModerationUpdate();
         successMessage = "Product changes submitted for admin approval";
+        isPendingApproval = true;
       } else {
         moderationUpdate = buildSellerApprovedModerationUpdate();
       }
@@ -877,7 +924,22 @@ export const updateProduct = async (req, res) => {
       { $set: productData },
       { new: true, runValidators: true },
     );
-    
+
+    if (isPendingApproval && updatedProduct) {
+      try {
+        const adminIds = await getAdminIds();
+        emitNotificationEvent(NOTIFICATION_EVENTS.PRODUCT_MODERATION_REQUEST, {
+          productId: updatedProduct._id,
+          productName: updatedProduct.name,
+          sellerId: req.user.id,
+          adminIds,
+          action: 'update'
+        });
+      } catch (e) {
+        logger.error("Notification emission failed", { error: e });
+      }
+    }
+
     // Enqueue search indexing asynchronously
     await enqueueProductIndex(id);
     await invalidate(`cache:catalog:product:${id}`);
@@ -934,7 +996,7 @@ export const deleteProduct = async (req, res) => {
     if (!product) {
       return handleResponse(res, 404, "Product not found or unauthorized");
     }
-    
+
     // Enqueue search index removal asynchronously
     await enqueueProductRemoval(id);
     await invalidate(`cache:catalog:product:${id}`);
@@ -1014,11 +1076,32 @@ export const getProductById = async (req, res) => {
       }
     }
 
+    const payload = normalizeProductDocumentModeration(product);
+
+    if (req.user) {
+      const userId = req.user.id;
+      const purchase = await Order.findOne({
+        customer: userId,
+        "items.product": id,
+        $or: [
+          { orderStatus: { $regex: /^delivered$/i } },
+          { status: { $regex: /^delivered$/i } }
+        ]
+      });
+      payload.hasPurchased = !!purchase;
+
+      const existingReview = await Review.findOne({
+        userId,
+        productId: id
+      });
+      payload.hasReviewed = !!existingReview;
+    }
+
     return handleResponse(
       res,
       200,
       "Product details fetched",
-      normalizeProductDocumentModeration(product),
+      payload,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -1084,6 +1167,45 @@ export const getModerationProducts = async (req, res) => {
       }
     }
 
+    const effectiveStockExpr = {
+      $cond: {
+        if: { $gt: [{ $size: { $ifNull: ["$variants", []] } }, 0] },
+        then: {
+          $sum: {
+            $map: {
+              input: "$variants",
+              as: "v",
+              in: { $convert: { input: "$$v.stock", to: "double", onError: 0, onNull: 0 } }
+            }
+          }
+        },
+        else: { $convert: { input: "$stock", to: "double", onError: 0, onNull: 0 } }
+      }
+    };
+
+    const thresholdExpr = {
+      $let: {
+        vars: {
+          rawThreshold: { $convert: { input: "$lowStockAlert", to: "double", onError: 0, onNull: 0 } }
+        },
+        in: { $cond: [{ $gt: ["$$rawThreshold", 0] }, "$$rawThreshold", 10] }
+      }
+    };
+
+    const { stockStatus = "all" } = req.query;
+    if (stockStatus !== "all") {
+      if (stockStatus === "out") {
+        baseQuery.$expr = { $eq: [effectiveStockExpr, 0] };
+      } else if (stockStatus === "low") {
+        baseQuery.$expr = {
+          $and: [
+            { $gt: [effectiveStockExpr, 0] },
+            { $lte: [effectiveStockExpr, thresholdExpr] }
+          ]
+        };
+      }
+    }
+
     let moderatedQuery = { ...baseQuery };
     const approvalFilter = buildApprovalStatusFilter(approvalStatus);
     if (Object.keys(approvalFilter).length > 0) {
@@ -1100,7 +1222,12 @@ export const getModerationProducts = async (req, res) => {
     };
     const sortQuery = sortMap[String(sort || "newest").toLowerCase()] || sortMap.newest;
 
-    const [items, total, allCount, pendingCount, approvedCount, rejectedCount] =
+    // Compute base counts for stats cards, ignoring status/stock filters
+    const baseStatsQuery = { ...baseQuery };
+    delete baseStatsQuery.status;
+    delete baseStatsQuery.$expr;
+
+    const [items, total, allCount, pendingCount, approvedCount, rejectedCount, activeCount, lowStockCount, outOfStockCount] =
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
@@ -1116,21 +1243,32 @@ export const getModerationProducts = async (req, res) => {
           .limit(limit)
           .lean(),
         Product.countDocuments(moderatedQuery),
-        Product.countDocuments(baseQuery),
+        Product.countDocuments(baseStatsQuery),
         Product.countDocuments({
-          ...baseQuery,
+          ...baseStatsQuery,
           approvalStatus: PRODUCT_APPROVAL_STATUS.PENDING,
         }),
         Product.countDocuments({
           $and: [
-            { ...baseQuery },
+            { ...baseStatsQuery },
             buildApprovalStatusFilter(PRODUCT_APPROVAL_STATUS.APPROVED),
           ],
         }),
         Product.countDocuments({
-          ...baseQuery,
+          ...baseStatsQuery,
           approvalStatus: PRODUCT_APPROVAL_STATUS.REJECTED,
         }),
+        Product.countDocuments({ ...baseStatsQuery, status: "active" }),
+        Product.countDocuments({
+          ...baseStatsQuery,
+          $expr: {
+            $and: [
+              { $gt: [effectiveStockExpr, 0] },
+              { $lte: [effectiveStockExpr, thresholdExpr] }
+            ]
+          }
+        }),
+        Product.countDocuments({ ...baseStatsQuery, $expr: { $eq: [effectiveStockExpr, 0] } }),
       ]);
 
     return handleResponse(res, 200, "Moderation products fetched", {
@@ -1144,6 +1282,9 @@ export const getModerationProducts = async (req, res) => {
         pending: pendingCount,
         approved: approvedCount,
         rejected: rejectedCount,
+        active: activeCount,
+        lowStock: lowStockCount,
+        outOfStock: outOfStockCount,
       },
     });
   } catch (error) {
@@ -1229,6 +1370,247 @@ export const rejectProduct = async (req, res) => {
       "Product rejected successfully",
       normalizeProductDocumentModeration(updated?.toObject?.() || updated),
     );
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const bulkImportProducts = async (req, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    const { products, mode } = req.body || {};
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return handleResponse(res, 400, "No products provided for import");
+    }
+
+    let sellerId = req.user.id;
+    if (role === "admin") {
+      if (!req.body.sellerId) {
+        return handleResponse(res, 400, "sellerId is required for admin import");
+      }
+      sellerId = req.body.sellerId;
+    }
+
+    // Load active categories in memory
+    const CategoryModel = (await import("../models/category.js")).default;
+    const activeCategories = await CategoryModel.find({ status: "active" }).lean();
+
+    const importedProducts = [];
+    const errors = [];
+
+    // getProductApprovalConfig from moderation service;
+    // builder functions are defined locally in this file
+    const { getProductApprovalConfig } = await import("../services/productModerationService.js");
+
+    const approvalConfig = await getProductApprovalConfig();
+
+    for (let index = 0; index < products.length; index++) {
+      const pData = products[index];
+      const rowNum = index + 3; // mapping to excel row
+
+      try {
+        if (!pData.name) {
+          throw new Error(`Row ${rowNum}: Product Title is required`);
+        }
+        if (!pData.mainGroup) {
+          throw new Error(`Row ${rowNum}: Main Group is required`);
+        }
+        if (!pData.specificCategory) {
+          throw new Error(`Row ${rowNum}: Specific Category is required`);
+        }
+
+        // Find mainGroup (header)
+        let header = activeCategories.find(
+          (c) => c.type === "header" && c.name.toLowerCase() === String(pData.mainGroup).trim().toLowerCase()
+        );
+        if (!header) {
+          throw new Error(`Row ${rowNum}: Main Group "${pData.mainGroup}" not found or inactive`);
+        }
+
+        // Find specificCategory under header
+        let category = activeCategories.find(
+          (c) =>
+            c.type === "category" &&
+            String(c.parentId) === String(header._id) &&
+            c.name.toLowerCase() === String(pData.specificCategory).trim().toLowerCase()
+        );
+        if (!category) {
+          const newCatSlug = slugify(pData.specificCategory);
+          // Check if category with same name or slug already exists under a different parent
+          const existingCategoryElsewhere = activeCategories.find(
+            (c) =>
+              c.type === "category" &&
+              (c.name.toLowerCase() === String(pData.specificCategory).trim().toLowerCase() ||
+               c.slug === newCatSlug)
+          );
+          
+          if (existingCategoryElsewhere) {
+            category = existingCategoryElsewhere;
+            // Align header to the actual parent header of the existing category
+            const parentHeader = activeCategories.find(
+              (c) => c.type === "header" && String(c._id) === String(category.parentId)
+            );
+            if (parentHeader) {
+              header = parentHeader;
+            }
+          } else {
+            // Create the category automatically
+            const newCategory = await CategoryModel.create({
+              name: String(pData.specificCategory).trim(),
+              slug: newCatSlug,
+              type: "category",
+              parentId: header._id,
+              status: "active"
+            });
+            
+            category = newCategory.toObject ? newCategory.toObject() : newCategory;
+            activeCategories.push(category);
+          }
+        }
+
+        // Find subCategory under category (optional)
+        let subcategory = null;
+        if (pData.subCategory && String(pData.subCategory).trim()) {
+          subcategory = activeCategories.find(
+            (c) =>
+              c.type === "subcategory" &&
+              String(c.parentId) === String(category._id) &&
+              c.name.toLowerCase() === String(pData.subCategory).trim().toLowerCase()
+          );
+          if (!subcategory) {
+            const newSubSlug = slugify(pData.subCategory);
+            // Check if subcategory with same name or slug already exists under a different parent
+            const existingSubElsewhere = activeCategories.find(
+              (c) =>
+                c.type === "subcategory" &&
+                (c.name.toLowerCase() === String(pData.subCategory).trim().toLowerCase() ||
+                 c.slug === newSubSlug)
+            );
+            
+            if (existingSubElsewhere) {
+              subcategory = existingSubElsewhere;
+              // Align category and header to the actual hierarchy of the existing subcategory
+              const parentCategory = activeCategories.find(
+                (c) => c.type === "category" && String(c._id) === String(subcategory.parentId)
+              );
+              if (parentCategory) {
+                category = parentCategory;
+                const parentHeader = activeCategories.find(
+                  (c) => c.type === "header" && String(c._id) === String(category.parentId)
+                );
+                if (parentHeader) {
+                  header = parentHeader;
+                }
+              }
+            } else {
+              // Create the subcategory automatically
+              const newSubcategory = await CategoryModel.create({
+                name: String(pData.subCategory).trim(),
+                slug: newSubSlug,
+                type: "subcategory",
+                parentId: category._id,
+                status: "active"
+              });
+              
+              subcategory = newSubcategory.toObject ? newSubcategory.toObject() : newSubcategory;
+              activeCategories.push(subcategory);
+            }
+          }
+        }
+
+        // Resolve status
+        const resolvedStatus = pData.status === "inactive" ? "inactive" : "active";
+
+        // Determine price, salePrice, stock from Variant 1
+        const v1 = pData.variants && pData.variants[0];
+        if (!v1) {
+          throw new Error(`Row ${rowNum}: At least one variant is required`);
+        }
+
+        const price = Number(v1.price);
+        const salePrice = v1.salePrice ? Number(v1.salePrice) : undefined;
+        const stock = Number(v1.stock);
+
+        if (isNaN(price)) {
+          throw new Error(`Row ${rowNum}: Variant 1 Price must be a valid number`);
+        }
+        if (isNaN(stock)) {
+          throw new Error(`Row ${rowNum}: Variant 1 Stock must be a valid number`);
+        }
+
+        const finalVariants = pData.variants.map((v, vIdx) => {
+          return {
+            name: String(v.name || "").trim(),
+            price: Number(v.price),
+            salePrice: v.salePrice ? Number(v.salePrice) : undefined,
+            stock: Number(v.stock),
+            sku: v.sku && String(v.sku).trim() ? String(v.sku).trim() : makeProductSku(pData.name, vIdx + 1),
+          };
+        });
+
+        // Use custom slugify or fallback
+        let slug = slugify(pData.name);
+
+        const newProdData = {
+          name: String(pData.name).trim(),
+          slug,
+          sku: finalVariants[0].sku, // use variant 1 sku as product sku
+          description: String(pData.description || "").trim(),
+          brand: String(pData.brand || "").trim(),
+          weight: String(pData.weight || "").trim(),
+          tags: Array.isArray(pData.tags) ? pData.tags : [],
+          sellerId,
+          headerId: header._id,
+          categoryId: category._id,
+          subcategoryId: subcategory ? subcategory._id : null,
+          status: resolvedStatus,
+          mainImage: pData.mainImageUrl ? String(pData.mainImageUrl).trim() : undefined,
+          galleryImages: Array.isArray(pData.galleryUrls) ? pData.galleryUrls : [],
+          variants: finalVariants,
+          price,
+          salePrice,
+          stock,
+        };
+
+        // Moderation
+        let moderationUpdate = {};
+        if (role === "admin") {
+          moderationUpdate = buildAdminApprovedModerationUpdate(req.user?.id || null);
+        } else {
+          if (approvalConfig.sellerCreateRequiresApproval) {
+            moderationUpdate = buildSellerPendingModerationUpdate();
+          } else {
+            moderationUpdate = buildSellerApprovedModerationUpdate();
+          }
+        }
+        Object.assign(newProdData, moderationUpdate);
+
+        const newProduct = await Product.create(newProdData);
+        if (newProduct && newProduct._id) {
+          await enqueueProductIndex(newProduct._id.toString());
+        }
+        importedProducts.push(newProduct);
+      } catch (rowErr) {
+        errors.push(rowErr.message);
+      }
+    }
+
+    // Invalidate list caches
+    await invalidate(buildKey("catalog", "productList", "*"));
+    await invalidate("cache:offersections:public:*");
+
+    if (errors.length > 0) {
+      return handleResponse(res, 400, "Import completed with errors", {
+        importedCount: importedProducts.length,
+        errors,
+      });
+    }
+
+    return handleResponse(res, 200, "Products imported successfully", {
+      importedCount: importedProducts.length,
+      products: importedProducts.map(p => p._id),
+    });
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

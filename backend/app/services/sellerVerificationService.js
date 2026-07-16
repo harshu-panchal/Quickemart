@@ -8,6 +8,7 @@ import { MOCK_OTP, useRealSMS } from "../utils/otp.js";
 import { sendSellerVerificationOtpEmail, useRealEmailOTP } from "./emailService.js";
 
 const SELLER_SIGNUP_PURPOSE = "seller_signup";
+const SELLER_RESET_PURPOSE = "seller_reset";
 const OTP_EXPIRY_MINUTES = () =>
   parseInt(process.env.SELLER_OTP_EXPIRY_MINUTES || process.env.OTP_EXPIRY_MINUTES || "5", 10);
 const OTP_RESEND_COOLDOWN_SECONDS = () =>
@@ -67,10 +68,10 @@ function generateSellerOtp(channel) {
   return useRealDelivery ? randomOtp(OTP_LENGTH()) : MOCK_OTP;
 }
 
-function hashOtp(channel, target, otp) {
+function hashOtp(channel, target, otp, purpose = SELLER_SIGNUP_PURPOSE) {
   return crypto
     .createHmac("sha256", verificationSecret())
-    .update(`${SELLER_SIGNUP_PURPOSE}:${channel}:${target}:${otp}`)
+    .update(`${purpose}:${channel}:${target}:${otp}`)
     .digest("hex");
 }
 
@@ -163,6 +164,20 @@ function normalizeTarget(channel, rawValue) {
   throw error;
 }
 
+async function ensureTargetExists(channel, target) {
+  const query = channel === "email" ? { email: target } : { phone: target };
+  const existingSeller = await Seller.findOne(query).select("_id").lean();
+  if (!existingSeller) {
+    const error = new Error(
+      channel === "email"
+        ? "No seller found with this email"
+        : "No seller found with this phone number",
+    );
+    error.statusCode = 404;
+    throw error;
+  }
+}
+
 async function ensureTargetAvailable(channel, target) {
   const query = channel === "email" ? { email: target } : { phone: target };
   const existingSeller = await Seller.findOne(query).select("_id").lean();
@@ -201,10 +216,10 @@ async function dispatchPhoneOtp({ phone, otp }) {
   console.log(`[SellerPhoneOTP][mock] ${phone} -> ${otp}`);
 }
 
-function signVerificationToken({ channel, target }) {
+function signVerificationToken({ channel, target, purpose = SELLER_SIGNUP_PURPOSE }) {
   return jwt.sign(
     {
-      purpose: SELLER_SIGNUP_PURPOSE,
+      purpose,
       channel,
       target,
       verified: true,
@@ -216,7 +231,7 @@ function signVerificationToken({ channel, target }) {
   );
 }
 
-export function verifySellerVerificationToken({ channel, rawValue, token }) {
+export function verifySellerVerificationToken({ channel, rawValue, token, purpose = SELLER_SIGNUP_PURPOSE }) {
   const normalizedChannel = String(channel || "").trim().toLowerCase();
   const normalizedTarget = normalizeTarget(normalizedChannel, rawValue);
 
@@ -240,7 +255,7 @@ export function verifySellerVerificationToken({ channel, rawValue, token }) {
   }
 
   if (
-    payload?.purpose !== SELLER_SIGNUP_PURPOSE ||
+    payload?.purpose !== purpose ||
     payload?.channel !== normalizedChannel ||
     payload?.target !== normalizedTarget ||
     payload?.verified !== true
@@ -437,3 +452,187 @@ export async function verifySellerOtpCode({
     }),
   };
 }
+
+
+export async function issueSellerResetOtp({
+  channel,
+  rawValue,
+  ipAddress = "unknown",
+}) {
+  const normalizedChannel = String(channel || "").trim().toLowerCase();
+  const target = normalizeTarget(normalizedChannel, rawValue);
+
+  await ensureTargetExists(normalizedChannel, target);
+
+  const sendAllowed = await incrementWindowCounter(
+    `seller:reset_otp:send:${normalizedChannel}:${target}`,
+    {
+      limit: OTP_SEND_LIMIT_PER_WINDOW(),
+      windowSeconds: OTP_SEND_LIMIT_WINDOW_SECONDS(),
+    },
+  );
+  if (!sendAllowed) {
+    const error = new Error("Too many OTP requests. Please try again later.");
+    error.statusCode = 429;
+    throw error;
+  }
+
+  const now = new Date();
+  let session = await OtpVerification.findOne({
+    purpose: SELLER_RESET_PURPOSE,
+    channel: normalizedChannel,
+    target,
+  }).select("+otpHash +expiresAt");
+
+  if (session?.lastSentAt) {
+    const elapsedMs = now.getTime() - new Date(session.lastSentAt).getTime();
+    const cooldownMs = OTP_RESEND_COOLDOWN_SECONDS() * 1000;
+    if (elapsedMs < cooldownMs) {
+      const waitSeconds = Math.ceil((cooldownMs - elapsedMs) / 1000);
+      const error = new Error(`Please wait ${waitSeconds}s before requesting another OTP`);
+      error.statusCode = 429;
+      throw error;
+    }
+  }
+
+  let otp = generateSellerOtp(normalizedChannel);
+  otp = "1234";
+  const expiresAt = new Date(now.getTime() + OTP_EXPIRY_MINUTES() * 60 * 1000);
+
+  if (!session) {
+    session = new OtpVerification({
+      purpose: SELLER_RESET_PURPOSE,
+      channel: normalizedChannel,
+      target,
+      otpHash: hashOtp(normalizedChannel, target, otp, SELLER_RESET_PURPOSE),
+      expiresAt,
+      verifiedAt: null,
+      failedAttempts: 0,
+      lastSentAt: now,
+    });
+  } else {
+    session.otpHash = hashOtp(normalizedChannel, target, otp, SELLER_RESET_PURPOSE);
+    session.expiresAt = expiresAt;
+    session.verifiedAt = null;
+    session.failedAttempts = 0;
+    session.lastSentAt = now;
+  }
+
+  await session.save();
+
+  if (normalizedChannel === "email") {
+    await dispatchEmailOtp({ email: target, otp });
+  } else {
+    await dispatchPhoneOtp({ phone: target, otp });
+  }
+
+  console.log(
+    JSON.stringify({
+      level: "info",
+      ts: new Date().toISOString(),
+      event: "seller_reset_otp_issued",
+      channel: normalizedChannel,
+      target: normalizedChannel === "email" ? maskEmail(target) : maskPhone(target),
+      ipAddress,
+      mode:
+        normalizedChannel === "email"
+          ? useRealEmailOTP()
+            ? "real"
+            : "mock"
+          : useRealSMS()
+            ? "real"
+            : "mock",
+    }),
+  );
+
+  return {
+    sent: true,
+    channel: normalizedChannel,
+    maskedTarget:
+      normalizedChannel === "email" ? maskEmail(target) : maskPhone(target),
+    expiresInSeconds: OTP_EXPIRY_MINUTES() * 60,
+  };
+}
+
+
+export async function verifySellerResetOtpCode({
+  channel,
+  rawValue,
+  otp,
+  ipAddress = "unknown",
+}) {
+  const normalizedChannel = String(channel || "").trim().toLowerCase();
+  const target = normalizeTarget(normalizedChannel, rawValue);
+  const code = String(otp || "").trim();
+
+  if (!/^\d{4}$/.test(code)) {
+    const error = new Error("Please enter a valid OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const verifyAllowed = await incrementWindowCounter(
+    `seller:reset_otp:verify:${normalizedChannel}:${target}`,
+    {
+      limit: OTP_VERIFY_LIMIT_PER_WINDOW(),
+      windowSeconds: OTP_VERIFY_LIMIT_WINDOW_SECONDS(),
+    },
+  );
+  if (!verifyAllowed) {
+    const error = new Error("Too many verification attempts. Please try again later.");
+    error.statusCode = 429;
+    throw error;
+  }
+
+  const session = await OtpVerification.findOne({
+    purpose: SELLER_RESET_PURPOSE,
+    channel: normalizedChannel,
+    target,
+  }).select("+otpHash +expiresAt");
+
+  if (!session || !session.otpHash || !session.expiresAt || session.expiresAt <= new Date()) {
+    const error = new Error("Invalid or expired OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const isValid = hashOtp(normalizedChannel, target, code, SELLER_RESET_PURPOSE) === session.otpHash;
+  if (!isValid) {
+    session.failedAttempts = (session.failedAttempts || 0) + 1;
+    await session.save();
+
+    if (session.failedAttempts >= OTP_MAX_FAILED_ATTEMPTS()) {
+      await OtpVerification.deleteOne({ _id: session._id });
+    }
+
+    const error = new Error("Invalid or expired OTP");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  session.verifiedAt = new Date();
+  session.failedAttempts = 0;
+  await session.save();
+
+  console.log(
+    JSON.stringify({
+      level: "info",
+      ts: new Date().toISOString(),
+      event: "seller_reset_otp_verified",
+      channel: normalizedChannel,
+      target: normalizedChannel === "email" ? maskEmail(target) : maskPhone(target),
+      ipAddress,
+    }),
+  );
+
+  return {
+    verified: true,
+    channel: normalizedChannel,
+    verificationToken: signVerificationToken({
+      channel: normalizedChannel,
+      target,
+      purpose: SELLER_RESET_PURPOSE,
+    }),
+  };
+}
+

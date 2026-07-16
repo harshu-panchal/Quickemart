@@ -15,17 +15,13 @@ const REDIS_ERROR_LOG_INTERVAL_MS = () =>
  * will throw an error if Redis is not properly configured.
  */
 export function isRedisEnabled() {
-  // Normalize env vars to lowercase for case-insensitive comparison
-  // This fixes REDIS_DISABLED=True (capital T) being silently ignored
-  const d = (process.env.REDIS_DISABLED || "").toLowerCase().trim();
-  const e = (process.env.REDIS_ENABLED || "").toLowerCase().trim();
+  const d = process.env.REDIS_DISABLED;
+  const e = process.env.REDIS_ENABLED;
   const isProduction = process.env.NODE_ENV === "production";
 
   // Default: disable Redis in Jest to avoid open handles + noisy retries.
   // Opt-in by setting REDIS_ENABLED=true.
   if (process.env.NODE_ENV === "test" && !(e === "true" || e === "1")) return false;
-
-  // REDIS_DISABLED=true|1|True|TRUE => disable Redis
   if (d === "true" || d === "1") {
     if (isProduction) {
       throw new Error(
@@ -35,8 +31,6 @@ export function isRedisEnabled() {
     }
     return false;
   }
-
-  // REDIS_ENABLED=false|0 => disable Redis
   if (e === "false" || e === "0") {
     if (isProduction) {
       throw new Error(
@@ -60,19 +54,6 @@ export function isRedisEnabled() {
         "Redis is required in production mode (NODE_ENV=production). " +
         "Please set REDIS_URL or REDIS_HOST environment variable."
       );
-    }
-  }
-
-  // In non-production: if no Redis config is provided at all, disable Redis
-  // instead of silently falling back to 127.0.0.1:6379 and crashing.
-  if (!isProduction) {
-    const hasConfig = !!(process.env.REDIS_URL || process.env.REDIS_HOST);
-    if (!hasConfig && e !== "true" && e !== "1") {
-      console.warn(
-        "[Redis] No REDIS_URL or REDIS_HOST configured. " +
-        "Redis disabled. Set REDIS_DISABLED=true to suppress this warning."
-      );
-      return false;
     }
   }
 
@@ -120,7 +101,7 @@ function attachRedisErrorHandler(client) {
 function standaloneOptions() {
   return {
     host: process.env.REDIS_HOST || "127.0.0.1",
-    port: parseInt(process.env.REDIS_PORT || "14667", 10),
+    port: parseInt(process.env.REDIS_PORT || "6379", 10),
     password: process.env.REDIS_PASSWORD || undefined,
     lazyConnect: true,
     enableReadyCheck: true,
@@ -202,7 +183,7 @@ export function getRedisOptionsForBull() {
   }
   return {
     host: process.env.REDIS_HOST || "127.0.0.1",
-    port: parseInt(process.env.REDIS_PORT || "14667", 10),
+    port: parseInt(process.env.REDIS_PORT || "6379", 10),
     password: process.env.REDIS_PASSWORD || undefined,
     maxRetriesPerRequest: null,
   };

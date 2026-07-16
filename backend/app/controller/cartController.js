@@ -119,11 +119,14 @@ export const updateQuantity = async (req, res) => {
       return handleResponse(res, 404, "Cart not found");
     }
 
-    const itemIndex = cart.items.findIndex(
-      (item) =>
-        item.productId.toString() === productId &&
-        String(item.variantSku || "").trim() === normalizedVariantSku,
-    );
+    const itemIndex = cart.items.findIndex((item) => {
+      if (!item || !item.productId) return false;
+      const itemProductId = item.productId._id ? item.productId._id.toString() : item.productId.toString();
+      return (
+        itemProductId === productId &&
+        String(item.variantSku || "").trim() === normalizedVariantSku
+      );
+    });
 
     if (itemIndex > -1) {
       cart.items[itemIndex].quantity = quantity;
@@ -134,6 +137,7 @@ export const updateQuantity = async (req, res) => {
       return handleResponse(res, 404, "Product not in cart");
     }
 
+    cart.markModified("items");
     await cart.save();
     const updatedCart = await fetchPopulatedCart(cart._id);
 
@@ -158,21 +162,44 @@ export const removeFromCart = async (req, res) => {
       return handleResponse(res, 404, "Cart not found");
     }
 
-    cart.items = cart.items.filter((item) => {
-      if (item.productId.toString() !== productId) return true;
-      // If variantSku is provided, remove only that variant line.
-      if (normalizedVariantSku) {
-        return String(item.variantSku || "").trim() !== normalizedVariantSku;
+    console.log("Removing item from cart:", { productId, normalizedVariantSku });
+    let removedCount = 0;
+    
+    // Iterate backwards so splice doesn't affect remaining indices
+    for (let i = cart.items.length - 1; i >= 0; i--) {
+      const item = cart.items[i];
+      let shouldRemove = false;
+      
+      if (!item || !item.productId) continue;
+      const itemProductId = item.productId._id ? item.productId._id.toString() : item.productId.toString();
+      
+      if (itemProductId === productId) {
+        if (normalizedVariantSku) {
+          if (String(item.variantSku || "").trim() === normalizedVariantSku) {
+            shouldRemove = true;
+          }
+        } else {
+          // If no variantSku is provided, remove all lines for that product
+          shouldRemove = true;
+        }
       }
-      // If no variantSku is provided, keep legacy behavior: remove all lines for that product.
-      return false;
-    });
+      
+      if (shouldRemove) {
+        cart.items.splice(i, 1);
+        removedCount++;
+      }
+    }
+    
+    console.log("Items removed:", removedCount);
 
+    cart.markModified("items");
     await cart.save();
     const updatedCart = await fetchPopulatedCart(cart._id);
 
     return handleResponse(res, 200, "Item removed from cart", updatedCart);
   } catch (error) {
+    import('fs').then(fs => fs.writeFileSync('backend_error.log', error.stack || error.message || String(error)));
+    console.error("removeFromCart ERROR:", error);
     return handleResponse(res, 500, error.message);
   }
 };

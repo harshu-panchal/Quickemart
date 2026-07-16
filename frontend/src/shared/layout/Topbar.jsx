@@ -7,12 +7,13 @@ import {
     HiOutlineSearch,
     HiOutlineMenu
 } from 'react-icons/hi';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { sellerApi } from '@/modules/seller/services/sellerApi';
 import { adminApi } from '@/modules/admin/services/adminApi';
 import { AnimatePresence } from 'framer-motion';
 import NotificationPopup from './NotificationPopup';
+import ConfirmDialog from '@shared/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 
 import { useSettings } from '@core/context/SettingsContext';
@@ -31,10 +32,12 @@ const Topbar = ({ onMenuClick }) => {
     const [notifications, setNotifications] = React.useState([]);
     const [unreadCount, setUnreadCount] = React.useState(0);
     const [showNotifications, setShowNotifications] = React.useState(false);
+    const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
     const notificationRef = React.useRef(null);
 
     const isSeller = location.pathname.startsWith('/seller');
     const isAdmin = location.pathname.startsWith('/admin');
+    const homePath = role === 'admin' ? '/admin' : (role === 'seller' ? '/seller' : '/');
 
     const handleSearchSubmit = (e) => {
         e?.preventDefault();
@@ -155,16 +158,20 @@ const Topbar = ({ onMenuClick }) => {
         }
     };
 
-    const handleLogout = () => {
-        logout();
+    const handleLogoutClick = () => {
+        if (role === 'admin') {
+            setShowLogoutConfirm(true);
+        } else {
+            logout();
+        }
     };
 
     return (
         <header className={cn(
             "bg-white/70 backdrop-blur-xl border-b border-gray-100/50 flex items-center justify-between shadow-[0_4px_30px_rgba(0,0,0,0.02)] transition-all duration-300",
             (role === 'admin' || role === 'seller')
-                ? "fixed top-0 left-0 right-0 z-[200] h-14 px-4 md:sticky md:top-0 md:h-16 md:px-6"
-                : "fixed top-0 left-72 right-0 h-16 px-6 z-40"
+                ? "fixed top-0 left-0 right-0 z-[200] h-14 px-4 md:left-72 md:h-16 md:px-6"
+                : "fixed top-0 left-72 right-0 h-16 px-6 z-[200]"
         )}>
             <div className="flex items-center flex-1 mr-4 overflow-hidden">
                 <button
@@ -175,7 +182,7 @@ const Topbar = ({ onMenuClick }) => {
                 </button>
 
                 {/* Mobile Logo */}
-                <div className="flex items-center space-x-2 mr-4 md:hidden">
+                <NavLink to={homePath} className="flex items-center space-x-2 mr-4 md:hidden">
                     {logoUrl ? (
                         <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/10 border border-gray-100">
                             <img src={logoUrl} alt={appName} className="h-full w-full object-contain" />
@@ -185,19 +192,21 @@ const Topbar = ({ onMenuClick }) => {
                             {appName.charAt(0)}
                         </div>
                     )}
-                </div>
+                </NavLink>
 
-                <form onSubmit={handleSearchSubmit} className="relative w-full md:w-[400px] group hidden md:block">
-                    <HiOutlineSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-primary transition-all duration-300" />
-                    <input
-                        type="text"
-                        placeholder={isSeller ? "Search products by name or SKU..." : "Search anything..."}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
-                        className="w-full pl-10 pr-4 py-2 bg-gray-100/50 border border-transparent rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/20 transition-all duration-500 outline-none"
-                    />
-                </form>
+                {!isSeller && !isAdmin && (
+                    <form onSubmit={handleSearchSubmit} className="relative w-full md:w-[400px] group hidden md:block">
+                        <HiOutlineSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-primary transition-all duration-300" />
+                        <input
+                            type="text"
+                            placeholder="Search anything..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
+                            className="w-full pl-10 pr-4 py-2 bg-gray-100/50 border border-transparent rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/20 transition-all duration-500 outline-none"
+                        />
+                    </form>
+                )}
             </div>
 
             <div className="flex items-center space-x-4">
@@ -251,13 +260,27 @@ const Topbar = ({ onMenuClick }) => {
                     </div>
                 </button>
                 <button
-                    onClick={handleLogout}
+                    onClick={handleLogoutClick}
                     className="flex items-center space-x-1.5 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all duration-300 font-bold text-xs shadow-sm hover:shadow-rose-100/50"
                 >
                     <HiOutlineLogout className="h-4 w-4" />
                     <span className="hidden lg:block">Sign Out</span>
                 </button>
             </div>
+            
+            <ConfirmDialog
+                isOpen={showLogoutConfirm}
+                title="Sign Out"
+                message="Are you sure you want to sign out from the admin center?"
+                confirmLabel="Sign Out"
+                cancelLabel="Cancel"
+                variant="danger"
+                onConfirm={() => {
+                    setShowLogoutConfirm(false);
+                    logout();
+                }}
+                onCancel={() => setShowLogoutConfirm(false)}
+            />
         </header>
     );
 };

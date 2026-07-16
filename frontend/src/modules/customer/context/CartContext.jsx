@@ -179,7 +179,7 @@ export const CartProvider = ({ children }) => {
     const normalizedVariantSku = String(variantSku || "").trim();
     const key = `${productId}::${normalizedVariantSku || ""}`;
 
-    // Optimistic update (remove only the matching line when variantSku is provided).
+    // Optimistic update
     setCart((prev) =>
       prev.filter(
         (item) =>

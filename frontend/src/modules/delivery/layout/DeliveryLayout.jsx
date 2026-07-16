@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { createPortal } from "react-dom";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { BellRing, MapPin } from "lucide-react";
 import { deliveryApi } from "../services/deliveryApi";
@@ -156,7 +156,7 @@ const DeliveryLayout = () => {
     shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(payload.orderId);
     const total = typeof p.total === "number" ? p.total : Number(p.total) || 0;
     const dropLabel = typeof p.drop === "string" ? p.drop : String(p.drop);
-    const earnings = typeof p.earnings === "number" ? p.earnings : Math.round(total * 0.1);
+    const earnings = typeof p.earnings === "number" ? p.earnings : (payload.paymentBreakdown?.riderPayoutTotal ?? Math.round(total * 0.1));
     setActiveOrder({
       id: payload.orderId,
       mongoId: undefined,
@@ -166,7 +166,7 @@ const DeliveryLayout = () => {
       estTime: "10-15 min",
       value: total,
       earnings: earnings,
-      expiresAt: payload.deliverySearchExpiresAt || null,
+      expiresAt: payload.deliverySearchExpiresAt || new Date(Date.now() + 60000).toISOString(),
       isReturnPickup: payload.type === "RETURN_PICKUP" || payload.isReturnPickup === true,
       items: payload.items || [],
     });
@@ -190,7 +190,7 @@ const DeliveryLayout = () => {
     shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(newOrder.orderId);
     const total = newOrder.pricing?.total || 0;
     const isReturnPickup = newOrder.isReturnPickup || false;
-    const earnings = newOrder.riderEarnings || Math.round(total * 0.1);
+    const earnings = newOrder.paymentBreakdown?.riderPayoutTotal ?? newOrder.riderEarnings ?? Math.round(total * 0.1);
     setActiveOrder({
       id: newOrder.orderId,
       mongoId: newOrder._id,
@@ -204,7 +204,7 @@ const DeliveryLayout = () => {
       estTime: "10-15 min",
       value: total,
       earnings: earnings,
-      expiresAt: newOrder.deliverySearchExpiresAt || null,
+      expiresAt: newOrder.deliverySearchExpiresAt || new Date(Date.now() + 60000).toISOString(),
       isReturnPickup,
       items: newOrder.items || [],
     });
@@ -213,9 +213,13 @@ const DeliveryLayout = () => {
   useEffect(() => {
     if (activeOrder) {
       startOrderRingtone();
-      return undefined;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "unset";
+      };
     }
     stopOrderRingtone();
+    document.body.style.overflow = "unset";
     return undefined;
   }, [activeOrder]);
 
@@ -912,7 +916,6 @@ const DeliveryLayout = () => {
       </main>
 
       {shouldShowBottomNav && <BottomNav />}
-      <Toaster position="top-center" />
     </div>
   );
 };

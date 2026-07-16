@@ -52,16 +52,21 @@ export async function getSellerLocationsData({
         { phone: searchRegex },
         { address: searchRegex },
         { category: searchRegex },
+        { sellerId: searchRegex },
       ],
     });
   }
 
-  const baseQuery = filters.length ? { $and: filters } : {};
-  const sellers = await Seller.find(baseQuery)
-    .select(
-      "_id name shopName email phone category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason",
-    )
-    .lean();
+  const query = filters.length > 1 ? { $and: filters } : (filters[0] || {});
+
+  const [sellers, allSellersBase] = await Promise.all([
+    Seller.find(query)
+      .select(
+        "_id sellerId name shopName email phone category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason",
+      )
+      .lean(),
+    Seller.find({}).select("address category").lean()
+  ]);
 
   const filteredByStatus = sellers.filter((seller) =>
     matchSellerLifecycleFilter(seller, normalizedLifecycle),
@@ -80,6 +85,7 @@ export async function getSellerLocationsData({
     return {
       ...seller,
       id: String(seller._id),
+      sellerId: seller.sellerId || null,
       city: cityLabel,
       lifecycle: resolveSellerLifecycleStatus(seller),
       hasValidLocation: locationValid,
@@ -196,8 +202,8 @@ export async function getSellerLocationsData({
 
   const allCities = [
     ...new Set(
-      sellersWithDerivedFields
-        .map((row) => row.city)
+      allSellersBase
+        .map((row) => extractSellerCity(row))
         .filter(Boolean)
         .map((value) => String(value).trim()),
     ),
@@ -205,7 +211,7 @@ export async function getSellerLocationsData({
 
   const allCategories = [
     ...new Set(
-      sellersWithDerivedFields
+      allSellersBase
         .map((row) => row.category || "General")
         .filter(Boolean)
         .map((value) => String(value).trim()),
@@ -292,6 +298,7 @@ export async function getActiveSellersData({
         { phone: regex },
         { address: regex },
         { category: regex },
+        { sellerId: regex },
       ],
     });
   }
@@ -408,6 +415,7 @@ export async function getActiveSellersData({
     return {
       id: String(seller._id),
       _id: seller._id,
+      sellerId: seller.sellerId || null,
       shopName: seller.shopName || "Unnamed Store",
       ownerName: seller.name || "Unnamed Owner",
       email: seller.email || "",

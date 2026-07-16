@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Home, Briefcase, MapPin, Trash2, Edit2, ChevronLeft } from 'lucide-react';
+import { Plus, Home, Briefcase, MapPin, Trash2, Edit2, ChevronLeft, Crosshair } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -12,15 +12,101 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
 import { useLocation } from '../context/LocationContext';
+import MapPicker from '../../../shared/components/MapPicker';
+import { useJsApiLoader } from "@react-google-maps/api";
+
+const libraries = ["places"];
+
+const ADDRESS_COMPONENT_PRIORITY = {
+    locality: [
+        "sublocality_level_1",
+        "sublocality",
+        "neighborhood",
+        "locality",
+        "administrative_area_level_3",
+    ],
+    city: [
+        "locality",
+        "administrative_area_level_3",
+        "administrative_area_level_2",
+    ],
+    state: ["administrative_area_level_1"],
+    pincode: ["postal_code"],
+};
+
+const getAddressComponent = (components = [], types = []) => {
+    const match = components.find((component) =>
+        types.some((type) => component.types?.includes(type)),
+    );
+    return match?.long_name || "";
+};
+
+const extractAddressDetails = (result) => {
+    const components = result?.address_components || [];
+    const locality = getAddressComponent(components, ADDRESS_COMPONENT_PRIORITY.locality) || "";
+    const city = getAddressComponent(components, ADDRESS_COMPONENT_PRIORITY.city) || "";
+    const state = getAddressComponent(components, ADDRESS_COMPONENT_PRIORITY.state) || "";
+    const pincode = getAddressComponent(components, ADDRESS_COMPONENT_PRIORITY.pincode) || "";
+
+    return { locality, city, state, pincode };
+};
+
+const PlacesAutocompleteInput = ({ isLoaded, value, onChange, onPlaceSelected, id, placeholder, maxLength }) => {
+    const inputRef = useRef(null);
+    const autocompleteInstance = useRef(null);
+
+    useEffect(() => {
+        if (!isLoaded || !inputRef.current || !window.google) return;
+        
+        autocompleteInstance.current = new window.google.maps.places.Autocomplete(inputRef.current, {
+            componentRestrictions: { country: "IN" },
+            fields: ["geometry", "formatted_address", "address_components", "name"],
+        });
+        
+        const listener = autocompleteInstance.current.addListener("place_changed", () => {
+            const place = autocompleteInstance.current.getPlace();
+            if (place && place.geometry) {
+                onPlaceSelected(place);
+            }
+        });
+
+        // Fix for Radix UI Dialog blocking pointer events on pac-container
+        const style = document.createElement('style');
+        style.innerHTML = `.pac-container { pointer-events: auto !important; z-index: 99999 !important; }`;
+        document.head.appendChild(style);
+
+        return () => {
+            if (window.google?.maps?.event) {
+                window.google.maps.event.removeListener(listener);
+            }
+            if (autocompleteInstance.current) {
+                window.google.maps.event.clearInstanceListeners(autocompleteInstance.current);
+            }
+            if (document.head.contains(style)) {
+                document.head.removeChild(style);
+            }
+        };
+    }, [isLoaded, onPlaceSelected]);
+
+    return (
+        <Input ref={inputRef} id={id} placeholder={placeholder} maxLength={maxLength} value={value} onChange={onChange} />
+    );
+};
 
 const AddressesPage = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const { refreshAddresses } = useLocation();
+
+    const { isLoaded } = useJsApiLoader({
+        id: "google-map-script",
+        googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+        libraries,
+    });
     const [addresses, setAddresses] = useState([]);
     const [rawAddresses, setRawAddresses] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -67,24 +153,141 @@ const AddressesPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams, loading]);
 
-    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [isAddOpen, setIsAddOpen] = useState(() => {
+        return sessionStorage.getItem('addAddressModalOpen') === 'true';
+    });
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     const [selectedAddress, setSelectedAddress] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+    const [mapPickerTarget, setMapPickerTarget] = useState(null);
 
-    const [addForm, setAddForm] = useState({
-        type: 'home',
-        name: '',
-        phone: '',
-        address: '',
-        landmark: '',
-        city: '',
-        state: '',
-        pincode: ''
+    const [addForm, setAddForm] = useState(() => {
+        const saved = sessionStorage.getItem('addAddressForm');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) {}
+        }
+        return {
+            type: 'home',
+            name: '',
+            phone: '',
+            address: '',
+            landmark: '',
+            city: '',
+            state: '',
+            pincode: '',
+            location: null
+        };
     });
 
+    useEffect(() => {
+        sessionStorage.setItem('addAddressModalOpen', isAddOpen);
+    }, [isAddOpen]);
+
+    useEffect(() => {
+        sessionStorage.setItem('addAddressForm', JSON.stringify(addForm));
+    }, [addForm]);
+
+    const handleAddPlaceChanged = useCallback((place) => {
+        const details = extractAddressDetails(place);
+        setAddForm(f => ({
+            ...f,
+            address: place.formatted_address || place.name || f.address,
+            city: details.city || f.city,
+            state: details.state || f.state,
+            pincode: details.pincode || f.pincode,
+            landmark: details.locality || f.landmark,
+            location: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }
+        }));
+    }, []);
+
+    const handleEditPlaceChanged = useCallback((place) => {
+        const details = extractAddressDetails(place);
+        setEditForm(f => ({
+            ...f,
+            address: place.formatted_address || place.name || f.address,
+            city: details.city || f.city,
+            state: details.state || f.state,
+            pincode: details.pincode || f.pincode,
+            landmark: details.locality || f.landmark,
+            location: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }
+        }));
+    }, []);
+
+    const handleDetectLocation = (isEdit = false) => {
+        if (!navigator.geolocation) {
+            toast.error("Geolocation is not supported by your browser");
+            return;
+        }
+
+        const toastId = toast.loading("Detecting your location...");
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                const setForm = isEdit ? setEditForm : setAddForm;
+
+                if (!window.google?.maps?.Geocoder) {
+                    toast.dismiss(toastId);
+                    toast.error("Google Maps API not loaded");
+                    return;
+                }
+
+                try {
+                    const geocoder = new window.google.maps.Geocoder();
+                    const response = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
+                    
+                    if (response.results && response.results.length > 0) {
+                        // Find the most specific result that isn't just a plus code
+                        const result = response.results.find(r => !r.types.includes('plus_code')) || response.results[0];
+                        const details = extractAddressDetails(result);
+                        
+                        // Clean up the formatted address (remove ", India" from the end and any leading plus codes)
+                        let cleanAddress = result.formatted_address.replace(/,\s*India$/, '');
+                        cleanAddress = cleanAddress.replace(/^[A-Z0-9\+]{4,12}(?:,\s*)?/, '');
+                        
+                        setForm(f => ({
+                            ...f,
+                            address: cleanAddress,
+                            city: details.city || f.city,
+                            state: details.state || f.state,
+                            pincode: details.pincode || f.pincode,
+                            landmark: details.locality || f.landmark,
+                            location: { lat: latitude, lng: longitude }
+                        }));
+                        toast.dismiss(toastId);
+                        toast.success("Location detected successfully!");
+                    } else {
+                        toast.dismiss(toastId);
+                        toast.error("Could not fetch address for this location");
+                    }
+                } catch (error) {
+                    toast.dismiss(toastId);
+                    toast.error("Failed to detect address details");
+                }
+            },
+            (error) => {
+                toast.dismiss(toastId);
+                toast.error("Please enable location permissions");
+            },
+            { enableHighAccuracy: true }
+        );
+    };
+
     const openAddModal = () => {
+        setAddForm(f => ({
+            ...f,
+            name: f.name || profileName,
+            phone: f.phone || profilePhone || ''
+        }));
+        setIsAddOpen(true);
+    };
+
+    const handleCloseAddModal = () => {
+        setIsAddOpen(false);
+        sessionStorage.removeItem('addAddressForm');
+        sessionStorage.removeItem('addAddressModalOpen');
         setAddForm({
             type: 'home',
             name: profileName,
@@ -93,12 +296,71 @@ const AddressesPage = () => {
             landmark: '',
             city: '',
             state: '',
-            pincode: ''
+            pincode: '',
+            location: null
         });
-        setIsAddOpen(true);
+    };
+
+    
+    const validateAddressForm = (form) => {
+        if (form.name && !/^[A-Za-z\s]+$/.test(form.name.trim())) {
+            toast.error('Name should contain only alphabets');
+            return false;
+        }
+        if (form.phone && !/^[6-9]\d{9}$/.test(form.phone.trim())) {
+            toast.error('Phone number must start with 6,7,8,9 and be exactly 10 digits');
+            return false;
+        }
+        if (!form.address?.trim()) {
+            toast.error('Please enter the address');
+            return false;
+        }
+        if (form.landmark && !/^[A-Za-z\s]+$/.test(form.landmark.trim())) {
+            toast.error('Landmark should contain only alphabets');
+            return false;
+        }
+        if (form.city && !/^[A-Za-z\s]+$/.test(form.city.trim())) {
+            toast.error('City should contain only alphabets');
+            return false;
+        }
+        if (form.state && !/^[A-Za-z\s]+$/.test(form.state.trim())) {
+            toast.error('State should contain only alphabets');
+            return false;
+        }
+        if (form.pincode && !/^\d{6}$/.test(form.pincode.trim())) {
+            toast.error('Pincode must be exactly 6 numeric digits');
+            return false;
+        }
+        return true;
+    };
+
+    const handleMapConfirm = (data) => {
+        if (mapPickerTarget === 'add') {
+            setAddForm(f => ({
+                ...f,
+                address: data.address || f.address,
+                city: data.city || f.city,
+                state: data.state || f.state,
+                pincode: data.pincode || f.pincode,
+                landmark: data.locality || f.landmark,
+                location: { lat: data.lat, lng: data.lng }
+            }));
+        } else if (mapPickerTarget === 'edit') {
+            setEditForm(f => ({
+                ...f,
+                address: data.address || f.address,
+                city: data.city || f.city,
+                state: data.state || f.state,
+                pincode: data.pincode || f.pincode,
+                landmark: data.locality || f.landmark,
+                location: { lat: data.lat, lng: data.lng }
+            }));
+        }
     };
 
     const handleSaveNewAddress = async () => {
+        if (!validateAddressForm(addForm)) return;
+        if (!validateAddressForm(addForm)) return;
         const name = addForm.name?.trim();
         const address = addForm.address?.trim();
         const city = addForm.city?.trim();
@@ -109,6 +371,17 @@ const AddressesPage = () => {
             toast.error('Please enter the address');
             return;
         }
+
+        const isDuplicate = rawAddresses.some(addr => 
+            addr.fullAddress?.toLowerCase().trim() === address.toLowerCase() &&
+            (addr.label || 'home').toLowerCase() === addForm.type.toLowerCase()
+        );
+
+        if (isDuplicate) {
+            toast.error('This address already exists');
+            return;
+        }
+
         const newAddr = {
             label: addForm.type.toLowerCase(),
             fullAddress: address,
@@ -143,6 +416,19 @@ const AddressesPage = () => {
                 addresses: [...rawAddresses, newAddr]
             });
             toast.success('Address saved successfully');
+            sessionStorage.removeItem('addAddressForm');
+            sessionStorage.removeItem('addAddressModalOpen');
+            setAddForm({
+                type: 'home',
+                name: profileName,
+                phone: profilePhone || '',
+                address: '',
+                landmark: '',
+                city: '',
+                state: '',
+                pincode: '',
+                location: null
+            });
             setIsAddOpen(false);
             setLoading(true);
             await fetchAddresses();
@@ -162,7 +448,8 @@ const AddressesPage = () => {
         landmark: '',
         city: '',
         state: '',
-        pincode: ''
+        pincode: '',
+            location: null
     });
     const [updating, setUpdating] = useState(false);
 
@@ -278,6 +565,26 @@ const AddressesPage = () => {
         }
     };
 
+    const handleMakeDefault = async (addr) => {
+        const idx = addresses.findIndex(a => (a.id === addr.id) || (a.address === addr.address && a.type === addr.type));
+        if (idx <= 0) return; 
+
+        const updatedAddresses = [...rawAddresses];
+        const [moved] = updatedAddresses.splice(idx, 1);
+        updatedAddresses.unshift(moved);
+
+        setLoading(true);
+        try {
+            await customerApi.updateProfile({ addresses: updatedAddresses });
+            toast.success('Default address updated');
+            await fetchAddresses();
+            await refreshAddresses?.();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to update default address');
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 pb-24 font-sans">
             <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-slate-200/60 mb-4 flex items-center gap-2">
@@ -338,6 +645,14 @@ const AddressesPage = () => {
                             </div>
 
                             <div className="mt-4 flex items-center gap-2 pt-3 border-t border-slate-100">
+                                {!addr.isDefault && (
+                                    <button
+                                        onClick={() => handleMakeDefault(addr)}
+                                        className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-xs hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5"
+                                    >
+                                        Make Default
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => handleEdit(addr)}
                                     className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-xs hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5"
@@ -357,7 +672,7 @@ const AddressesPage = () => {
             </div>
 
             {/* Add Address Modal */}
-            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <Dialog open={isAddOpen} onOpenChange={(open) => !open ? handleCloseAddModal() : setIsAddOpen(true)}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Add New Address</DialogTitle>
@@ -376,15 +691,39 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="name">Full Name</Label>
-                            <Input id="name" placeholder="John Doe" value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} />
+                            <Input id="name" placeholder="John Doe" maxLength={50} value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value.replace(/[^A-Za-z\s]/g, '') }))} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="phone">Phone Number</Label>
-                            <Input id="phone" placeholder="+91 98765 43210" value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} />
+                            <Input id="phone" placeholder="9876543210" maxLength={10} value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '') }))} />
                         </div>
+                        
                         <div className="grid gap-2">
-                            <Label htmlFor="address">Address</Label>
-                            <Textarea id="address" placeholder="Flat No, Building, Street" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))} />
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="address">Address</Label>
+                                <div className="flex gap-2">
+                                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs text-primary border-primary bg-brand-50" onClick={() => handleDetectLocation(false)}>
+                                        <Crosshair size={12} className="mr-1" /> Detect
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs text-primary border-primary bg-brand-50" onClick={() => { setMapPickerTarget('add'); setIsMapPickerOpen(true); }}>
+                                        <MapPin size={12} className="mr-1" /> Map
+                                    </Button>
+                                </div>
+                            </div>
+                            <PlacesAutocompleteInput 
+                                isLoaded={isLoaded}
+                                id="address" 
+                                placeholder="Flat No, Building, Street" 
+                                maxLength={200} 
+                                value={addForm.address} 
+                                onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                                onPlaceSelected={handleAddPlaceChanged}
+                            />
+                            {addForm.location && (
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Coordinates: {addForm.location.lat.toFixed(6)}, {addForm.location.lng.toFixed(6)}
+                                </p>
+                            )}
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="landmark">Nearest Landmark (optional)</Label>
@@ -398,20 +737,20 @@ const AddressesPage = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="city">City</Label>
-                                <Input id="city" placeholder="New Delhi" value={addForm.city} onChange={e => setAddForm(f => ({ ...f, city: e.target.value }))} />
+                                <Input id="city" placeholder="New Delhi" maxLength={50} value={addForm.city} onChange={e => setAddForm(f => ({ ...f, city: e.target.value.replace(/[^A-Za-z\s]/g, '') }))} />
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="state">State</Label>
-                                <Input id="state" placeholder="Delhi" value={addForm.state} onChange={e => setAddForm(f => ({ ...f, state: e.target.value }))} />
+                                <Input id="state" placeholder="Delhi" maxLength={50} value={addForm.state} onChange={e => setAddForm(f => ({ ...f, state: e.target.value.replace(/[^A-Za-z\s]/g, '') }))} />
                             </div>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="pincode">Pincode</Label>
-                            <Input id="pincode" placeholder="110075" value={addForm.pincode} onChange={e => setAddForm(f => ({ ...f, pincode: e.target.value }))} />
+                            <Input id="pincode" placeholder="110075" maxLength={6} value={addForm.pincode} onChange={e => setAddForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '') }))} />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={saving}>Cancel</Button>
+                        <Button variant="outline" onClick={handleCloseAddModal} disabled={saving}>Cancel</Button>
                         <Button className="bg-primary hover:bg-[#0b721b]" onClick={handleSaveNewAddress} disabled={saving}>{saving ? 'Saving...' : 'Save Address'}</Button>
                     </DialogFooter>
                 </DialogContent>
@@ -437,15 +776,38 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-name">Full Name</Label>
-                            <Input id="edit-name" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+                            <Input id="edit-name" maxLength={50} value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value.replace(/[^A-Za-z\s]/g, '') }))} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-phone">Phone Number</Label>
-                            <Input id="edit-phone" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+                            <Input id="edit-phone" maxLength={10} value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '') }))} />
                         </div>
+                        
                         <div className="grid gap-2">
-                            <Label htmlFor="edit-address">Address</Label>
-                            <Textarea id="edit-address" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="edit-address">Address</Label>
+                                <div className="flex gap-2">
+                                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs text-primary border-primary bg-brand-50" onClick={() => handleDetectLocation(true)}>
+                                        <Crosshair size={12} className="mr-1" /> Detect
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs text-primary border-primary bg-brand-50" onClick={() => { setMapPickerTarget('edit'); setIsMapPickerOpen(true); }}>
+                                        <MapPin size={12} className="mr-1" /> Map
+                                    </Button>
+                                </div>
+                            </div>
+                            <PlacesAutocompleteInput 
+                                isLoaded={isLoaded}
+                                id="edit-address"
+                                maxLength={200} 
+                                value={editForm.address} 
+                                onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                                onPlaceSelected={handleEditPlaceChanged}
+                            />
+                            {editForm.location && (
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Coordinates: {editForm.location.lat.toFixed(6)}, {editForm.location.lng.toFixed(6)}
+                                </p>
+                            )}
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-landmark">Nearest Landmark (optional)</Label>
@@ -459,16 +821,16 @@ const AddressesPage = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="edit-city">City</Label>
-                                <Input id="edit-city" placeholder="New Delhi" value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} />
+                                <Input id="edit-city" placeholder="New Delhi" maxLength={50} value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value.replace(/[^A-Za-z\s]/g, '') }))} />
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="edit-state">State</Label>
-                                <Input id="edit-state" placeholder="Delhi" value={editForm.state} onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))} />
+                                <Input id="edit-state" placeholder="Delhi" maxLength={50} value={editForm.state} onChange={e => setEditForm(f => ({ ...f, state: e.target.value.replace(/[^A-Za-z\s]/g, '') }))} />
                             </div>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-pincode">Pincode</Label>
-                            <Input id="edit-pincode" placeholder="110075" value={editForm.pincode} onChange={e => setEditForm(f => ({ ...f, pincode: e.target.value }))} />
+                            <Input id="edit-pincode" placeholder="110075" maxLength={6} value={editForm.pincode} onChange={e => setEditForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '') }))} />
                         </div>
                     </div>
                     <DialogFooter>

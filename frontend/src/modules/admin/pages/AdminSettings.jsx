@@ -303,7 +303,13 @@ const AdminSettings = () => {
                                         <input
                                             type="text"
                                             value={settings.supportPhone}
-                                            onChange={(e) => handleInputChange('supportPhone', e.target.value)}
+                                            onChange={(e) => {
+                                                let val = e.target.value.replace(/\D/g, '');
+                                                if (val.length > 0 && !/^[6-9]/.test(val)) {
+                                                    val = val.replace(/^[^6-9]+/, '');
+                                                }
+                                                handleInputChange('supportPhone', val.slice(0, 10));
+                                            }}
                                             className="w-full pl-12 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
                                         />
                                     </div>

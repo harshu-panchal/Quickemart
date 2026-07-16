@@ -51,7 +51,7 @@ const DeliveryFunds = () => {
 
             // Map backend Transaction model to frontend format
             const mapped = data.map(tx => ({
-                id: tx.reference,
+                id: tx.reference?.length > 16 ? tx.reference.slice(0, 8) + '...' + tx.reference.slice(-5) : (tx.reference || 'N/A'),
                 _id: tx._id,
                 riderName: tx.user?.name || 'Unknown',
                 riderId: tx.user?._id?.slice(-6).toUpperCase() || 'N/A',
@@ -108,7 +108,7 @@ const DeliveryFunds = () => {
 
     const filteredTransfers = useMemo(() => {
         return transfers.filter(tx => {
-            const matchesSearch = tx.riderName.toLowerCase().includes(searchTerm.toLowerCase()) || tx.id.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = tx.riderName.toLowerCase().includes(searchTerm.toLowerCase()) || tx.referenceId.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesStatus = filterStatus === 'all' || tx.status === filterStatus;
             return matchesSearch && matchesStatus;
         });

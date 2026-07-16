@@ -15,7 +15,7 @@ export async function getAdminDashboardStats() {
       Order.countDocuments(),
     ]);
 
-  const totalUsers = totalCustomers + totalSellers + totalRiders;
+  const totalUsers = totalCustomers;
   const activeSellers = await Seller.countDocuments({ isVerified: true });
 
   const revenueData = await Order.aggregate([
@@ -127,7 +127,10 @@ export async function getAdminDashboardStats() {
             ? "error"
             : "warning",
       amount: `\u20B9${order.pricing.total}`,
-      time: "Recently",
+      time: order.createdAt ? new Date(order.createdAt).toLocaleString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      }) : "Recently",
     })),
     categoryData: categoryData.map((category, index) => ({
       ...category,

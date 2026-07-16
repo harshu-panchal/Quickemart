@@ -51,12 +51,13 @@ export class PhonePeAdapter extends PaymentProviderPort {
     return PAYMENT_GATEWAY.PHONEPE;
   }
 
-  async initiatePayment({ merchantOrderId, amountPaise, redirectUrl }) {
+  async initiatePayment({ merchantOrderId, amountPaise, redirectUrl, callbackUrl }) {
     const client = getPhonePeClient();
     const request = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantOrderId)
       .amount(amountPaise)
       .redirectUrl(redirectUrl)
+      .callbackUrl(callbackUrl || redirectUrl)
       .build();
     const response = await client.pay(request);
     return {

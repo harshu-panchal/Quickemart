@@ -62,13 +62,13 @@ const AdminWallet = () => {
                 const summary = summaryRes.data.result || {};
                 const ledger = ledgerRes.data.result || {};
                 const mappedTransactions = (ledger.items || []).map((entry) => ({
-                    id: entry.transactionId || entry.reference || entry._id,
+                    id: (entry.transactionId || entry.reference || entry._id || '').toString().substring(0, 10).toUpperCase(),
                     type: entry.type || "UNKNOWN",
                     amount: entry.direction === "DEBIT" ? -Math.abs(entry.amount || 0) : Math.abs(entry.amount || 0),
                     status: entry.status || "COMPLETED",
                     sender: entry.direction === "DEBIT" ? (entry.actorType || "SYSTEM") : "SYSTEM",
                     recipient: entry.direction === "CREDIT" ? (entry.actorType || "SYSTEM") : "PLATFORM_WALLET",
-                    date: entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : "-",
+                    date: entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : "-",
                     time: entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-",
                     notes: entry.description || entry.type,
                     method: entry.paymentMode || "N/A",
@@ -340,7 +340,7 @@ const AdminWallet = () => {
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">Live</span>
-                                        <div className="h-2 w-2 rounded-full bg-brand-400 shadow-[0_0_8px_rgba(52,211,153,0.5)] animate-pulse" />
+                                        <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
                                     </div>
                                 </div>
 
@@ -605,7 +605,7 @@ const AdminWallet = () => {
                                 <button
                                     onClick={handleProcessPayouts}
                                     disabled={isProcessing}
-                                    className="w-full py-4 bg-brand-500 hover:bg-brand-400 text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 group disabled:opacity-50"
+                                    className="w-full py-4 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 group disabled:opacity-50"
                                 >
                                     {isProcessing ? <RotateCw className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4 group-hover:rotate-12 transition-transform" />}
                                     {isProcessing ? 'SETTLING...' : 'Bulk Settlement'}

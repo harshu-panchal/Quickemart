@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import PageHeader from '@shared/components/ui/PageHeader';
 import StatCard from '@shared/components/ui/StatCard';
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
     const [statsData, setStatsData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -70,7 +72,7 @@ const AdminDashboard = () => {
         const updatedDate = new Date(updated.getFullYear(), updated.getMonth(), updated.getDate());
         const dayDiff = Math.round((nowDate - updatedDate) / (1000 * 60 * 60 * 24));
 
-        let dayLabel = updated.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        let dayLabel = updated.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
         if (dayDiff === 0) dayLabel = 'Today';
         if (dayDiff === 1) dayLabel = 'Yesterday';
 
@@ -90,7 +92,8 @@ const AdminDashboard = () => {
             color: 'text-brand-600',
             bg: 'bg-brand-50',
             trend: '+12.5%',
-            description: 'Active this month'
+            description: 'Active this month',
+            onClick: () => navigate('/admin/users')
         },
         {
             label: 'Active Sellers',
@@ -99,7 +102,8 @@ const AdminDashboard = () => {
             color: 'text-purple-600',
             bg: 'bg-purple-50',
             trend: '+5.2%',
-            description: 'Verified stores'
+            description: 'Verified stores',
+            onClick: () => navigate('/admin/sellers/active')
         },
         {
             label: 'Total Orders',
@@ -108,7 +112,8 @@ const AdminDashboard = () => {
             color: 'text-orange-600',
             bg: 'bg-orange-50',
             trend: '+18.4%',
-            description: 'Last 30 days'
+            description: 'Last 30 days',
+            onClick: () => navigate('/admin/orders/all')
         },
         {
             label: 'Revenue',
@@ -117,7 +122,8 @@ const AdminDashboard = () => {
             color: 'text-brand-600',
             bg: 'bg-brand-50',
             trend: '+8.2%',
-            description: 'Net earnings'
+            description: 'Net earnings',
+            onClick: () => navigate('/admin/wallet')
         },
     ];
 
@@ -152,6 +158,7 @@ const AdminDashboard = () => {
                         description={stat.description}
                         color={stat.color}
                         bg={stat.bg}
+                        onClick={stat.onClick}
                         className={cn("ring-1 ring-gray-100", stat.bg + "/30")}
                     />
                 ))}
@@ -166,8 +173,8 @@ const AdminDashboard = () => {
                         className="h-full"
                     >
                         <div className="ds-chart-container min-h-[250px]">
-                            <ResponsiveContainer width="100%" height={250}>
-                                <AreaChart data={chartData}>
+                            <ResponsiveContainer width="100%" height={250} className="focus:outline-none">
+                                <AreaChart data={chartData} style={{ outline: 'none' }}>
                                     <defs>
                                         <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1} />
@@ -220,8 +227,8 @@ const AdminDashboard = () => {
                         className="h-full border-none shadow-sm ring-1 ring-gray-100"
                     >
                         <div className="h-[250px] min-h-[250px] relative">
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
+                            <ResponsiveContainer width="100%" height={250} className="focus:outline-none">
+                                <PieChart style={{ outline: 'none' }}>
                                     <Pie
                                         data={categoryData}
 
@@ -280,7 +287,7 @@ const AdminDashboard = () => {
                                 <tbody className="divide-y divide-gray-50">
                                     {recentOrders.map((order) => (
                                         <tr key={order.id} className="group hover:bg-gray-50/50 transition-all">
-                                            <td className="py-4 text-sm font-semibold text-primary">{order.id}</td>
+                                            <td className="py-4 text-sm font-semibold text-primary">#{order.id?.slice(-8).toUpperCase()}</td>
                                             <td className="py-4">
                                                 <div className="flex items-center space-x-2">
                                                     <div className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-semibold text-gray-500 ring-2 ring-white shadow-sm uppercase">
@@ -301,7 +308,10 @@ const AdminDashboard = () => {
                                 </tbody>
                             </table>
                         </div>
-                        <button className="w-full mt-6 py-3 rounded-xl bg-gray-50 text-xs font-bold text-gray-500 hover:bg-primary hover:text-white transition-all">
+                        <button 
+                            onClick={() => navigate('/admin/orders/all')}
+                            className="w-full mt-6 py-3 rounded-xl bg-gray-50 text-xs font-bold text-gray-500 hover:bg-primary hover:text-white transition-all"
+                        >
                             VIEW ALL ORDERS
                         </button>
                     </Card>
@@ -339,7 +349,10 @@ const AdminDashboard = () => {
                                 <div className="py-12 text-center text-slate-300 italic text-xs">No sales data yet</div>
                             )}
                         </div>
-                        <button className="w-full mt-6 py-3 border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-gray-400 hover:border-primary hover:text-primary transition-all">
+                        <button 
+                            onClick={() => navigate('/admin/products')}
+                            className="w-full mt-6 py-3 border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-gray-400 hover:border-primary hover:text-primary transition-all"
+                        >
                             VIEW ALL PRODUCTS
                         </button>
                     </Card>

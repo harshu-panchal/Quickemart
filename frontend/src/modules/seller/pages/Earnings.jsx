@@ -93,7 +93,7 @@ const Earnings = () => {
                   type: txn.type ?? "",
                   amount: `₹${Number(txn.amount ?? 0).toLocaleString()}`,
                   status: txn.status ?? "",
-                  date: txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString() : ""),
+                  date: txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ""),
                   customer: txn.customer ?? "",
                   ref: txn.ref ?? "",
                 }));

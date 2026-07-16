@@ -19,7 +19,6 @@ const BillingCharges = () => {
     const { showToast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
     const [deliveryMode, setDeliveryMode] = useState('distance'); // 'fixed' or 'distance'
-    const [returnDeliveryCommission, setReturnDeliveryCommission] = useState(0);
 
     const [config, setConfig] = useState({
         platformFee: 0,
@@ -44,7 +43,7 @@ const BillingCharges = () => {
                 ]);
 
                 if (platformRes.data?.success && platformRes.data.result) {
-                    setReturnDeliveryCommission(platformRes.data.result.returnDeliveryCommission ?? 0);
+                    // removed obsolete returnDeliveryCommission
                 }
 
                 if (deliveryRes.data?.success && deliveryRes.data.result) {
@@ -74,18 +73,16 @@ const BillingCharges = () => {
         try {
             setIsSaving(true);
             await Promise.all([
-                adminApi.updatePlatformSettings({
-                    returnDeliveryCommission,
-                }),
+                adminApi.updatePlatformSettings({}),
                 adminApi.updateDeliveryFinanceSettings({
                     deliveryPricingMode: deliveryMode === 'fixed' ? 'fixed_price' : 'distance_based',
                     customerBaseDeliveryFee: config.baseCharge,
-                    riderBasePayout: config.riderBasePayout,
+                    riderBasePayout: config.baseCharge,
                     baseDeliveryCharge: config.baseCharge,
                     baseDistanceCapacityKm: config.baseDistance,
                     incrementalKmSurcharge: config.extraPerKm,
-                    deliveryPartnerRatePerKm: config.deliveryPartnerRatePerKm,
-                    fleetCommissionRatePerKm: config.deliveryPartnerRatePerKm,
+                    deliveryPartnerRatePerKm: config.extraPerKm,
+                    fleetCommissionRatePerKm: config.extraPerKm,
                     fixedDeliveryFee: config.fixedCharge,
                     handlingFeeStrategy: config.handlingFeeStrategy,
                     codEnabled: config.codEnabled,
@@ -103,7 +100,9 @@ const BillingCharges = () => {
     };
 
     const handleInputChange = (field, value) => {
-        setConfig(prev => ({ ...prev, [field]: parseFloat(value) || 0 }));
+        let parsed = parseFloat(value) || 0;
+        if (parsed < 0) parsed = 0;
+        setConfig(prev => ({ ...prev, [field]: parsed }));
     };
 
     return (
@@ -161,9 +160,10 @@ const BillingCharges = () => {
                                     <Info className="h-3 w-3 opacity-50" />
                                 </label>
                                 <div className="relative group">
-                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-red-500 transition-colors">₹</span>
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-red-500 transition-colors pointer-events-none">₹</span>
                                     <input
                                         type="number"
+                                        min="0"
                                         value={config.platformFee}
                                         onChange={(e) => handleInputChange('platformFee', e.target.value)}
                                         className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-red-500/10 transition-all"
@@ -177,9 +177,10 @@ const BillingCharges = () => {
                                     <Zap className="h-3 w-3 text-amber-500" />
                                 </label>
                                 <div className="relative group">
-                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-red-500 transition-colors">₹</span>
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-red-500 transition-colors pointer-events-none">₹</span>
                                     <input
                                         type="number"
+                                        min="0"
                                         value={config.freeDeliveryThreshold}
                                         onChange={(e) => handleInputChange('freeDeliveryThreshold', e.target.value)}
                                         className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-red-500/10 transition-all"
@@ -221,9 +222,10 @@ const BillingCharges = () => {
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base Delivery Charge (₹)</label>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base Fee (₹)</label>
                                             <input
                                                 type="number"
+                                                min="0"
                                                 value={config.baseCharge}
                                                 onChange={(e) => handleInputChange('baseCharge', e.target.value)}
                                                 className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
@@ -231,48 +233,30 @@ const BillingCharges = () => {
                                             <p className="text-[10px] font-bold text-slate-400 italic">Customer-facing minimum fee for first X kms.</p>
                                         </div>
                                         <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rider Base Payout (₹)</label>
-                                            <input
-                                                type="number"
-                                                value={config.riderBasePayout}
-                                                onChange={(e) => handleInputChange('riderBasePayout', e.target.value)}
-                                                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
-                                            />
-                                            <p className="text-[10px] font-bold text-slate-400 italic">Base payout for delivery partner within base radius.</p>
-                                        </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base Distance Capacity (km)</label>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Free Delivery Upto (km)</label>
                                             <div className="relative group">
                                                 <input
                                                     type="number"
+                                                    min="0"
                                                     step="0.1"
                                                     value={config.baseDistance}
                                                     onChange={(e) => handleInputChange('baseDistance', e.target.value)}
                                                     className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
                                                 />
-                                                <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase">km</span>
+                                                <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase pointer-events-none">km</span>
                                             </div>
                                             <p className="text-[10px] font-bold text-slate-400 italic">Radius covered by the base charge.</p>
                                         </div>
                                         <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incremental Km Surcharge (₹)</label>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Per Km Fee (₹)</label>
                                             <input
                                                 type="number"
+                                                min="0"
                                                 value={config.extraPerKm}
                                                 onChange={(e) => handleInputChange('extraPerKm', e.target.value)}
                                                 className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
                                             />
                                             <p className="text-[10px] font-bold text-slate-400 italic">Charged for every km beyond base radius.</p>
-                                        </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Delivery Partner Rate (₹/km)</label>
-                                            <input
-                                                type="number"
-                                                value={config.deliveryPartnerRatePerKm}
-                                                onChange={(e) => handleInputChange('deliveryPartnerRatePerKm', e.target.value)}
-                                                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
-                                            />
-                                            <p className="text-[10px] font-bold text-slate-400 italic">Net payout to delivery partner per km.</p>
                                         </div>
                                     </div>
                                 </>
@@ -281,9 +265,10 @@ const BillingCharges = () => {
                                     <div className="space-y-3">
                                         <label className="text-base font-bold text-slate-900">Fixed Delivery Charge (₹)</label>
                                         <div className="relative group max-w-md">
-                                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-slate-900 transition-colors">₹</span>
+                                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-slate-900 transition-colors pointer-events-none">₹</span>
                                             <input
                                                 type="number"
+                                                min="0"
                                                 value={config.fixedCharge}
                                                 onChange={(e) => handleInputChange('fixedCharge', e.target.value)}
                                                 className="w-full pl-10 pr-5 py-4 bg-white ring-1 ring-slate-200 border-none rounded-xl text-base font-medium text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 transition-all"
@@ -295,26 +280,7 @@ const BillingCharges = () => {
                             )}
 
                             <div className="mt-8 pt-6 border-t border-dashed border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                        Return Delivery Commission (per pickup)
-                                    </label>
-                                    <div className="relative group max-w-md">
-                                        <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300 group-focus-within:text-slate-900 transition-colors">₹</span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={returnDeliveryCommission}
-                                            onChange={(e) =>
-                                                setReturnDeliveryCommission(Number(e.target.value) || 0)
-                                            }
-                                            className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
-                                        />
-                                    </div>
-                                    <p className="text-[10px] font-bold text-slate-400">
-                                        Flat amount paid to delivery partner for each approved return pickup (deducted from seller earnings).
-                                    </p>
-                                </div>
+                                {/* Obsolete Return Delivery Commission field removed */}
                             </div>
                         </div>
                     </Card>

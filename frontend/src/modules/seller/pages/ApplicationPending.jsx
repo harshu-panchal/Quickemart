@@ -36,7 +36,7 @@ const ApplicationPending = () => {
     <div className="min-h-screen bg-slate-950 relative overflow-hidden font-['Outfit']">
       <div className="absolute inset-0">
         <div className="absolute top-[-20%] right-[-10%] h-[420px] w-[420px] rounded-full bg-amber-400/10 blur-3xl" />
-        <div className="absolute bottom-[-20%] left-[-10%] h-[420px] w-[420px] rounded-full bg-brand-400/10 blur-3xl" />
+        <div className="absolute bottom-[-20%] left-[-10%] h-[420px] w-[420px] rounded-full bg-blue-400/10 blur-3xl" />
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-4xl items-center justify-center px-4 py-10">
@@ -86,8 +86,8 @@ const ApplicationPending = () => {
           ) : null}
 
           {!isRejected ? (
-            <div className="mt-6 rounded-2xl border border-brand-400/30 bg-brand-500/10 px-4 py-3 text-sm text-brand-200 flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0 text-brand-400" />
+            <div className="mt-6 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0 text-emerald-400" />
               <p className="font-semibold">
                 Approval usually takes less than 24 hours. You can return to login and try again later.
               </p>
@@ -100,12 +100,6 @@ const ApplicationPending = () => {
               className="inline-flex items-center justify-center rounded-xl bg-white text-slate-900 px-5 py-3 text-sm font-black tracking-wide hover:bg-slate-100 transition-colors"
             >
               Back To Seller Login
-            </Link>
-            <Link
-              to="/"
-              className="inline-flex items-center justify-center rounded-xl border border-white/20 bg-white/5 text-white px-5 py-3 text-sm font-bold hover:bg-white/10 transition-colors"
-            >
-              Go To Home
             </Link>
           </div>
         </motion.div>

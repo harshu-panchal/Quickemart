@@ -220,12 +220,15 @@ const SidebarItem = ({
 
 const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hoveredIdx, setHoveredIdx }) => {
   const { settings } = useSettings();
+  const { role } = useAuth();
   const appName = settings?.appName || 'App';
+  
+  const homePath = role === 'admin' ? '/admin' : (role === 'seller' ? '/seller' : '/');
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex-shrink-0 flex h-16 items-center justify-between px-5 border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent z-10">
-        <div className="flex items-center space-x-2.5">
+        <NavLink to={homePath} className="flex items-center space-x-2.5 hover:opacity-90 transition-opacity">
           {settings?.logoUrl ? (
             <div className="h-9 w-9 rounded-xl overflow-hidden shadow-sm ring-1 ring-white/10 group-hover:scale-110 transition-all duration-500 ease-out">
               <img src={settings.logoUrl} alt={appName} className="h-full w-full object-contain" />
@@ -243,7 +246,7 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
               {title}
             </span>
           </div>
-        </div>
+        </NavLink>
 
         {/* Mobile Close Button */}
         <button

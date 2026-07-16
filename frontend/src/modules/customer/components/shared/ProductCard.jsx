@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Heart, Plus, Minus, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,9 @@ const ProductCard = React.memo(
 
     const { openProduct } = useProductDetail();
     const [showHeartPopup, setShowHeartPopup] = React.useState(false);
+    
+    const location = useLocation();
+    const isWishlistPage = location.pathname === '/wishlist';
 
     const imageRef = React.useRef(null);
 
@@ -51,9 +54,17 @@ const ProductCard = React.memo(
 
       const picked = variants.find(matchesDisplayedPrice) || variants[0];
       const key = String(picked?.sku || picked?.name || "").trim();
+      
+      const variantMrp = Number(picked?.price || 0);
+      const variantSale = Number(picked?.salePrice || 0);
+      const hasDiscount = variantSale > 0 && variantSale < variantMrp;
+      
       return {
         key,
         name: String(picked?.name || "").trim(),
+        displayPrice: hasDiscount ? variantSale : (variantMrp || displayed),
+        displayOriginalPrice: hasDiscount ? variantMrp : (displayedOriginal > displayed ? displayedOriginal : null),
+        discountPercent: hasDiscount ? Math.round(((variantMrp - variantSale) / variantMrp) * 100) : (displayedOriginal > displayed ? Math.round(((displayedOriginal - displayed) / displayedOriginal) * 100) : 0)
       };
     }, [product]);
 
@@ -108,6 +119,15 @@ const ProductCard = React.memo(
       (e) => {
         e.preventDefault();
         e.stopPropagation();
+
+        // If the product has multiple variants, open the product detail sheet
+        // so the user can select which variant they want to add.
+        const variants = Array.isArray(product?.variants) ? product.variants : [];
+        if (variants.length > 1 && openProduct) {
+          openProduct(product);
+          return;
+        }
+
         if (imageRef.current) {
           animateAddToCart(
             imageRef.current.getBoundingClientRect(),
@@ -119,8 +139,12 @@ const ProductCard = React.memo(
           variantSku: variantKey,
           variantName: defaultVariant?.name || "",
         });
+        
+        if (isWishlistPage && isWishlisted) {
+          toggleWishlistGlobal(product);
+        }
       },
-      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name],
+      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name, openProduct, isWishlistPage, isWishlisted, toggleWishlistGlobal],
     );
 
     const handleIncrement = React.useCallback(
@@ -172,7 +196,7 @@ const ProductCard = React.memo(
           {/* Badge (Custom or Discount) */}
           {(badge ||
             product.discount ||
-            product.originalPrice > product.price) && (
+            defaultVariant?.discountPercent > 0) && (
               <div
                 className={cn(
                   "absolute z-10 bg-primary text-primary-foreground font-[900] rounded-md shadow-sm uppercase tracking-wider flex items-center justify-center",
@@ -182,7 +206,7 @@ const ProductCard = React.memo(
                 )}>
                 {badge ||
                   product.discount ||
-                  `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`}
+                  `${defaultVariant?.discountPercent}% OFF`}
               </div>
             )}
 
@@ -296,15 +320,15 @@ const ProductCard = React.memo(
                   "font-[1000] text-[#1A1A1A]",
                   compact ? "text-[11px]" : "text-[13px] sm:text-sm",
                 )}>
-                ₹{product.price}
+                ₹{defaultVariant?.displayPrice || product.price}
               </span>
-              {product.originalPrice > product.price && (
+              {defaultVariant?.displayOriginalPrice && (
                 <span
                   className={cn(
                     "font-medium text-gray-400 line-through leading-none",
                     compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
                   )}>
-                  ₹{product.originalPrice}
+                  ₹{defaultVariant.displayOriginalPrice}
                 </span>
               )}
             </div>

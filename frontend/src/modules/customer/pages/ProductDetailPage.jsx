@@ -29,6 +29,7 @@ const ProductDetailPage = () => {
     const [reviewLoading, setReviewLoading] = useState(false);
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+    const [localHasReviewed, setLocalHasReviewed] = useState(false);
     const [noServiceData, setNoServiceData] = useState(null);
 
     // Dynamically load no-service Lottie on mount
@@ -86,6 +87,9 @@ const ProductDetailPage = () => {
     };
 
     useEffect(() => {
+        setNewReview({ rating: 5, comment: '' });
+        setLocalHasReviewed(false);
+        setReviews([]);
         if (id) {
             fetchData();
         }
@@ -111,8 +115,17 @@ const ProductDetailPage = () => {
                 comment: newReview.comment
             });
             if (res.data.success) {
-                showToast("Review submitted for moderation", "success");
+                showToast("Review submitted successfully", "success");
                 setNewReview({ rating: 5, comment: '' });
+                setLocalHasReviewed(true);
+                setReviews(prev => [{
+                    _id: 'temp-' + Date.now(),
+                    rating: newReview.rating,
+                    comment: newReview.comment,
+                    createdAt: new Date().toISOString(),
+                    userId: { name: 'You' },
+                    status: 'pending'
+                }, ...prev]);
             }
         } catch (error) {
             showToast(error.response?.data?.message || "Failed to submit review", "error");
@@ -315,45 +328,54 @@ const ProductDetailPage = () => {
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm sticky top-24">
                             <h3 className="text-2xl font-black text-slate-800 mb-2">Write a Review</h3>
                             <p className="text-slate-500 font-medium mb-6 text-sm">Share your experience with this product</p>
-
-                            <form onSubmit={handleReviewSubmit} className="space-y-6">
-                                <div className="space-y-3">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Your Rating</label>
-                                    <div className="flex gap-2">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                            <button
-                                                key={star}
-                                                type="button"
-                                                onClick={() => setNewReview({ ...newReview, rating: star })}
-                                                className={cn(
-                                                    "h-12 w-12 rounded-xl flex items-center justify-center transition-all",
-                                                    newReview.rating >= star ? "bg-orange-50 text-orange-500" : "bg-slate-50 text-slate-300"
-                                                )}
-                                            >
-                                                <Star className={cn("h-6 w-6", newReview.rating >= star && "fill-current")} />
-                                            </button>
-                                        ))}
+                            {product?.hasReviewed || localHasReviewed ? (
+                                <div className="bg-brand-50 p-6 rounded-2xl border border-brand-100 text-center mt-6">
+                                    <p className="text-sm font-bold text-primary">You have already reviewed this product. Thank you!</p>
+                                </div>
+                            ) : product?.hasPurchased ? (
+                                <form onSubmit={handleReviewSubmit} className="space-y-6">
+                                    <div className="space-y-3">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Your Rating</label>
+                                        <div className="flex gap-2">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <button
+                                                    key={star}
+                                                    type="button"
+                                                    onClick={() => setNewReview({ ...newReview, rating: star })}
+                                                    className={cn(
+                                                        "h-12 w-12 rounded-xl flex items-center justify-center transition-all",
+                                                        newReview.rating >= star ? "bg-orange-50 text-orange-500" : "bg-slate-50 text-slate-300"
+                                                    )}
+                                                >
+                                                    <Star className={cn("h-6 w-6", newReview.rating >= star && "fill-current")} />
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="space-y-3">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Comment</label>
-                                    <textarea
-                                        value={newReview.comment}
-                                        onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
-                                        placeholder="What did you like or dislike?"
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold min-h-[120px] outline-none ring-1 ring-transparent focus:ring-primary/20 transition-all"
-                                    />
-                                </div>
+                                    <div className="space-y-3">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Comment</label>
+                                        <textarea
+                                            value={newReview.comment}
+                                            onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                                            placeholder="What did you like or dislike?"
+                                            className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold min-h-[120px] outline-none ring-1 ring-transparent focus:ring-primary/20 transition-all"
+                                        />
+                                    </div>
 
-                                <Button
-                                    type="submit"
-                                    disabled={isSubmittingReview}
-                                    className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95"
-                                >
-                                    {isSubmittingReview ? "SUBMITTING..." : "SUBMIT REVIEW"}
-                                </Button>
-                            </form>
+                                    <Button
+                                        type="submit"
+                                        disabled={isSubmittingReview}
+                                        className="w-full h-12 bg-primary hover:opacity-90 text-white font-black rounded-xl text-xs uppercase tracking-[0.1em] transition-all shadow-lg shadow-brand-100"
+                                    >
+                                        {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+                                    </Button>
+                                </form>
+                            ) : (
+                                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-center mt-6">
+                                    <p className="text-sm font-bold text-slate-500">You must purchase and receive this product before you can write a review.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -380,8 +402,11 @@ const ProductDetailPage = () => {
                                                     {review.userId?.name?.[0] || "?"}
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-black text-slate-800">{review.userId?.name || "Anonymous"}</h4>
-                                                    <div className="flex items-center gap-1">
+                                                    <h4 className="font-black text-slate-800">
+                                                        {review.userId?.name || "Anonymous"}
+                                                        {review.status === 'pending' && <span className="ml-2 text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded uppercase">Pending</span>}
+                                                    </h4>
+                                                    <div className="flex items-center gap-1 mt-1">
                                                         {[...Array(5)].map((_, i) => (
                                                             <Star
                                                                 key={i}
@@ -392,7 +417,7 @@ const ProductDetailPage = () => {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(review.createdAt).toLocaleDateString()}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(review.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                         </div>
                                         <p className="text-slate-600 font-medium leading-relaxed">{review.comment}</p>
                                     </div>

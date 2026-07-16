@@ -91,6 +91,7 @@ export const requestDeliveryOtp = async (req, res) => {
       error: {
         code: e.code || "OTP_REQUEST_FAILED",
         message: e.message,
+        ...(e.details ? { details: e.details } : {})
       },
     });
   }
@@ -124,6 +125,7 @@ export const verifyDeliveryOtp = async (req, res) => {
         ...(typeof e.attemptsRemaining === "number"
           ? { attemptsRemaining: e.attemptsRemaining }
           : {}),
+        ...(e.details ? { details: e.details } : {})
       },
     });
   }
@@ -365,40 +367,6 @@ export const verifyReturnPickupOtp = async (req, res) => {
       { path: "returnDeliveryBoy", select: "name phone" }
     ]);
 
-    // ── Credit rider commission on successful pickup (BACKGROUND) ────────────
-    setImmediate(async () => {
-      try {
-        const commission = order.returnDeliveryCommission || 0;
-        const alreadyPaid = order.financeFlags?.returnPickupCommissionPaid;
-        if (commission > 0 && order.returnDeliveryBoy && !alreadyPaid) {
-          await creditWallet({
-            ownerType: "DELIVERY_PARTNER",
-            ownerId: order.returnDeliveryBoy,
-            amount: commission,
-            bucket: "available",
-          });
-
-          await Transaction.create({
-            user: order.returnDeliveryBoy,
-            userModel: "Delivery",
-            order: order._id,
-            type: "Delivery Earning",
-            amount: commission,
-            status: "Settled",
-            reference: `RET-PICK-${order.orderId}`,
-            meta: { flow: "return_pickup_commission" },
-          });
-
-          await Order.updateOne(
-            { _id: order._id },
-            { $set: { "financeFlags.returnPickupCommissionPaid": true } },
-          );
-        }
-      } catch (commErr) {
-        console.error("[verifyReturnPickupOtp] Background commission credit failed:", commErr.message);
-      }
-    });
-
     return handleResponse(res, 200, "Return pickup verified. Navigate to seller now.", order);
   } catch (e) {
     return handleResponse(res, e.statusCode || 500, e.message);
@@ -530,6 +498,40 @@ export const verifyReturnDropOtp = async (req, res) => {
       { path: "customer", select: "name phone" },
       { path: "address" }
     ]);
+
+    // ── Credit rider commission on successful drop (BACKGROUND) ────────────
+    setImmediate(async () => {
+      try {
+        const commission = order.returnDeliveryCommission || 0;
+        const alreadyPaid = order.financeFlags?.returnPickupCommissionPaid;
+        if (commission > 0 && order.returnDeliveryBoy && !alreadyPaid) {
+          await creditWallet({
+            ownerType: "DELIVERY_PARTNER",
+            ownerId: order.returnDeliveryBoy,
+            amount: commission,
+            bucket: "available",
+          });
+
+          await Transaction.create({
+            user: order.returnDeliveryBoy,
+            userModel: "Delivery",
+            order: order._id,
+            type: "Delivery Earning",
+            amount: commission,
+            status: "Settled",
+            reference: `RET-DROP-${order.orderId}`,
+            meta: { flow: "return_drop_commission" },
+          });
+
+          await Order.updateOne(
+            { _id: order._id },
+            { $set: { "financeFlags.returnPickupCommissionPaid": true } },
+          );
+        }
+      } catch (commErr) {
+        console.error("[verifyReturnDropOtp] Background commission credit failed:", commErr.message);
+      }
+    });
 
     return handleResponse(res, 200, "Return delivery complete! Admin will review the product.", order);
   } catch (e) {

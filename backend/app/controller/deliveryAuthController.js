@@ -22,7 +22,8 @@ export const signupDelivery = async (req, res) => {
             name, phone, vehicleType,
             email, address, vehicleNumber,
             drivingLicenseNumber,
-            accountHolder, accountNumber, ifsc
+            accountHolder, accountNumber, ifsc,
+            dob, bloodGroup
         } = req.body;
 
         if (!name || !phone) {
@@ -83,6 +84,8 @@ export const signupDelivery = async (req, res) => {
             accountHolder,
             accountNumber,
             ifsc,
+            dob,
+            bloodGroup,
             profileImage: profileImageUrl,
             documents: {
                 aadhar: aadharUrl,
@@ -101,17 +104,11 @@ export const signupDelivery = async (req, res) => {
         }
 
         if (useRealSMS()) {
-            try {
-                await sendSmsIndiaHubOtp({ phone, otp });
-            } catch (smsErr) {
-                // SMS failure should NOT block rider signup — log and continue
-                console.error("[SMS] Failed to send signup OTP:", smsErr.message);
-            }
+            await sendSmsIndiaHubOtp({ phone, otp });
         }
 
         return handleResponse(res, 200, "OTP sent successfully");
     } catch (error) {
-        console.error("[signupDelivery] 500 ERROR:", error.message, error.stack);
         return handleResponse(res, 500, error.message);
     }
 };
@@ -129,8 +126,11 @@ export const loginDelivery = async (req, res) => {
 
         const delivery = await Delivery.findOne({ phone });
 
-        if (!delivery || !delivery.isVerified) {
+        if (!delivery) {
             return handleResponse(res, 404, "Delivery partner not found");
+        }
+        if (!delivery.isVerified) {
+            return handleResponse(res, 403, "Your application is still pending admin approval");
         }
 
         let otp = generateOTP();
@@ -143,17 +143,13 @@ export const loginDelivery = async (req, res) => {
         await delivery.save();
 
         if (useRealSMS()) {
-            try {
-                await sendSmsIndiaHubOtp({ phone, otp });
-            } catch (smsErr) {
-                // SMS failure should NOT block rider login — log and continue
-                console.error("[SMS] Failed to send login OTP:", smsErr.message);
-            }
+            await sendSmsIndiaHubOtp({ phone, otp });
         }
 
         return handleResponse(res, 200, "OTP sent successfully");
     } catch (error) {
-        return handleResponse(res, 500, error.message);
+        console.error("loginDelivery Error:", error);
+        return handleResponse(res, 500, error.message, { stack: error.stack });
     }
 };
 
@@ -178,7 +174,16 @@ export const verifyDeliveryOTP = async (req, res) => {
             return handleResponse(res, 400, "Invalid or expired OTP");
         }
 
-        delivery.isVerified = true;
+        if (!delivery.isVerified) {
+            // New signup OTP verification
+            delivery.otp = undefined;
+            delivery.otpExpiry = undefined;
+            await delivery.save();
+            return handleResponse(res, 200, "Phone verified successfully", {
+                pendingApproval: true
+            });
+        }
+
         delivery.isOnline = true; // Auto-activate delivery boy on login
         delivery.otp = undefined;
         delivery.otpExpiry = undefined;

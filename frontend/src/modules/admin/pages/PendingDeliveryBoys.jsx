@@ -47,7 +47,7 @@ const PendingDeliveryBoys = () => {
                 name: r.name,
                 phone: r.phone,
                 email: r.email,
-                appliedDate: new Date(r.createdAt).toLocaleDateString(),
+                appliedDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                 location: r.currentArea || 'Unknown',
                 vehicle: r.vehicleType,
                 documents: Object.keys(r.documents || {}).filter(key => r.documents[key]),
@@ -77,7 +77,14 @@ React.useEffect(() => {
 const filteredRiders = useMemo(() => {
     return pendingRiders.filter(r => {
         const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.phone.includes(searchTerm);
-        const matchesStatus = filterStatus === 'all' || r.status === filterStatus;
+        
+        let matchesStatus = true;
+        if (filterStatus === 'pending') {
+            matchesStatus = r.status === 'pending_review';
+        } else if (filterStatus === 'missing_info') {
+            matchesStatus = !r.location || r.location === 'Unknown' || r.location === 'Not Specified';
+        }
+
         return matchesSearch && matchesStatus;
     });
 }, [pendingRiders, searchTerm, filterStatus]);
@@ -253,12 +260,28 @@ return (
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">
-                                        <button
-                                            onClick={() => setViewingRider(rider)}
-                                            className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
-                                        >
-                                            VIEW APPLICATION
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={() => handleApprove(rider.id)}
+                                                className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 flex items-center justify-center transition-all shadow-sm"
+                                                title="Approve"
+                                            >
+                                                <Check className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleReject(rider.id)}
+                                                className="h-8 w-8 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-all shadow-sm"
+                                                title="Reject"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => setViewingRider(rider)}
+                                                className="px-4 py-2 bg-slate-900 text-white rounded-lg text-[10px] font-bold shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 ml-2"
+                                            >
+                                                VIEW APPLICATION
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))
