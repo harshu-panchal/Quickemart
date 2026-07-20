@@ -245,6 +245,7 @@ const AdminRoutes = () => {
         <Route path="/products" element={<ProductManagement />} />
         <Route path="/sellers/active" element={<ActiveSellers />} />
         <Route path="/sellers/active/:id" element={<SellerDetail />} />
+        <Route path="/support" element={<SupportTickets />} />
         <Route path="/support-tickets" element={<SupportTickets />} />
         <Route path="/moderation" element={<ReviewModeration />} />
         <Route path="/experience-studio" element={<ContentManager />} />

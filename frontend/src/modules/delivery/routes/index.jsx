@@ -47,6 +47,7 @@ const DeliveryRoutes = () => {
         <Route path="profile/documents" element={<Documents />} />
         <Route path="profile/safety-privacy" element={<SafetyPrivacy />} />
         <Route path="profile/settings" element={<Settings />} />
+        <Route path="support" element={<HelpSupport />} />
         <Route path="profile/help-support" element={<HelpSupport />} />
         <Route path="profile/withdrawals" element={<Withdrawals />} />
         <Route path="notifications" element={<Notifications />} />
