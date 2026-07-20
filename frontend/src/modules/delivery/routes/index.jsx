@@ -22,6 +22,9 @@ import HelpSupport from "../pages/profile/HelpSupport";
 import Withdrawals from "../pages/profile/Withdrawals";
 import Notifications from "../pages/Notifications";
 
+const TermsPage = React.lazy(() => import("../../customer/pages/TermsPage"));
+const PrivacyPage = React.lazy(() => import("../../customer/pages/PrivacyPage"));
+
 const DeliveryRoutes = () => {
   useEffect(() => {
     setActiveRole(ROLES.DELIVERY);
@@ -49,6 +52,8 @@ const DeliveryRoutes = () => {
         <Route path="profile/settings" element={<Settings />} />
         <Route path="support" element={<HelpSupport />} />
         <Route path="profile/help-support" element={<HelpSupport />} />
+        <Route path="terms" element={<TermsPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
         <Route path="profile/withdrawals" element={<Withdrawals />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="/" element={<Navigate to="dashboard" replace />} />

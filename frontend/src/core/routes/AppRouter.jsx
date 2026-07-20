@@ -114,8 +114,24 @@ const AppRouter = () => {
                     element: <DeliveryAuth />,
                 },
                 {
+                    path: 'seller/terms',
+                    element: <TermsPage />,
+                },
+                {
+                    path: 'seller/privacy',
+                    element: <PrivacyPage />,
+                },
+                {
                     path: 'seller/support',
                     element: <SellerSupportPage />,
+                },
+                {
+                    path: 'delivery/terms',
+                    element: <TermsPage />,
+                },
+                {
+                    path: 'delivery/privacy',
+                    element: <PrivacyPage />,
                 },
                 {
                     path: 'delivery/support',
