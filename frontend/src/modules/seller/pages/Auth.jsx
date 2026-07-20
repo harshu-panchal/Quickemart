@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@core/context/AuthContext";
 import { useSettings } from "@core/context/SettingsContext";
 import { UserRole } from "@core/constants/roles";
@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import Lottie from "lottie-react";
 import sellerAnimation from "../../../assets/INSTANT_6.json";
 import { sellerApi } from "../services/sellerApi";
+import { compressImage } from "../../../shared/utils/imageCompressor";
 import MapPicker from "../../../shared/components/MapPicker";
 
 const createInitialVerificationState = () => ({
@@ -204,8 +205,27 @@ const Auth = () => {
     }
   };
 
-  const handleDocumentChange = (e, docName) => {
-    setDocuments({ ...documents, [docName]: e.target.files[0] });
+  const handleDocumentChange = async (e, docName) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const labelMap = {
+      tradeLicense: "Trade License",
+      gstCertificate: "GST Certificate",
+      idProof: "ID Proof",
+    };
+    const label = labelMap[docName] || "Document";
+
+    const toastId = toast.loading(`Processing ${label}...`);
+    try {
+      const compressedFile = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
+      setDocuments((prev) => ({ ...prev, [docName]: compressedFile }));
+      toast.success(`${label} optimized successfully.`, { id: toastId });
+    } catch (err) {
+      console.error("Compression error:", err);
+      setDocuments((prev) => ({ ...prev, [docName]: file }));
+      toast.error(`Failed to compress ${label}. Using original file.`, { id: toastId });
+    }
   };
 
   const handleSendVerificationOtp = async (field) => {
@@ -1172,10 +1192,11 @@ const Auth = () => {
               </form>
               )}
 
-              <div className="pt-1 border-t border-slate-50 flex flex-col items-center gap-1">
+              <div className="pt-3 border-t border-slate-100 flex flex-col items-center gap-2 text-center">
                 <p className="text-slate-600 font-bold text-sm">
                   {isLogin ? "New to the platform?" : "Already part of us?"}{" "}
                   <button
+                    type="button"
                     onClick={() => {
                       setIsLogin(!isLogin);
                       setSignupStep(1);
@@ -1184,9 +1205,20 @@ const Auth = () => {
                         phone: createInitialVerificationState(),
                       });
                     }}
-                    className="text-slate-900 hover:text-black transition-colors px-2">
+                    className="text-slate-900 hover:text-black font-extrabold transition-colors px-2 underline underline-offset-2">
                     {isLogin ? "Register Store" : "Sign In"}
                   </button>
+                </p>
+                <p className="text-xs text-slate-500 font-semibold">
+                  By continuing, you agree to our{" "}
+                  <Link to="/terms" target="_blank" className="text-slate-900 font-bold hover:underline">
+                    Terms &amp; Conditions
+                  </Link>{" "}
+                  and{" "}
+                  <Link to="/privacy" target="_blank" className="text-slate-900 font-bold hover:underline">
+                    Privacy Policy
+                  </Link>
+                  .
                 </p>
               </div>
             </motion.div>

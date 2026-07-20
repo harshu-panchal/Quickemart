@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Lottie from "lottie-react";
 import deliveryRiding from "@/assets/Delivery Riding.json";
 import { deliveryApi } from "../services/deliveryApi";
+import { compressImage } from "../../../shared/utils/imageCompressor";
 import { useAuth } from "@core/context/AuthContext";
 import { useSettings } from "@core/context/SettingsContext";
 import { toast } from "sonner";
@@ -452,11 +453,20 @@ const DeliveryAuth = () => {
                                 capture="user"
                                 id="profile-upload"
                                 className="hidden"
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   const file = e.target.files[0];
-                                  if (file) {
+                                  if (!file) return;
+                                  const toastId = toast.loading("Processing profile photo...");
+                                  try {
+                                    const compressedFile = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.75 });
+                                    setProfileImageFile(compressedFile);
+                                    setProfileImagePreview(URL.createObjectURL(compressedFile));
+                                    toast.success("Profile photo optimized successfully.", { id: toastId });
+                                  } catch (err) {
+                                    console.error("Compression error:", err);
                                     setProfileImageFile(file);
                                     setProfileImagePreview(URL.createObjectURL(file));
+                                    toast.error("Failed to compress profile photo. Using original.", { id: toastId });
                                   }
                                 }}
                               />
@@ -856,12 +866,25 @@ const DeliveryAuth = () => {
                                   id={doc.id}
                                   className="hidden"
                                   accept="image/*"
-                                  onChange={(e) => {
+                                  onChange={async (e) => {
                                     const file = e.target.files[0];
-                                    if (doc.id === "dl") handleDLUpload(file);
-                                    else if (doc.id === "pan") handlePanUpload(file);
-                                    else if (doc.id === "aadhar") handleAadharUpload(file);
-                                    else doc.setter(file);
+                                    if (!file) return;
+                                    const toastId = toast.loading(`Processing ${doc.label}...`);
+                                    try {
+                                      const compressedFile = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
+                                      if (doc.id === "dl") handleDLUpload(compressedFile);
+                                      else if (doc.id === "pan") handlePanUpload(compressedFile);
+                                      else if (doc.id === "aadhar") handleAadharUpload(compressedFile);
+                                      else doc.setter(compressedFile);
+                                      toast.success(`${doc.label} optimized successfully.`, { id: toastId });
+                                    } catch (err) {
+                                      console.error("Compression error:", err);
+                                      if (doc.id === "dl") handleDLUpload(file);
+                                      else if (doc.id === "pan") handlePanUpload(file);
+                                      else if (doc.id === "aadhar") handleAadharUpload(file);
+                                      else doc.setter(file);
+                                      toast.error(`Failed to compress ${doc.label}. Using original.`, { id: toastId });
+                                    }
                                   }}
                                 />
                                 <label
@@ -1021,9 +1044,9 @@ const DeliveryAuth = () => {
 
                       <p className="text-center text-xs text-gray-400 font-semibold pt-1">
                         By joining, you agree to our{" "}
-                        <Link to="/terms" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms</Link>{" "}
+                        <Link to="/terms" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms &amp; Conditions</Link>{" "}
                         &amp;{" "}
-                        <Link to="/privacy" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
+                        <Link to="/privacy" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
                       </p>
                     </div>
                   )}
@@ -1066,6 +1089,13 @@ const DeliveryAuth = () => {
                           <>Login Now <ArrowRight className="w-4 h-4" /></>
                         )}
                       </button>
+
+                      <p className="text-center text-xs text-gray-400 font-semibold pt-2">
+                        By logging in, you agree to our{" "}
+                        <Link to="/terms" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms</Link>{" "}
+                        &amp;{" "}
+                        <Link to="/privacy" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
+                      </p>
                     </div>
                   )}
                 </motion.div>

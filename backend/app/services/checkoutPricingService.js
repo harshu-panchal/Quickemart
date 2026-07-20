@@ -82,11 +82,10 @@ async function computeDistanceKmForSeller({ sellerId, addressLocation, session =
 
   const distanceKm = Number((distanceInMeters / 1000).toFixed(3));
   
-  const radius = Number(seller.serviceRadius || 5);
+  const radius = Number(seller.serviceRadius || 50);
   if (distanceKm > radius) {
-    const err = new Error(`${seller.shopName || "Store"} does not deliver to your current location (Distance: ${distanceKm}km, Service Radius: ${radius}km)`);
-    err.statusCode = 400;
-    throw err;
+    // Log warning and allow delivery with incremental km surcharge
+    console.warn(`[DistanceCheck] ${seller.shopName || "Store"} distance ${distanceKm}km exceeds preferred radius ${radius}km. Proceeding with distance surcharge.`);
   }
 
   return { distanceKm, distanceSource };
@@ -246,8 +245,8 @@ function applyGlobalHandlingFeeToSellerBreakdowns(
     const breakdown = entry?.breakdown;
     if (!breakdown) continue;
 
-    const shouldCharge = chosenSellerId && entry.sellerId === chosenSellerId;
-    const handlingFeeCharged = shouldCharge ? fee : 0;
+    const shouldCharge = false;
+    const handlingFeeCharged = 0;
 
     breakdown.handlingFeeCharged = handlingFeeCharged;
     breakdown.snapshots = breakdown.snapshots && typeof breakdown.snapshots === "object"

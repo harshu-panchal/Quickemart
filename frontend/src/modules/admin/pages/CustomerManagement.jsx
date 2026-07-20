@@ -14,7 +14,8 @@ import {
     UserPlus,
     RotateCw,
     Activity,
-    Loader2
+    Loader2,
+    X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,43 @@ const CustomerManagement = () => {
     const [pageSize, setPageSize] = useState(25);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
+
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [addForm, setAddForm] = useState({ name: '', phone: '' });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleCreateCustomer = async (e) => {
+        e.preventDefault();
+        const cleanName = addForm.name.trim();
+        const cleanPhone = addForm.phone.trim().replace(/\D/g, '');
+
+        if (!cleanName) {
+            toast.error("Please enter full name");
+            return;
+        }
+        if (cleanPhone.length !== 10) {
+            toast.error("Please enter a valid 10-digit mobile number");
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            const { data } = await adminApi.createCustomer({ name: cleanName, phone: cleanPhone });
+            if (data.success) {
+                toast.success(`Customer "${cleanName}" added successfully!`);
+                setIsAddModalOpen(false);
+                setAddForm({ name: '', phone: '' });
+                fetchCustomers(1);
+            } else {
+                toast.error(data.message || "Failed to create customer");
+            }
+        } catch (error) {
+            console.error("Error creating customer:", error);
+            toast.error(error.response?.data?.message || "Failed to create customer");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -94,12 +132,60 @@ const CustomerManagement = () => {
         });
     }, [customers, searchTerm, filterStatus]);
 
-    const handleExport = () => {
+    const handleExport = async () => {
         setIsExporting(true);
-        setTimeout(() => {
+        try {
+            const { data } = await adminApi.getUsers({ page: 1, limit: 10000 });
+            if (data.success) {
+                const payload = data.result || {};
+                const list = Array.isArray(payload.items) ? payload.items : (data.results || []);
+
+                if (list.length === 0) {
+                    toast.error("No customers found to export");
+                    return;
+                }
+
+                // Build CSV content
+                const csvRows = [];
+                const headers = ["ID", "Name", "Email", "Phone", "Status", "Total Orders", "Total Spent (Rs)", "Joined Date", "Last Order Date"];
+                csvRows.push(headers.join(","));
+
+                list.forEach(customer => {
+                    const row = [
+                        customer.id || customer._id || "",
+                        `"${(customer.name || "").replace(/"/g, '""')}"`,
+                        `"${(customer.email || "").replace(/"/g, '""')}"`,
+                        `"${(customer.phone || "").replace(/"/g, '""')}"`,
+                        customer.status || "active",
+                        customer.totalOrders || 0,
+                        customer.totalSpent || 0,
+                        customer.joinedDate ? new Date(customer.joinedDate).toLocaleDateString() : "N/A",
+                        customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "N/A"
+                    ];
+                    csvRows.push(row.join(","));
+                });
+
+                const csvContent = "\uFEFF" + csvRows.join("\n");
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `customers_export_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                toast.success('Customer database exported successfully!');
+            } else {
+                toast.error("Failed to export customers");
+            }
+        } catch (error) {
+            console.error("Export error:", error);
+            toast.error("An error occurred during export");
+        } finally {
             setIsExporting(false);
-            toast.success('Customer database exported successfully!');
-        }, 1500);
+        }
     };
 
     const getTimeAgo = (date) => {
@@ -135,7 +221,10 @@ const CustomerManagement = () => {
                             {isExporting ? <RotateCw className="ds-icon-sm animate-spin" /> : <Download className="ds-icon-sm" />}
                             {isExporting ? 'EXPORTING...' : 'EXPORT'}
                         </button>
-                        <button className="ds-btn ds-btn-md bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+                        <button
+                            onClick={() => setIsAddModalOpen(true)}
+                            className="ds-btn ds-btn-md bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                        >
                             <UserPlus className="ds-icon-sm" />
                             NEW CUSTOMER
                         </button>
@@ -314,6 +403,88 @@ const CustomerManagement = () => {
                     />
                 </div>
             </Card>
+
+            {/* Add New Customer Modal */}
+            {isAddModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+                    <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-gray-100">
+                        <button
+                            onClick={() => setIsAddModalOpen(false)}
+                            className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-all"
+                        >
+                            <X className="ds-icon-sm" />
+                        </button>
+
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="p-3 bg-primary/10 text-primary rounded-2xl">
+                                <UserPlus className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900">Add New Customer</h3>
+                                <p className="text-xs font-semibold text-gray-500">Customer can log in directly via phone & OTP</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleCreateCustomer} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                                    Full Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. Rajesh Kumar"
+                                    value={addForm.name}
+                                    onChange={(e) => setAddForm((prev) => ({ ...prev, name: e.target.value }))}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-medium text-sm transition-all"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                                    Mobile Number <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-3.5 text-sm font-bold text-gray-400">+91</span>
+                                    <input
+                                        type="tel"
+                                        required
+                                        maxLength={10}
+                                        placeholder="10-digit mobile number"
+                                        value={addForm.phone}
+                                        onChange={(e) => setAddForm((prev) => ({ ...prev, phone: e.target.value.replace(/\D/g, '') }))}
+                                        className="w-full pl-14 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-bold text-sm tracking-wider transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 pt-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAddModalOpen(false)}
+                                    className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-all text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex-1 py-3 px-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span>Creating...</span>
+                                        </>
+                                    ) : (
+                                        <span>Create Customer</span>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

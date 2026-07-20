@@ -313,66 +313,91 @@ const ProductCard = React.memo(
           </div>
 
           {/* Price Row / ADD Button Combination for compact */}
-          <div className="mt-auto flex items-center justify-between gap-1">
-            <div className="flex flex-col">
-              <span
-                className={cn(
-                  "font-[1000] text-[#1A1A1A]",
-                  compact ? "text-[11px]" : "text-[13px] sm:text-sm",
-                )}>
-                ₹{defaultVariant?.displayPrice || product.price}
-              </span>
-              {defaultVariant?.displayOriginalPrice && (
-                <span
-                  className={cn(
-                    "font-medium text-gray-400 line-through leading-none",
-                    compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
-                  )}>
-                  ₹{defaultVariant.displayOriginalPrice}
-                </span>
-              )}
-            </div>
+          {(() => {
+            const priceVal = Number(defaultVariant?.displayPrice || product.price || 0);
+            const stockVal = Number(product.stock || 0);
+            const totalVariantStock = Array.isArray(product?.variants) && product.variants.length > 0
+              ? product.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)
+              : stockVal;
+            const effectiveStock = Math.max(stockVal, totalVariantStock);
+            const isItemOutOfStock = product.isOutOfStock || effectiveStock <= 0 || priceVal <= 0;
 
-            {/* ADD Button / Quantity Selector (Always in price row) */}
-            <div className="flex">
-              {quantity > 0 ? (
-                <div
-                  className={cn(
-                    "flex items-center bg-white border-[1.5px] border-primary rounded-lg p-0.5 justify-between",
-                    compact ? "min-w-[60px]" : "min-w-[68px] sm:min-w-[90px] md:min-w-[100px]",
-                  )}>
-                  <button
-                    onClick={handleDecrement}
-                    className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform sm:p-1 sm:px-1">
-                    <Minus size={compact ? 10 : 12} strokeWidth={3.5} />
-                  </button>
-                  <span
-                    className={cn(
-                      "font-black text-primary",
-                      compact ? "text-[10px]" : "text-[11px] sm:text-[13px] md:text-sm",
+            return (
+              <div className="mt-auto flex items-center justify-between gap-1 min-h-[32px]">
+                <div className="flex flex-col">
+                  {isItemOutOfStock ? (
+                    <span className={cn(
+                      "font-black text-rose-600 uppercase tracking-wide",
+                      compact ? "text-[10px]" : "text-[11px] sm:text-xs",
                     )}>
-                    {quantity}
-                  </span>
-                  <button
-                    onClick={handleIncrement}
-                    className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform sm:p-1 sm:px-1">
-                    <Plus size={compact ? 10 : 12} strokeWidth={3.5} />
-                  </button>
+                      OUT OF STOCK
+                    </span>
+                  ) : (
+                    <>
+                      <span
+                        className={cn(
+                          "font-[1000] text-[#1A1A1A]",
+                          compact ? "text-[11px]" : "text-[13px] sm:text-sm",
+                        )}>
+                        ₹{defaultVariant?.displayPrice || product.price}
+                      </span>
+                      {defaultVariant?.displayOriginalPrice && (
+                        <span
+                          className={cn(
+                            "font-medium text-gray-400 line-through leading-none",
+                            compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
+                          )}>
+                          ₹{defaultVariant.displayOriginalPrice}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
-              ) : (
-                <button
-                  onClick={handleAddToCart}
-                  className={cn(
-                    "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95",
-                    compact
-                      ? "px-2.5 py-1 text-[10px]"
-                      : "px-3.5 py-1.5 text-[11px] sm:px-7 sm:py-2 sm:text-[13px] md:text-sm md:px-8 md:py-2.5",
-                  )}>
-                  ADD
-                </button>
-              )}
-            </div>
-          </div>
+
+                {/* ADD Button / Quantity Selector */}
+                {!isItemOutOfStock && (
+                  <div className="flex">
+                    {quantity > 0 ? (
+                      <div
+                        className={cn(
+                          "flex items-center bg-white border-[1.5px] border-primary rounded-lg p-0.5 justify-between",
+                          compact ? "min-w-[60px]" : "min-w-[68px] sm:min-w-[90px] md:min-w-[100px]",
+                        )}>
+                        <button
+                          onClick={handleDecrement}
+                          className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform sm:p-1 sm:px-1">
+                          <Minus size={compact ? 10 : 12} strokeWidth={3.5} />
+                        </button>
+                        <span
+                          className={cn(
+                            "font-black text-primary",
+                            compact ? "text-[10px]" : "text-[11px] sm:text-[13px] md:text-sm",
+                          )}>
+                          {quantity}
+                        </span>
+                        <button
+                          onClick={handleIncrement}
+                          className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform sm:p-1 sm:px-1">
+                          <Plus size={compact ? 10 : 12} strokeWidth={3.5} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleAddToCart}
+                        className={cn(
+                          "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95",
+                          compact
+                            ? "px-2.5 py-1 text-[10px]"
+                            : "px-3.5 py-1.5 text-[11px] sm:px-7 sm:py-2 sm:text-[13px] md:text-sm md:px-8 md:py-2.5",
+                        )}>
+                        ADD
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
     );

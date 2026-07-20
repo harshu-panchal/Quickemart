@@ -314,65 +314,44 @@ const ProductManagement = () => {
 
   const handleSave = async () => {
     try {
-      if (
-        !formData.name ||
-        formData.price === "" || formData.price === undefined ||
-        formData.stock === "" || formData.stock === undefined ||
-        !formData.header ||
-        !formData.category ||
-        !formData.subcategory
-      ) {
-        toast.error("Please fill all required fields, including categories");
-        return;
+      if (!editingItem) return;
+
+      // Validate pricing and stock
+      for (let i = 0; i < formData.variants.length; i++) {
+        const v = formData.variants[i];
+        if (!v.price || Number(v.price) <= 0) {
+          toast.error(`Please enter a valid price for variant "${v.name}"`);
+          return;
+        }
+        if (v.stock === "" || Number(v.stock) < 0) {
+          toast.error(`Please enter stock for variant "${v.name}"`);
+          return;
+        }
       }
 
       const data = new FormData();
-      data.append("name", formData.name);
-      data.append("slug", formData.slug);
-      data.append("sku", formData.sku);
-      data.append("description", formData.description);
-      data.append("price", Number(formData.price));
-      data.append("salePrice", Number(formData.salePrice) || 0);
-      data.append("stock", Number(formData.stock));
-      data.append("headerId", formData.header);
-      data.append("categoryId", formData.category);
-      data.append("subcategoryId", formData.subcategory);
       data.append("status", formData.status);
-      data.append("brand", formData.brand);
-      data.append("weight", formData.weight);
-      data.append("tags", formData.tags);
-      data.append("variants", JSON.stringify(formData.variants));
+      
+      const firstVariant = formData.variants[0] || {};
+      data.append("price", firstVariant.price);
+      data.append("salePrice", firstVariant.salePrice || 0);
+      data.append("stock", firstVariant.stock);
+      data.append("sku", firstVariant.sku);
+      
+      data.append("variants", JSON.stringify(formData.variants.map(v => ({
+          name: v.name,
+          price: Number(v.price),
+          salePrice: Number(v.salePrice) || 0,
+          stock: Number(v.stock),
+          sku: v.sku
+      }))));
 
-      if (formData.mainImageFile) {
-        data.append("mainImage", formData.mainImageFile);
-      }
-      // Gallery images — collect non-null slots in order
-      const galleryFilesList = (formData.galleryFiles || []).filter(Boolean);
-      galleryFilesList.forEach((file) => data.append("galleryImages", file));
-      // Labels only for slots that have images
-      const galleryLabelsList = formData.galleryImages
-        .map((img, i) => (img ? (formData.galleryLabels[i] || "") : null))
-        .filter((l) => l !== null);
-      if (galleryLabelsList.length > 0) {
-        data.append("galleryLabels", JSON.stringify(galleryLabelsList));
-      }
-
-      if (editingItem) {
-        const response = await sellerApi.updateProduct(editingItem._id || editingItem.id, data);
-        const approvalStatus = response?.data?.result?.approvalStatus;
-        if (approvalStatus === "pending") {
-          toast.success("Product changes submitted for admin approval");
-        } else {
-          toast.success(response?.data?.message || "Product updated successfully");
-        }
+      const response = await sellerApi.updateProduct(editingItem._id || editingItem.id, data);
+      const approvalStatus = response?.data?.result?.approvalStatus;
+      if (approvalStatus === "pending") {
+        toast.success("Product changes submitted for admin approval");
       } else {
-        const response = await sellerApi.createProduct(data);
-        const approvalStatus = response?.data?.result?.approvalStatus;
-        if (approvalStatus === "pending") {
-          toast.success("Product submitted for admin approval");
-        } else {
-          toast.success(response?.data?.message || "Product created successfully");
-        }
+        toast.success(response?.data?.message || "Product updated successfully");
       }
 
       setIsProductModalOpen(false);
@@ -465,6 +444,55 @@ const ProductManagement = () => {
 
   const openEditModal = (item = null) => {
     if (item) {
+      const rawHeader = item.headerId?._id || item.headerId;
+      const rawCategory = item.categoryId?._id || item.categoryId;
+      const rawSubcategory = item.subcategoryId?._id || item.subcategoryId;
+
+      let headerStr = rawHeader ? String(rawHeader) : "";
+      let categoryStr = rawCategory ? String(rawCategory) : "";
+      let subcategoryStr = rawSubcategory ? String(rawSubcategory) : "";
+
+      if (categories && categories.length > 0) {
+        for (const h of categories) {
+          const hId = String(h._id || h.id);
+          let foundInHeader = false;
+
+          if (h.children) {
+            for (const c of h.children) {
+              const cId = String(c._id || c.id);
+
+              if (c.children) {
+                for (const sc of c.children) {
+                  const scId = String(sc._id || sc.id);
+                  if (scId === subcategoryStr || scId === categoryStr || scId === headerStr) {
+                    headerStr = hId;
+                    categoryStr = cId;
+                    subcategoryStr = scId;
+                    foundInHeader = true;
+                    break;
+                  }
+                }
+              }
+
+              if (foundInHeader) break;
+
+              if (cId === categoryStr || cId === subcategoryStr || cId === headerStr) {
+                headerStr = hId;
+                categoryStr = cId;
+                foundInHeader = true;
+                break;
+              }
+            }
+          }
+
+          if (foundInHeader) break;
+
+          if (hId === headerStr || hId === categoryStr) {
+            headerStr = hId;
+          }
+        }
+      }
+
       setFormData({
         name: item.name || "",
         slug: item.slug || "",
@@ -474,9 +502,9 @@ const ProductManagement = () => {
         salePrice: item.salePrice ?? "",
         stock: item.stock ?? "",
         lowStockAlert: item.lowStockAlert ?? 5,
-        header: item.headerId?._id || item.headerId || "",
-        category: item.categoryId?._id || item.categoryId || "",
-        subcategory: item.subcategoryId?._id || item.subcategoryId || "",
+        header: headerStr,
+        category: categoryStr,
+        subcategory: subcategoryStr,
         status: item.status || "active",
         tags: Array.isArray(item.tags) ? item.tags.join(", ") : item.tags || "",
         weight: item.weight || "",
@@ -823,31 +851,44 @@ const ProductManagement = () => {
                     )}
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <ApprovalBadge approvalStatus={p.approvalStatus} />
-                      {p.approvalReviewedAt ? (
-                        <span className="text-[10px] text-slate-400">
-                          Reviewed
-                        </span>
-                      ) : p.approvalRequestedAt ? (
-                        <span className="text-[10px] text-slate-400">
-                          Submitted
-                        </span>
-                      ) : null}
-                    </div>
+                    {p.isMasterCatalogItem ? (
+                      <span className="text-[10px] text-slate-400 italic">Not Listed</span>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <ApprovalBadge approvalStatus={p.approvalStatus} />
+                        {p.approvalReviewedAt ? (
+                          <span className="text-[10px] text-slate-400">Reviewed</span>
+                        ) : p.approvalRequestedAt ? (
+                          <span className="text-[10px] text-slate-400">Submitted</span>
+                        ) : null}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => openEditModal(p)}
-                        className="p-1 hover:text-brand-600 rounded-lg transition-all text-slate-500">
-                        <HiOutlinePencilSquare className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(p)}
-                        className="p-1 hover:text-rose-600 rounded-lg transition-all text-slate-500">
-                        <HiOutlineTrash className="h-4 w-4" />
-                      </button>
+                      {p.isMasterCatalogItem ? (
+                        // Unlisted master catalog item → "List Now" button
+                        <button
+                          onClick={() => navigate(`/seller/products/add?masterProductId=${p._id}`)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all shadow-sm shadow-emerald-100">
+                          <HiOutlinePlus className="h-3 w-3" />
+                          List Now
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => openEditModal(p)}
+                            className="p-1 hover:text-brand-600 rounded-lg transition-all text-slate-500"
+                            title={p.isLegacyProduct ? "Edit (full)" : "Edit price & stock"}>
+                            <HiOutlinePencilSquare className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(p)}
+                            className="p-1 hover:text-rose-600 rounded-lg transition-all text-slate-500">
+                            <HiOutlineTrash className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -994,453 +1035,145 @@ const ProductManagement = () => {
               </div>
 
               <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-                {/* Modal Sidebar Tabs */}
-                <div
-                  className="lg:w-1/4 bg-slate-50/50 border-r border-slate-100 p-4 space-y-1 overflow-y-auto min-h-0"
-                  onWheel={handleModalScrollWheel}>
-                  {[
-                    {
-                      id: "general",
-                      label: "General Info",
-                      icon: HiOutlineTag,
-                    },
-                    {
-                      id: "variants",
-                      label: "Item Variants",
-                      icon: HiOutlineSwatch,
-                    },
-                    {
-                      id: "category",
-                      label: "Groups",
-                      icon: HiOutlineFolderOpen,
-                    },
-                    { id: "media", label: "Photos", icon: HiOutlinePhoto },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setModalTab(tab.id)}
-                      className={cn(
-                        "w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition-all text-left",
-                        modalTab === tab.id
-                          ? "bg-white text-primary shadow-sm ring-1 ring-slate-100"
-                          : "text-slate-600 hover:bg-slate-100",
-                      )}>
-                      <tab.icon className="h-4 w-4" />
-                      <span>{tab.label}</span>
-                    </button>
-                  ))}
-
-                  <div className="pt-8 px-4">
-                    <div className="p-4 bg-brand-50 rounded-2xl border border-brand-100">
-                      <p className="text-[9px] font-bold text-brand-600 uppercase tracking-widest mb-1">
-                        Status
-                      </p>
+                {/* Left Side: Configuration Fields */}
+                <div className="lg:w-3/5 p-6 overflow-y-auto space-y-6 border-r border-slate-100">
+                  {/* Status & Low Stock Alert Row */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                        Listing Status
+                      </label>
                       <select
                         value={formData.status}
-                        onChange={(e) =>
-                          setFormData({ ...formData, status: e.target.value })
-                        }
-                        className="w-full bg-transparent border-none text-xs font-bold text-brand-700 outline-none p-0 cursor-pointer focus:ring-0">
-                        <option value="active">PUBLISHED</option>
-                        <option value="inactive">DRAFT</option>
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500/40 text-slate-700"
+                      >
+                        <option value="active">Active (Visible to customers)</option>
+                        <option value="inactive">Inactive (Hidden from search)</option>
                       </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                        Low Stock Threshold
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formData.lowStockAlert}
+                        onChange={(e) => setFormData({ ...formData, lowStockAlert: e.target.value })}
+                        placeholder="e.g. 5"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500/40 text-slate-700"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Variants Inputs */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-50">
+                      <HiOutlineSwatch className="h-4 w-4 text-emerald-500" />
+                      <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Configure Variation Prices</h4>
+                    </div>
+
+                    <div className="space-y-3">
+                      {formData.variants.map((v, i) => (
+                        <div key={v.id || i} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                          <div className="flex justify-between items-center pb-2 border-b border-slate-200/40">
+                            <span className="text-[10px] font-black text-slate-600 bg-white border border-slate-200/60 px-2.5 py-0.5 rounded-md">
+                              {v.name || `Variant ${i + 1}`}
+                            </span>
+                            <span className="text-[9px] font-mono text-slate-400">
+                              SKU: {v.sku || "N/A"}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                Price (₹) *
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={v.price}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const news = [...formData.variants];
+                                  news[i].price = val;
+                                  setFormData({ ...formData, variants: news });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500/40 text-slate-800"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                Sale Price (₹)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={v.salePrice}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const news = [...formData.variants];
+                                  news[i].salePrice = val;
+                                  setFormData({ ...formData, variants: news });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500/40 text-slate-800"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                Stock *
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={v.stock}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const news = [...formData.variants];
+                                  news[i].stock = val;
+                                  setFormData({ ...formData, variants: news });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500/40 text-slate-800"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Modal Content Area */}
-                <div
-                  className="flex-1 p-8 overflow-y-auto min-h-0 overscroll-contain custom-scrollbar"
-                  onWheel={handleModalScrollWheel}>
-                  {modalTab === "general" && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                            Product Title
-                          </label>
-                          <input
-                            value={formData.name}
-                            onChange={(e) => {
-                              const nextName = e.target.value;
-                              setFormData((prev) => ({
-                                ...prev,
-                                name: nextName,
-                                sku:
-                                  !prev.sku || isAutoSku(prev.sku, prev.name, 1)
-                                    ? makeSku(nextName, 1)
-                                    : prev.sku,
-                                variants: prev.variants.map((variant, idx) => {
-                                  const variantIndex = idx + 1;
-                                  const shouldAuto =
-                                    !variant.sku ||
-                                    isAutoSku(variant.sku, prev.name, variantIndex);
-                                  return shouldAuto
-                                    ? { ...variant, sku: makeSku(nextName, variantIndex) }
-                                    : variant;
-                                }),
-                              }));
-                            }}
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
-                            placeholder="e.g. Premium Basmati Rice"
-                          />
-                        </div>
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                            Web Address
-                          </label>
-                          <div className="flex items-center bg-slate-50 rounded-xl px-4 py-2.5">
-                            <span className="text-[10px] text-slate-600 font-bold mr-1">
-                              /product/
-                            </span>
-                            <input
-                              value={formData.slug}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  slug: e.target.value,
-                                })
-                              }
-                              className="flex-1 bg-transparent border-none text-sm text-slate-600 font-semibold outline-none"
-                              placeholder="premium-basmati-rice"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-1.5 flex flex-col">
-                        <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                          About this item
-                        </label>
-                        <textarea
-                          value={formData.description}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              description: e.target.value,
-                            })
-                          }
-                          onWheel={(e) => e.stopPropagation()}
-                          onTouchMove={(e) => e.stopPropagation()}
-                          className="w-full px-4 py-3 bg-slate-100 border-none rounded-2xl text-sm font-semibold min-h-[160px] max-h-[260px] outline-none resize-none overflow-y-auto custom-scrollbar"
-                          placeholder="Describe the item here..."
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                            Brand Name
-                          </label>
-                          <input
-                            value={formData.brand}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                brand: e.target.value,
-                              })
-                            }
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
-                            placeholder="e.g. Amul"
-                          />
-                        </div>
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                            Product Code
-                          </label>
-                          <input
-                            value={formData.sku}
-                            onChange={(e) =>
-                              setFormData({ ...formData, sku: e.target.value })
-                            }
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-mono font-bold outline-none ring-primary/5 focus:ring-2"
-                            placeholder="AUTO-GENERATED"
-                          />
-                        </div>
-                      </div>
+                {/* Right Side: Product Details Preview */}
+                <div className="lg:w-2/5 p-6 bg-slate-50/50 overflow-y-auto space-y-4">
+                  <div className="aspect-[4/3] rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden flex items-center justify-center relative">
+                    {formData.mainImage ? (
+                      <img src={formData.mainImage} alt={formData.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <HiOutlinePhoto className="h-12 w-12 text-slate-200" />
+                    )}
+                    <span className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full">
+                      {formData.brand || "NO BRAND"}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Product</h4>
+                      <h3 className="text-sm font-black text-slate-800 leading-tight mt-0.5">{formData.name}</h3>
                     </div>
-                  )}
-                  {/* Additional tabs populated as needed */}
-                  {modalTab === "category" && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                            Main Group <span className="text-rose-500">*</span>
-                          </label>
-                          <select
-                            value={formData.header}
-                            onChange={(e) =>
-                              setFormData({ ...formData, header: e.target.value, category: "", subcategory: "" })
-                            }
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-bold outline-none cursor-pointer">
-                            <option value="">Select Main Group</option>
-                            {categories.map((h) => (
-                              <option key={h._id || h.id} value={h._id || h.id}>
-                                {h.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                            Specific Category <span className="text-rose-500">*</span>
-                          </label>
-                          <select
-                            value={formData.category}
-                            onChange={(e) =>
-                              setFormData({ ...formData, category: e.target.value, subcategory: "" })
-                            }
-                            disabled={!formData.header}
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-bold outline-none cursor-pointer disabled:opacity-50">
-                            <option value="">Select Category</option>
-                            {categories
-                              .find((h) => (h._id || h.id) === formData.header)
-                              ?.children?.map((c) => (
-                                <option key={c._id || c.id} value={c._id || c.id}>
-                                  {c.name}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="space-y-1.5 flex flex-col">
-                        <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                          Sub-Category <span className="text-rose-500">*</span>
-                        </label>
-                        <select
-                          value={formData.subcategory}
-                          onChange={(e) =>
-                            setFormData({ ...formData, subcategory: e.target.value })
-                          }
-                          disabled={!formData.category}
-                          className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-bold outline-none cursor-pointer disabled:opacity-50">
-                          <option value="">Select Sub-Category</option>
-                          {categories
-                            .find((h) => (h._id || h.id) === formData.header)
-                            ?.children?.find((c) => (c._id || c.id) === formData.category)
-                            ?.children?.map((sc) => (
-                              <option key={sc._id || sc.id} value={sc._id || sc.id}>
-                                {sc.name}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  {modalTab === "media" && (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
-                      <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                          Main Cover Photo
-                        </label>
-                        <div className="flex flex-col md:flex-row items-start gap-6">
-                          <div className="w-48 aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center group hover:border-primary hover:bg-primary/5 transition-all cursor-pointer overflow-hidden relative">
-                            <input
-                              type="file"
-                              className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                              onChange={(e) => handleImageUpload(e, "main")}
-                            />
-                            {formData.mainImage ? (
-                              <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="flex flex-col items-center">
-                                <HiOutlinePhoto className="h-10 w-10 text-slate-200" />
-                                <p className="text-[10px] text-slate-600 font-bold mt-2">UPLOAD</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                          Gallery Photos
-                        </label>
-
-                        {/* Hidden gallery file input */}
-                        <input
-                          ref={galleryFileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleGalleryFileChange}
-                        />
-
-                        {/* Single dropdown - selecting a type auto-opens file picker */}
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            Select Image Type
-                          </p>
-                          <div className="relative">
-                            <select
-                              value={selectedGalleryType}
-                              onChange={handleGalleryTypeSelect}
-                              className="w-full px-4 py-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none cursor-pointer appearance-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                            >
-                              <option value="">Select image type to upload...</option>
-                              {IMAGE_LABEL_OPTIONS.map((opt) => {
-                                const alreadyUsed = formData.galleryLabels.includes(opt);
-                                if (alreadyUsed) return null;
-                                return <option key={opt} value={opt}>{opt}</option>;
-                              })}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
-                              <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-medium ml-1">
-                            Choosing a type will instantly open the file picker.
-                          </p>
-                        </div>
-
-                        {/* 5 fixed image slots - display only, auto-filled on upload */}
-                        <div className="grid grid-cols-5 gap-3">
-                          {[0, 1, 2, 3, 4].map((idx) => {
-                            const image = formData.galleryImages[idx];
-                            const label = formData.galleryLabels[idx];
-                            const hasImage = !!image;
-                            return (
-                              <div key={idx} className="flex flex-col gap-1.5">
-                                <div
-                                  className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center relative overflow-hidden transition-all ${hasImage ? "border-slate-200" : "border-slate-200 bg-slate-50 opacity-70"
-                                    }`}
-                                >
-                                  {hasImage ? (
-                                    <>
-                                      <img src={image} alt={label} className="w-full h-full object-cover" />
-                                      <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); handleRemoveGalleryImage(idx); }}
-                                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors z-20 shadow"
-                                      >
-                                        <HiOutlineTrash className="h-3 w-3" />
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <HiOutlinePlus className="h-5 w-5 text-slate-300" />
-                                      <p className="text-[9px] font-bold uppercase tracking-widest mt-1 text-slate-300">
-                                        Empty
-                                      </p>
-                                    </>
-                                  )}
-                                </div>
-                                {label && (
-                                  <p className="text-[8px] font-black text-center text-primary uppercase tracking-wider truncate">
-                                    {label}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          Select a type, then click a slot to upload. Existing images load automatically.
+                    {formData.description && (
+                      <div className="space-y-1">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</h4>
+                        <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-h-32 overflow-y-auto custom-scrollbar">
+                          {formData.description}
                         </p>
                       </div>
-                    </div>
-                  )}
-
-                  {modalTab === "variants" && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold">Product Variants</h4>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              variants: [
-                                ...prev.variants,
-                                {
-                                  id: Date.now(),
-                                  name: "",
-                                  price: "",
-                                  salePrice: "",
-                                  stock: "",
-                                  sku: makeSku(prev.name, prev.variants.length + 1),
-                                },
-                              ],
-                            }))
-                          }
-                          className="bg-primary/10 text-primary px-3 py-1 rounded-lg text-[10px] font-bold">+ ADD</button>
-                      </div>
-                      <div className="space-y-3">
-                        {formData.variants.map((v, i) => (
-                          <div key={v.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                            <div className="md:col-span-2 space-y-1">
-                              <label className="text-[8px] font-bold text-slate-600 uppercase tracking-widest ml-1">Variant Name</label>
-                              <input value={v.name} onChange={e => {
-                                const news = [...formData.variants];
-                                news[i].name = e.target.value;
-                                setFormData({ ...formData, variants: news });
-                              }} placeholder="e.g. 1kg, 1 pack, 1 liter..." className="w-full bg-white px-3 py-2 rounded-xl text-xs ring-1 ring-slate-100 outline-none" />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-600 uppercase tracking-widest ml-1">Price</label>
-                              <input type="number" min="0" value={v.price} onChange={e => {
-                                const val = e.target.value;
-                                if (val !== '' && Number(val) < 0) return;
-                                const news = [...formData.variants];
-                                news[i].price = val;
-                                setFormData({ ...formData, variants: news });
-                              }} placeholder="Price" className="w-full bg-white px-3 py-2 rounded-xl text-xs ring-1 ring-slate-100 outline-none" />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-brand-400 uppercase tracking-widest ml-1">Sale Price</label>
-                              <input type="number" min="0" value={v.salePrice} onChange={e => {
-                                const val = e.target.value;
-                                if (val !== '' && Number(val) < 0) return;
-                                const news = [...formData.variants];
-                                news[i].salePrice = val;
-                                setFormData({ ...formData, variants: news });
-                              }} placeholder="Sale" className="w-full bg-brand-50/50 px-3 py-2 rounded-xl text-xs ring-1 ring-brand-100 text-brand-700 outline-none" />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-600 uppercase tracking-widest ml-1">Stock</label>
-                              <input type="number" min="0" value={v.stock} onChange={e => {
-                                const val = e.target.value;
-                                if (val !== '' && Number(val) < 0) return;
-                                const news = [...formData.variants];
-                                news[i].stock = val;
-                                setFormData({ ...formData, variants: news });
-                              }} placeholder="Stock" className="w-full bg-white px-3 py-2 rounded-xl text-xs ring-1 ring-slate-100 outline-none" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 space-y-1">
-                                <label className="text-[8px] font-bold text-slate-600 uppercase tracking-widest ml-1">SKU</label>
-                                <input value={v.sku} onChange={e => {
-                                  const news = [...formData.variants];
-                                  news[i].sku = e.target.value;
-                                  setFormData({ ...formData, variants: news });
-                                }} placeholder="SKU" className="w-full bg-white px-3 py-2 rounded-xl text-[10px] ring-1 ring-slate-100 outline-none" />
-                              </div>
-                              <button type="button" onClick={() => {
-                                setFormData((prev) => {
-                                  const remaining = prev.variants
-                                    .map((variant, idx) => ({ variant, oldIndex: idx + 1 }))
-                                    .filter((item, idx) => idx !== i)
-                                    .map((item, newIdx) => {
-                                      const shouldAuto =
-                                        !item.variant.sku ||
-                                        isAutoSku(item.variant.sku, prev.name, item.oldIndex);
-                                      return shouldAuto
-                                        ? { ...item.variant, sku: makeSku(prev.name, newIdx + 1) }
-                                        : item.variant;
-                                    });
-                                  return { ...prev, variants: remaining };
-                                });
-                              }} className="text-rose-500 p-2 hover:bg-rose-50 rounded-lg shrink-0 mb-0.5">
-                                <HiOutlineTrash className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -276,6 +276,17 @@ export const CartProvider = ({ children }) => {
         : Number(item.price || 0);
     return total + unit * Number(item.quantity || 0);
   }, 0);
+
+  const gstTotal = cart.reduce((total, item) => {
+    const unit =
+      Number(item.salePrice || 0) > 0 && Number(item.salePrice) < Number(item.price || 0)
+        ? Number(item.salePrice)
+        : Number(item.price || 0);
+    const itemGstRate = Number(item.gstTax || 0);
+    const itemGst = (unit * Number(item.quantity || 0) * itemGstRate) / 100;
+    return total + itemGst;
+  }, 0);
+
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   const cartValue = useMemo(() => ({
@@ -285,10 +296,11 @@ export const CartProvider = ({ children }) => {
     updateQuantity,
     clearCart,
     cartTotal,
+    gstTotal,
     cartCount,
     loading,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cart, cartTotal, cartCount, loading]);
+  }), [cart, cartTotal, gstTotal, cartCount, loading]);
 
   return (
     <CartContext.Provider value={cartValue}>

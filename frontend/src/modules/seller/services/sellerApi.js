@@ -12,10 +12,16 @@ export const sellerApi = {
     // Products
     getProducts: (params) => axiosInstance.get('/products/seller/me', { params }),
     getProductById: (id) => axiosInstance.get(`/products/${id}`),
-    createProduct: (data) => axiosInstance.post('/products', data),
+    createProduct: (data) => axiosInstance.post('/products', data), // Admin use only going forward
+    createListing: (data) => axiosInstance.post('/products/seller/listings', data), // New: seller lists from master catalog
     updateProduct: (id, data) => axiosInstance.put(`/products/${id}`, data),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
     bulkImportProducts: (data) => axiosInstance.post('/products/bulk', data),
+    downloadTemplate: () => axiosInstance.get('/products/bulk/template', { responseType: 'blob' }),
+    
+    // Catalog lookups
+    getCatalogBrands: (params) => axiosInstance.get('/products/catalog/brands', { params }),
+    getCatalogProducts: (params) => axiosInstance.get('/products/catalog/products', { params }),
 
     // Categories (Public)
     getCategories: () => axiosInstance.get('/admin/categories'),

@@ -7,6 +7,7 @@
  */
 
 import express from 'express';
+import mongoose from 'mongoose';
 import handleResponse from '../utils/helper.js';
 import { getHealthStatus, getReadinessStatus } from '../services/healthCheck.js';
 

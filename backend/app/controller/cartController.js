@@ -3,6 +3,9 @@ import Product from "../models/product.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 
+import Category from "../models/category.js";
+import { calculateCustomerDisplayPrice } from "../services/finance/pricingService.js";
+
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants";
 
@@ -11,9 +14,50 @@ const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   ...getApprovedOrLegacyFilter(),
 };
 
-function sanitizeCartItems(cart) {
+async function sanitizeCartItems(cart) {
   if (!cart || !Array.isArray(cart.items)) return cart;
   cart.items = cart.items.filter((item) => Boolean(item?.productId));
+
+  const categoryIds = [...new Set(cart.items.map(item => String(item.productId?.headerId || item.productId?.categoryId || "")).filter(Boolean))];
+  const categoryDocs = await Category.find({ _id: { $in: categoryIds } })
+    .select("_id name adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue")
+    .lean();
+  const categoryMap = new Map(categoryDocs.map(c => [String(c._id), c]));
+
+  cart.items = cart.items.map((item) => {
+    const p = item.productId;
+    if (!p) return item;
+
+    const catConfig = categoryMap.get(String(p.headerId)) || categoryMap.get(String(p.categoryId)) || null;
+    const rawSale = Number(p.salePrice || p.price || 0);
+    const rawReg = Number(p.price || p.salePrice || 0);
+
+    const saleDisplay = calculateCustomerDisplayPrice(rawSale, catConfig).customerDisplayPrice;
+    const regDisplay = calculateCustomerDisplayPrice(rawReg, catConfig).customerDisplayPrice;
+
+    const updatedVariants = (p.variants || []).map((v) => {
+      const vSale = Number(v.salePrice || v.price || 0);
+      const vReg = Number(v.price || v.salePrice || 0);
+      return {
+        ...v,
+        sellerBasePrice: vSale,
+        salePrice: calculateCustomerDisplayPrice(vSale, catConfig).customerDisplayPrice,
+        price: calculateCustomerDisplayPrice(vReg, catConfig).customerDisplayPrice,
+      };
+    });
+
+    return {
+      ...item,
+      productId: {
+        ...p,
+        sellerBasePrice: rawSale,
+        salePrice: saleDisplay,
+        price: regDisplay,
+        variants: updatedVariants,
+      },
+    };
+  });
+
   return cart;
 }
 
@@ -36,7 +80,7 @@ async function fetchPopulatedCart(cartId) {
     })
     .lean();
 
-  return sanitizeCartItems(cart);
+  return await sanitizeCartItems(cart);
 }
 
 /* ===============================
@@ -58,7 +102,7 @@ export const getCart = async (req, res) => {
       return handleResponse(res, 200, "Cart fetched successfully", newCart);
     }
 
-    return handleResponse(res, 200, "Cart fetched successfully", sanitizeCartItems(cart));
+    return handleResponse(res, 200, "Cart fetched successfully", await sanitizeCartItems(cart));
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

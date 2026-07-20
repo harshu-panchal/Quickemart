@@ -333,12 +333,12 @@ export default function HeroCategoriesPerPage() {
                   Add banner
                 </button>
               </div>
-              <div className="space-y-3 max-h-48 overflow-y-auto">
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                 {formBanners.map((item, idx) => (
                   <Card key={idx} className="p-3 bg-white border-slate-100">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start gap-3">
                           <div className="w-16 h-16 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                             {item.imageUrl ? (
                               <img
@@ -376,6 +376,73 @@ export default function HeroCategoriesPerPage() {
                               className="w-full p-2 bg-slate-50 rounded-xl text-xs font-bold border-none outline-none"
                               placeholder="Subtitle (optional)"
                             />
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                              <select
+                                value={item.linkType || "none"}
+                                onChange={(e) => updateBannerItem(idx, { linkType: e.target.value, linkValue: "" })}
+                                className="w-full p-2 bg-slate-50 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                              >
+                                <option value="none">No link</option>
+                                <option value="header">Header Category</option>
+                                <option value="category">Category</option>
+                                <option value="subcategory">Subcategory</option>
+                                <option value="product">Product (enter ID)</option>
+                                <option value="url">External URL</option>
+                              </select>
+
+                              {/* Smart picker based on linkType */}
+                              {(item.linkType === 'url' || item.linkType === 'product') ? (
+                                <input
+                                  value={item.linkValue || ''}
+                                  onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                  className="w-full p-2 bg-slate-50 rounded-xl text-xs font-bold border-none outline-none"
+                                  placeholder={item.linkType === 'url' ? 'https://...' : 'Product ID'}
+                                />
+                              ) : item.linkType === 'header' ? (
+                                <select
+                                  value={item.linkValue || ''}
+                                  onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                  className="w-full p-2 bg-slate-50 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                                >
+                                  <option value="">— Select header —</option>
+                                  {headers.map((h) => (
+                                    <option key={h._id} value={h._id}>{h.name}</option>
+                                  ))}
+                                </select>
+                              ) : item.linkType === 'category' ? (
+                                <select
+                                  value={item.linkValue || ''}
+                                  onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                  className="w-full p-2 bg-slate-50 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                                >
+                                  <option value="">— Select category —</option>
+                                  {headers.flatMap((h) =>
+                                    (h.children || []).map((cat) => (
+                                      <option key={cat._id} value={cat._id}>{h.name} → {cat.name}</option>
+                                    ))
+                                  )}
+                                </select>
+                              ) : item.linkType === 'subcategory' ? (
+                                <select
+                                  value={item.linkValue || ''}
+                                  onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                  className="w-full p-2 bg-slate-50 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                                >
+                                  <option value="">— Select subcategory —</option>
+                                  {headers.flatMap((h) =>
+                                    (h.children || []).flatMap((cat) =>
+                                      (cat.children || []).map((sub) => (
+                                        <option key={sub._id} value={sub._id}>{cat.name} → {sub.name}</option>
+                                      ))
+                                    )
+                                  )}
+                                </select>
+                              ) : (
+                                <div className="w-full p-2 bg-slate-100 rounded-xl text-[10px] text-slate-400 flex items-center">
+                                  Select a link type
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

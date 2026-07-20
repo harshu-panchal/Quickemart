@@ -27,6 +27,22 @@ export const adminCatalogApi = {
     updateProduct: (id, formData) =>
         axiosInstance.put(`/products/${id}`, formData),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
+    bulkImportCatalog: (formData) => 
+        axiosInstance.post('/admin/catalog/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        }),
+    downloadImportTemplate: () => 
+        axiosInstance.get('/admin/catalog/template', { responseType: 'blob' }),
+    getMasterProducts: (params) =>
+        axiosInstance.get('/admin/catalog', { params }),
+    createMasterProduct: (formData) =>
+        axiosInstance.post('/admin/catalog', formData),
+    updateMasterProduct: (id, formData) =>
+        axiosInstance.put(`/admin/catalog/${id}`, formData),
+    deleteMasterProduct: (id) =>
+        axiosInstance.delete(`/admin/catalog/${id}`),
+    getCatalogBrands: (params) =>
+        axiosInstance.get('/products/catalog/brands', { params }),
 };
 
 export default adminCatalogApi;

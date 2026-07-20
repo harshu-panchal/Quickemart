@@ -1,4 +1,10 @@
+import mongoose from "mongoose";
 import Product from "../models/product.js";
+import MasterProduct from "../models/masterProduct.js";
+import Category from "../models/category.js";
+import { syncUnlinkedSellerProductsToMasterCatalog } from "../controllers/adminCatalogController.js";
+import { calculateCustomerDisplayPrice } from "../services/finance/pricingService.js";
+import ExcelJS from "exceljs";
 import Order from "../models/order.js";
 import Review from "../models/review.js";
 import { handleResponse } from "../utils/helper.js";
@@ -367,7 +373,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -377,10 +383,67 @@ export const getProducts = async (req, res) => {
         Product.countDocuments(finalQuery),
       ]);
 
+      // Query Master Catalog products that have no seller offers listed in this area/query
+      let masterProducts = [];
+      try {
+        const masterQuery = { status: { $ne: 'deleted' } };
+        if (query.headerId) masterQuery.headerId = query.headerId;
+        if (query.categoryId) masterQuery.categoryId = query.categoryId;
+        if (query.subcategoryId) masterQuery.subcategoryId = query.subcategoryId;
+        if (query.name) masterQuery.name = query.name;
+        if (query.$text) masterQuery.$text = query.$text;
+
+        const existingMasterIds = new Set(
+          rawProducts.map((p) => (p.masterProductId ? String(p.masterProductId) : null)).filter(Boolean)
+        );
+        const existingSlugs = new Set(rawProducts.map(p => p.slug));
+        const existingNames = new Set(rawProducts.map(p => String(p.name || '').toLowerCase()));
+        
+        const allMaster = await MasterProduct.find(masterQuery).lean();
+        
+        masterProducts = allMaster
+          .filter(
+            (mp) =>
+              !existingMasterIds.has(String(mp._id)) &&
+              !existingSlugs.has(mp.slug) &&
+              !existingNames.has(String(mp.name || '').toLowerCase())
+          )
+          .map(mp => ({
+            _id: mp._id,
+            name: mp.name,
+            slug: mp.slug,
+            description: mp.description || '',
+            sku: mp.sku || '',
+            price: 0,
+            salePrice: 0,
+            stock: 0,
+            brand: mp.brand || '',
+            weight: mp.packSize || '',
+            mainImage: mp.mainImage || '',
+            galleryImages: mp.galleryImages || [],
+            headerId: mp.headerId,
+            categoryId: mp.categoryId,
+            subcategoryId: mp.subcategoryId,
+            sellerId: null,
+            status: 'active',
+            approvalStatus: 'approved',
+            isFeatured: false,
+            variants: (mp.variants || []).map(v => ({ ...v, price: 0, salePrice: 0, stock: 0 })),
+            createdAt: mp.createdAt,
+            isMasterProduct: true,
+            isOutOfStock: true
+          }));
+      } catch (err) {
+        logger.error("Failed to query master products for customer view", { error: err });
+      }
+
+      const combinedRaw = [...rawProducts, ...masterProducts];
+      const combinedTotal = total + masterProducts.length;
+
       // Collect unique category IDs (headerId, categoryId, subcategoryId) and seller IDs
       const categoryIdSet = new Set();
       const sellerIdSet = new Set();
-      for (const p of rawProducts) {
+      for (const p of combinedRaw) {
         if (p.headerId) categoryIdSet.add(String(p.headerId));
         if (p.categoryId) categoryIdSet.add(String(p.categoryId));
         if (p.subcategoryId) categoryIdSet.add(String(p.subcategoryId));
@@ -399,29 +462,66 @@ export const getProducts = async (req, res) => {
 
       const nameMap = Object.fromEntries([...categoryEntries, ...sellerEntries]);
 
-      // Enrich products to match the shape previously returned by .populate()
-      const products = rawProducts.map((p) => ({
-        ...p,
-        headerId: p.headerId
-          ? { _id: p.headerId, name: nameMap[String(p.headerId)] ?? null }
-          : null,
-        categoryId: p.categoryId
-          ? { _id: p.categoryId, name: nameMap[String(p.categoryId)] ?? null }
-          : null,
-        subcategoryId: p.subcategoryId
-          ? { _id: p.subcategoryId, name: nameMap[String(p.subcategoryId)] ?? null }
-          : null,
-        sellerId: p.sellerId
-          ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
-          : null,
-      }));
+      const categoryDocs = await Category.find({ _id: { $in: Array.from(categoryIdSet) } })
+        .select("_id name adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue")
+        .lean();
+      const categoryMap = new Map(categoryDocs.map(c => [String(c._id), c]));
+
+      const products = combinedRaw.map((p) => {
+        const enriched = {
+          ...p,
+          headerId: p.headerId
+            ? { _id: p.headerId, name: nameMap[String(p.headerId)] ?? null }
+            : null,
+          categoryId: p.categoryId
+            ? { _id: p.categoryId, name: nameMap[String(p.categoryId)] ?? null }
+            : null,
+          subcategoryId: p.subcategoryId
+            ? { _id: p.subcategoryId, name: nameMap[String(p.subcategoryId)] ?? null }
+            : null,
+          sellerId: p.sellerId
+            ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
+            : null,
+        };
+
+        const headerIdStr = String(p.headerId?._id || p.headerId || '');
+        const catIdStr = String(p.categoryId?._id || p.categoryId || '');
+        const catConfig = categoryMap.get(headerIdStr) || categoryMap.get(catIdStr) || null;
+
+        const rawSale = Number(p.salePrice || p.price || 0);
+        const rawReg = Number(p.price || p.salePrice || 0);
+
+        const saleDisplay = calculateCustomerDisplayPrice(rawSale, catConfig).customerDisplayPrice;
+        const regDisplay = calculateCustomerDisplayPrice(rawReg, catConfig).customerDisplayPrice;
+
+        const updatedVariants = (p.variants || []).map((v) => {
+          const vSale = Number(v.salePrice || v.price || 0);
+          const vReg = Number(v.price || v.salePrice || 0);
+          const vSaleDisplay = calculateCustomerDisplayPrice(vSale, catConfig).customerDisplayPrice;
+          const vRegDisplay = calculateCustomerDisplayPrice(vReg, catConfig).customerDisplayPrice;
+          return {
+            ...v,
+            sellerBasePrice: vSale,
+            salePrice: vSaleDisplay,
+            price: vRegDisplay,
+          };
+        });
+
+        return {
+          ...enriched,
+          sellerBasePrice: rawSale,
+          salePrice: saleDisplay,
+          price: regDisplay,
+          variants: updatedVariants,
+        };
+      });
 
       return {
         items: normalizeProductListModeration(products),
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
+        total: combinedTotal,
+        totalPages: Math.ceil(combinedTotal / limit) || 1,
       };
     };
 
@@ -453,9 +553,9 @@ export const getSellerProducts = async (req, res) => {
     const baseSellerQuery = { sellerId };
     const query = { ...baseSellerQuery };
     if (stockStatus === "in") {
-      query.stock = { $gt: 0 };
+      query.$or = [{ stock: { $gt: 0 } }, { "variants.stock": { $gt: 0 } }];
     } else if (stockStatus === "out") {
-      query.stock = 0;
+      query.stock = { $lte: 0 };
     }
 
     if (approvalStatus && String(approvalStatus).trim().toLowerCase() !== "all") {
@@ -490,7 +590,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -570,8 +670,63 @@ export const getSellerProducts = async (req, res) => {
       }),
     ]);
 
+    // Mark each product with listing metadata
+    const listedProducts = normalizeProductListModeration(products).map((p) => ({
+      ...p,
+      isListedBySeller: true,
+      isLegacyProduct: !p.masterProductId, // true = old seller-created, false = catalog-linked
+    }));
+
+    // Fetch all master catalog products and append ones the seller hasn't listed yet
+    const listedMasterIds = new Set(
+      products
+        .map((p) => (p.masterProductId ? String(p.masterProductId) : null))
+        .filter(Boolean)
+    );
+
+    let unlistedCatalogItems = [];
+    try {
+      const allMasterProducts = await MasterProduct.find({ status: "active" })
+        .populate("headerId categoryId subcategoryId", "name")
+        .lean();
+
+      unlistedCatalogItems = allMasterProducts
+        .filter((mp) => !listedMasterIds.has(String(mp._id)))
+        .map((mp) => ({
+          _id: mp._id,
+          masterProductId: mp._id,
+          name: mp.name,
+          brand: mp.brand || "",
+          mainImage: mp.mainImage || "",
+          galleryImages: mp.galleryImages || [],
+          headerId: mp.headerId,
+          categoryId: mp.categoryId,
+          subcategoryId: mp.subcategoryId,
+          variants: (mp.variants || []).map((v) => ({
+            name: v.name,
+            price: 0,
+            salePrice: 0,
+            stock: 0,
+            sku: v.sku || "",
+          })),
+          price: 0,
+          salePrice: 0,
+          stock: 0,
+          status: "active",
+          approvalStatus: "approved",
+          isListedBySeller: false,
+          isLegacyProduct: false,
+          isMasterCatalogItem: true,
+          createdAt: mp.createdAt,
+        }));
+    } catch (err) {
+      logger.error("Failed to fetch unlisted catalog items for seller", { error: err });
+    }
+
+    const mergedItems = [...listedProducts, ...unlistedCatalogItems];
+
     return handleResponse(res, 200, "Seller products fetched", {
-      items: normalizeProductListModeration(products),
+      items: mergedItems,
       page,
       limit,
       total,
@@ -592,9 +747,142 @@ export const getSellerProducts = async (req, res) => {
 };
 
 /* ===============================
+   CREATE SELLER LISTING
+   (Seller picks a master catalog product,
+    provides price + stock per variant)
+================================ */
+export const createSellerListing = async (req, res) => {
+  try {
+    const sellerId = req.user.id;
+    const { masterProductId, variants: variantsRaw, status } = req.body;
+
+    if (!masterProductId) {
+      return handleResponse(res, 400, "masterProductId is required");
+    }
+
+    // Load the master product for metadata
+    const master = await MasterProduct.findById(masterProductId).lean();
+    if (!master) {
+      return handleResponse(res, 404, "Master product not found");
+    }
+
+    // Parse variants if sent as string (FormData)
+    let variants = variantsRaw;
+    if (typeof variants === "string") {
+      try {
+        variants = JSON.parse(variants);
+      } catch {
+        variants = [];
+      }
+    }
+    if (!Array.isArray(variants) || variants.length === 0) {
+      return handleResponse(res, 400, "At least one variant with price and stock is required");
+    }
+
+    // Validate each variant has a price
+    for (let i = 0; i < variants.length; i++) {
+      const v = variants[i];
+      if (!v.price || Number(v.price) <= 0) {
+        return handleResponse(res, 400, `Variant "${v.name || i + 1}" must have a valid price`);
+      }
+      if (v.stock === undefined || v.stock === "" || Number(v.stock) < 0) {
+        return handleResponse(res, 400, `Variant "${v.name || i + 1}" must have a stock value`);
+      }
+    }
+
+    // Normalize variants: merge master metadata with seller's price/stock
+    const normalizedVariants = variants.map((v, idx) => ({
+      name: v.name || master.variants?.[idx]?.name || `Variant ${idx + 1}`,
+      price: Number(v.price),
+      salePrice: Number(v.salePrice || 0),
+      stock: Number(v.stock),
+      sku: v.sku || `${master.slug}-${(v.name || idx + 1).toString().toLowerCase().replace(/[^a-z0-9]/g, "")}`,
+    }));
+
+    // Auto-calculate root stock and price from variants
+    const totalStock = normalizedVariants.reduce((sum, v) => sum + v.stock, 0);
+    const rootStock = Math.max(Number(0), totalStock);
+    const rootPrice = normalizedVariants[0].price;
+    const rootSalePrice = normalizedVariants[0].salePrice || 0;
+
+    // Build unique slug for this seller listing
+    let baseSlug = `${master.slug}-${String(sellerId).slice(-6)}`;
+    let finalSlug = baseSlug;
+    let slugExists = await Product.exists({ slug: finalSlug });
+    let attempts = 0;
+    while (slugExists && attempts < 10) {
+      attempts++;
+      finalSlug = `${baseSlug}-${Math.random().toString(36).substring(2, 5)}`;
+      slugExists = await Product.exists({ slug: finalSlug });
+    }
+
+    // Build unique SKU for this listing
+    const rawSku = master.sku ? `${master.sku}-${String(sellerId).slice(-4)}` : makeProductSku(master.name, 1);
+    let finalSku = rawSku;
+    let skuExists = await Product.exists({ sku: finalSku });
+    attempts = 0;
+    while (skuExists && attempts < 10) {
+      attempts++;
+      finalSku = `${rawSku}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+      skuExists = await Product.exists({ sku: finalSku });
+    }
+
+    // Determine approval status
+    let moderationUpdate = {};
+    const approvalConfig = await getProductApprovalConfig();
+    if (approvalConfig.sellerCreateRequiresApproval) {
+      moderationUpdate = buildSellerPendingModerationUpdate();
+    } else {
+      moderationUpdate = buildSellerApprovedModerationUpdate();
+    }
+
+    // Create the product listing using master catalog metadata + seller's price/stock
+    const newProduct = await Product.create({
+      masterProductId: master._id,
+      sellerId,
+      name: master.name,
+      slug: finalSlug,
+      sku: finalSku,
+      description: master.description || "",
+      brand: master.brand || "App",
+      weight: master.packSize || master.unit || "",
+      mainImage: master.mainImage || "",
+      galleryImages: master.galleryImages || [],
+      galleryLabels: master.galleryLabels || [],
+      tags: master.searchTags || [],
+      headerId: master.headerId,
+      categoryId: master.categoryId,
+      subcategoryId: master.subcategoryId || undefined,
+      price: rootPrice,
+      salePrice: rootSalePrice,
+      stock: rootStock,
+      variants: normalizedVariants,
+      gstTax: master.gstTax || 0,
+      status: status || "active",
+      ...moderationUpdate,
+    });
+
+    // Invalidate cache
+    await invalidate(`cache:catalog:product:${master._id.toString()}`);
+    await invalidate("cache:catalog:productList:*");
+
+    const approvalStatus = newProduct.approvalStatus;
+    const message = approvalStatus === "pending"
+      ? "Product submitted for admin approval"
+      : "Product listed successfully";
+
+    return handleResponse(res, 201, message, normalizeProductDocumentModeration(newProduct.toObject()));
+  } catch (error) {
+    logger.error("createSellerListing error", { error });
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
    CREATE PRODUCT
 ================================ */
 export const createProduct = async (req, res) => {
+
   try {
     const role = String(req.user?.role || "").toLowerCase();
     const productData = { ...req.body };
@@ -669,22 +957,38 @@ export const createProduct = async (req, res) => {
       return handleResponse(res, 400, "Product name is required");
     }
 
-    // Auto-generate slug
-    if (!productData.slug || productData.slug.trim() === "") {
-      productData.slug = slugify(productData.name);
-    } else {
-      productData.slug = slugify(productData.slug);
+    // Auto-generate & ensure unique slug
+    let rawSlug = productData.slug && productData.slug.trim() !== "" 
+      ? slugify(productData.slug) 
+      : slugify(productData.name);
+    let finalSlug = rawSlug;
+    let slugExists = await Product.exists({ slug: finalSlug });
+    let attempts = 0;
+    while (slugExists && attempts < 10) {
+      attempts++;
+      finalSlug = `${rawSlug}-${Math.random().toString(36).substring(2, 6)}`;
+      slugExists = await Product.exists({ slug: finalSlug });
     }
+    productData.slug = finalSlug;
 
     productData.description =
       typeof productData.description === "string"
         ? productData.description.trim()
         : productData.description || "";
 
-    // Auto-generate product SKU if missing
-    if (!productData.sku || String(productData.sku).trim() === "") {
-      productData.sku = makeProductSku(productData.name, 1);
+    // Auto-generate & ensure unique product SKU
+    let rawSku = productData.sku && String(productData.sku).trim() !== ""
+      ? String(productData.sku).trim()
+      : makeProductSku(productData.name, 1);
+    let finalSku = rawSku;
+    let skuExists = await Product.exists({ sku: finalSku });
+    attempts = 0;
+    while (skuExists && attempts < 10) {
+      attempts++;
+      finalSku = `${rawSku}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      skuExists = await Product.exists({ sku: finalSku });
     }
+    productData.sku = finalSku;
 
     applyMediaFields(productData);
 
@@ -702,14 +1006,30 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    if (Array.isArray(productData.variants)) {
+    if (Array.isArray(productData.variants) && productData.variants.length > 0) {
       productData.variants = productData.variants.map((variant, idx) => ({
         ...variant,
+        price: Number(variant.price || 0),
+        salePrice: Number(variant.salePrice || 0),
+        stock: Number(variant.stock || 0),
         sku:
           variant?.sku && String(variant.sku).trim()
             ? variant.sku
             : makeProductSku(productData.name, idx + 1),
       }));
+
+      const totalVariantStock = productData.variants.reduce((sum, v) => sum + Number(v.stock || 0), 0);
+      productData.stock = Math.max(Number(productData.stock || 0), totalVariantStock);
+
+      const firstVariant = productData.variants[0];
+      if ((!productData.price || Number(productData.price) <= 0) && firstVariant?.price > 0) {
+        productData.price = firstVariant.price;
+        productData.salePrice = firstVariant.salePrice || 0;
+      }
+    }
+
+    if (productData.gstTax !== undefined) {
+      productData.gstTax = Math.max(0, Math.min(28, Number(productData.gstTax) || 0));
     }
 
     let moderationUpdate = {};
@@ -751,9 +1071,13 @@ export const createProduct = async (req, res) => {
       // Enqueue search indexing asynchronously
       await enqueueProductIndex(product._id.toString());
       await invalidate(`cache:catalog:product:${product._id.toString()}`);
+      if (product.masterProductId) {
+        await invalidate(`cache:catalog:product:${product.masterProductId.toString()}`);
+      }
     }
 
     try {
+      await invalidate("cache:catalog:productList:*");
       await invalidate(buildKey("catalog", "productList", "*"));
       await invalidate("cache:offersections:public:*");
     } catch (cacheErr) {
@@ -857,12 +1181,60 @@ export const updateProduct = async (req, res) => {
       return handleResponse(res, 404, "Product not found or unauthorized");
     }
 
-    if (productData.name) {
-      if (!productData.slug || productData.slug.trim() === "") {
-        productData.slug = slugify(productData.name);
+    const existingSlug = product.slug;
+    const existingSku = product.sku;
+
+    // Handle slug update safely without collision
+    if (productData.slug && String(productData.slug).trim() !== "") {
+      const candidateBase = slugify(productData.slug);
+      if (candidateBase !== existingSlug) {
+        let uniqueSlug = candidateBase;
+        let counter = 1;
+        while (await Product.exists({ slug: uniqueSlug, _id: { $ne: id } })) {
+          uniqueSlug = `${candidateBase}-${counter}`;
+          counter++;
+        }
+        productData.slug = uniqueSlug;
       } else {
-        productData.slug = slugify(productData.slug);
+        delete productData.slug;
       }
+    } else if (productData.name && productData.name !== product.name) {
+      const candidateBase = slugify(productData.name);
+      if (candidateBase !== existingSlug) {
+        let uniqueSlug = candidateBase;
+        let counter = 1;
+        while (await Product.exists({ slug: uniqueSlug, _id: { $ne: id } })) {
+          uniqueSlug = `${candidateBase}-${counter}`;
+          counter++;
+        }
+        productData.slug = uniqueSlug;
+      } else {
+        delete productData.slug;
+      }
+    } else {
+      delete productData.slug;
+    }
+
+    // Handle SKU update safely without collision
+    if (productData.sku && String(productData.sku).trim() !== "") {
+      const candidateSku = String(productData.sku).trim();
+      if (candidateSku !== existingSku) {
+        let uniqueSku = candidateSku;
+        let counter = 1;
+        while (await Product.exists({ sku: uniqueSku, _id: { $ne: id } })) {
+          uniqueSku = `${candidateSku}-${counter}`;
+          counter++;
+        }
+        productData.sku = uniqueSku;
+      } else {
+        delete productData.sku;
+      }
+    } else {
+      delete productData.sku;
+    }
+
+    if (productData.gstTax !== undefined) {
+      productData.gstTax = Math.max(0, Math.min(28, Number(productData.gstTax) || 0));
     }
 
     if (productData.description !== undefined) {
@@ -870,11 +1242,6 @@ export const updateProduct = async (req, res) => {
         typeof productData.description === "string"
           ? productData.description.trim()
           : productData.description || "";
-    }
-
-    const skuBaseName = productData.name || product.name;
-    if (!productData.sku || String(productData.sku).trim() === "") {
-      productData.sku = product.sku || makeProductSku(skuBaseName, 1);
     }
 
     applyMediaFields(productData);
@@ -887,18 +1254,36 @@ export const updateProduct = async (req, res) => {
       try {
         productData.variants = JSON.parse(productData.variants);
       } catch (e) {
-        // keep existing if invalid?
+        // keep existing if invalid
       }
     }
 
-    if (Array.isArray(productData.variants)) {
-      productData.variants = productData.variants.map((variant, idx) => ({
-        ...variant,
-        sku:
-          variant?.sku && String(variant.sku).trim()
-            ? variant.sku
-            : makeProductSku(skuBaseName, idx + 1),
-      }));
+    if (Array.isArray(productData.variants) && productData.variants.length > 0) {
+      const existingVariants = product.variants || [];
+      const skuBaseName = productData.name || product.name || 'item';
+
+      productData.variants = productData.variants.map((variant, idx) => {
+        const vSku = variant?.sku && String(variant.sku).trim()
+          ? String(variant.sku).trim()
+          : (existingVariants[idx]?.sku || `${existingSku || 'SKU'}-V${idx + 1}`);
+
+        return {
+          ...variant,
+          price: Number(variant.price || 0),
+          salePrice: Number(variant.salePrice || 0),
+          stock: Number(variant.stock || 0),
+          sku: vSku,
+        };
+      });
+
+      const totalVariantStock = productData.variants.reduce((sum, v) => sum + Number(v.stock || 0), 0);
+      productData.stock = Math.max(Number(productData.stock || 0), totalVariantStock);
+
+      const firstVariant = productData.variants[0];
+      if ((!productData.price || Number(productData.price) <= 0) && firstVariant?.price > 0) {
+        productData.price = firstVariant.price;
+        productData.salePrice = firstVariant.salePrice || 0;
+      }
     }
 
     let moderationUpdate = {};
@@ -943,8 +1328,12 @@ export const updateProduct = async (req, res) => {
     // Enqueue search indexing asynchronously
     await enqueueProductIndex(id);
     await invalidate(`cache:catalog:product:${id}`);
+    if (updatedProduct && updatedProduct.masterProductId) {
+      await invalidate(`cache:catalog:product:${updatedProduct.masterProductId.toString()}`);
+    }
 
     try {
+      await invalidate("cache:catalog:productList:*");
       await invalidate(buildKey("catalog", "productList", "*"));
       await invalidate("cache:offersections:public:*");
     } catch (cacheErr) {
@@ -1023,7 +1412,7 @@ export const deleteProduct = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    const enforceRadius = isCustomerVisibilityRequest(req);
+    const enforceRadius = isCustomerVisibilityRequest(req) && (process.env.NODE_ENV === "production" || req.query.enforceRadius === "true");
 
     let nearbySellerSet = null;
     const coords = parseCustomerCoordinates(req.query || {});
@@ -1042,24 +1431,82 @@ export const getProductById = async (req, res) => {
       nearbySellerSet = new Set(nearbySellerIds.map(String));
     }
 
-    const cacheKey = buildKey("catalog", "product", id);
-    const product = await getOrSet(
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const query = isObjectId
+      ? { $or: [{ _id: id }, { masterProductId: id }], status: "active" }
+      : { slug: id.toLowerCase(), status: "active" };
+
+    const cacheKey = buildKey("catalog", "product", isObjectId ? id : `slug-${id.toLowerCase()}`);
+    let product = await getOrSet(
       cacheKey,
       async () =>
-        Product.findById(id)
+        Product.findOne(query)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
           .populate("subcategoryId", "name")
           .populate("sellerId", "shopName")
+          .sort({ price: 1 })
           .lean(),
       getTTL("product"),
     );
 
     if (!product) {
-      return handleResponse(res, 404, "Product not found");
+      const masterQuery = isObjectId ? { _id: id } : { slug: id.toLowerCase() };
+      const masterProduct = await MasterProduct.findOne(masterQuery)
+        .populate("headerId", "name")
+        .populate("categoryId", "name")
+        .populate("subcategoryId", "name")
+        .lean();
+
+      if (masterProduct) {
+        // Check if any seller listed stock/price for this master product
+        const sellerOffer = await Product.findOne({ masterProductId: masterProduct._id, status: "active" })
+          .select(
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
+          )
+          .populate("headerId", "name")
+          .populate("categoryId", "name")
+          .populate("subcategoryId", "name")
+          .populate("sellerId", "shopName")
+          .sort({ price: 1 })
+          .lean();
+
+        if (sellerOffer) {
+          product = sellerOffer;
+        } else {
+          const payload = normalizeProductDocumentModeration({
+            _id: masterProduct._id,
+            name: masterProduct.name,
+            slug: masterProduct.slug,
+            description: masterProduct.description || '',
+            sku: masterProduct.sku || '',
+            price: 0,
+            salePrice: 0,
+            stock: 0,
+            brand: masterProduct.brand || '',
+            weight: masterProduct.packSize || '',
+            mainImage: masterProduct.mainImage || '',
+            galleryImages: masterProduct.galleryImages || [],
+            headerId: masterProduct.headerId,
+            categoryId: masterProduct.categoryId,
+            subcategoryId: masterProduct.subcategoryId,
+            sellerId: null,
+            status: 'active',
+            approvalStatus: 'approved',
+            isFeatured: false,
+            variants: (masterProduct.variants || []).map(v => ({ ...v, price: 0, salePrice: 0, stock: 0 })),
+            createdAt: masterProduct.createdAt,
+            isMasterProduct: true,
+            isOutOfStock: true
+          });
+          return handleResponse(res, 200, "Product details fetched successfully", payload);
+        }
+      } else {
+        return handleResponse(res, 404, "Product not found");
+      }
     }
 
     if (enforceRadius) {
@@ -1469,7 +1916,16 @@ export const bulkImportProducts = async (req, res) => {
           }
         }
 
-        // Find subCategory under category (optional)
+        // Check if subcategories exist under this category
+        const subcategoriesUnderCategory = activeCategories.filter(
+          (c) => c.type === "subcategory" && String(c.parentId) === String(category._id)
+        );
+
+        if (subcategoriesUnderCategory.length > 0 && (!pData.subCategory || !String(pData.subCategory).trim())) {
+          throw new Error(`Row ${rowNum}: Sub Category is required for Main Category "${category.name}"`);
+        }
+
+        // Find subCategory under category
         let subcategory = null;
         if (pData.subCategory && String(pData.subCategory).trim()) {
           subcategory = activeCategories.find(
@@ -1613,5 +2069,277 @@ export const bulkImportProducts = async (req, res) => {
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+export const getCatalogBrands = async (req, res) => {
+  try {
+    const { headerId, categoryId, subcategoryId } = req.query;
+    const query = { status: { $ne: 'deleted' } };
+
+    const conditions = [];
+    if (subcategoryId) conditions.push({ subcategoryId }, { categoryId: subcategoryId }, { headerId: subcategoryId });
+    if (categoryId) conditions.push({ categoryId }, { headerId: categoryId });
+    if (headerId) conditions.push({ headerId });
+
+    if (conditions.length > 0) {
+      query.$or = conditions;
+    }
+
+    const rawBrands = await MasterProduct.distinct("brand", query);
+    const brands = (rawBrands || [])
+      .filter((b) => b && typeof b === 'string' && b.trim() !== '')
+      .map((b) => b.trim())
+      .filter((val, idx, self) => self.findIndex((t) => t.toLowerCase() === val.toLowerCase()) === idx)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    return res.status(200).json({ success: true, results: brands });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getCatalogProducts = async (req, res) => {
+  try {
+    await syncUnlinkedSellerProductsToMasterCatalog();
+    const { headerId, categoryId, subcategoryId, brand } = req.query;
+    const query = { status: { $ne: 'deleted' } };
+
+    const conditions = [];
+    if (subcategoryId) conditions.push({ subcategoryId }, { categoryId: subcategoryId }, { headerId: subcategoryId });
+    if (categoryId) conditions.push({ categoryId }, { headerId: categoryId });
+    if (headerId) conditions.push({ headerId });
+
+    if (conditions.length > 0) {
+      query.$or = conditions;
+    }
+
+    if (brand) query.brand = new RegExp("^" + String(brand).trim() + "$", "i");
+
+    const products = await MasterProduct.find(query).populate('headerId categoryId subcategoryId', 'name');
+    return res.status(200).json({ success: true, results: products });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const generateBulkTemplate = async (req, res) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+
+    // 1. Fetch live DB Categories
+    const categories = await Category.find({ type: "header" })
+      .select("name type children")
+      .populate({
+        path: "children",
+        select: "name type children",
+        populate: {
+          path: "children",
+          select: "name type"
+        }
+      })
+      .sort({ name: 1 })
+      .lean();
+
+    // 2. Fetch live Master Products & Brands
+    const masterProducts = await MasterProduct.find({ status: { $ne: "deleted" } })
+      .select("name brand variants")
+      .lean();
+
+    const distinctBrands = [...new Set(masterProducts.map(p => p.brand).filter(Boolean))];
+    const brandList = distinctBrands.length > 0 ? distinctBrands : ['Generic'];
+
+    const productTitles = [...new Set(masterProducts.map(p => p.name).filter(Boolean))];
+    const titleList = productTitles.length > 0 ? productTitles : ['Sample Product'];
+
+    // Collect all variants across master products
+    const allVariants = new Set(['Default']);
+    masterProducts.forEach(mp => {
+      if (Array.isArray(mp.variants)) {
+        mp.variants.forEach(v => {
+          if (v.name) allVariants.add(v.name);
+        });
+      }
+    });
+    const variantList = [...allVariants];
+
+    // Helper for excel named range identifier
+    const getExcelName = (name, index) => "_" + String(name).replace(/[^a-zA-Z0-9]/g, "") + "_" + index;
+
+    // 3. Create Lists Sheet (very hidden)
+    const listSheet = workbook.addWorksheet('Lists', { state: 'veryHidden' });
+    listSheet.getCell('A1').value = 'Parent Name';
+    listSheet.getCell('B1').value = 'Named Range';
+    let mappingRowIndex = 2;
+    let listColIndex = 8; // start from Column H for category mapping lists
+
+    const addListAndMapping = (parentName, items, indexCounter) => {
+      if (!items || items.length === 0) return;
+      const rangeName = getExcelName(parentName, indexCounter);
+      listSheet.getColumn(listColIndex).values = [parentName, ...items.map(i => i.name)];
+      const colLetter = listSheet.getColumn(listColIndex).letter;
+      
+      workbook.definedNames.add(`Lists!$${colLetter}$2:$${colLetter}$${items.length + 1}`, rangeName);
+
+      listSheet.getCell(`A${mappingRowIndex}`).value = parentName;
+      listSheet.getCell(`B${mappingRowIndex}`).value = rangeName;
+      mappingRowIndex++;
+      listColIndex++;
+    };
+
+    // Main Categories (Header Categories) in Col C (3)
+    const catList = categories.length > 0 ? categories : [{ name: 'Electronics', children: [] }];
+    listSheet.getColumn(3).values = ['Main Categories', ...catList.map(c => c.name)];
+    const mainColLetter = listSheet.getColumn(3).letter;
+    const catEndRow = Math.max(2, catList.length + 1);
+    workbook.definedNames.add(`Lists!$${mainColLetter}$2:$${mainColLetter}$${catEndRow}`, 'MainCategories');
+
+    // CategoryMap for VLOOKUP
+    workbook.definedNames.add('Lists!$A$2:$B$1000', 'CategoryMap');
+
+    // Admin Brands in Col D (4)
+    listSheet.getColumn(4).values = ['Admin Brands', ...brandList];
+    const brandEndRow = Math.max(2, brandList.length + 1);
+    workbook.definedNames.add(`Lists!$D$2:$D$${brandEndRow}`, 'AdminBrands');
+
+    // Master Product Titles in Col E (5)
+    listSheet.getColumn(5).values = ['Master Products', ...titleList];
+    const titleEndRow = Math.max(2, titleList.length + 1);
+    workbook.definedNames.add(`Lists!$E$2:$E$${titleEndRow}`, 'MasterProducts');
+
+    // Admin Variants in Col F (6)
+    listSheet.getColumn(6).values = ['Admin Variants', ...variantList];
+    const variantEndRow = Math.max(2, variantList.length + 1);
+    workbook.definedNames.add(`Lists!$F$2:$F$${variantEndRow}`, 'AdminVariants');
+
+    // Build Dependent Category Lists
+    let indexCounter = 1;
+    catList.forEach(mainCat => {
+      addListAndMapping(mainCat.name, mainCat.children, indexCounter++);
+      if (mainCat.children) {
+        mainCat.children.forEach(subCat => {
+          addListAndMapping(subCat.name, subCat.children, indexCounter++);
+        });
+      }
+    });
+
+    // 4. Products Sheet
+    const sheet = workbook.addWorksheet('Products');
+    await sheet.protect('quickemart123', {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertColumns: false,
+      insertRows: false,
+      deleteColumns: false,
+      deleteRows: false,
+    });
+
+    // Row 1: Instructions (LOCKED)
+    sheet.mergeCells('A1:J1');
+    const instCell = sheet.getCell('A1');
+    instCell.value = 'INSTRUCTIONS & RULES: 1. Columns with * are required. 2. Sub Category is required if available for selected Main Category. 3. Row 3 is a sample row (Read-Only reference). Data entry starts from Row 4.';
+    instCell.font = { italic: true, color: { argb: 'FF555555' } };
+    instCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+    instCell.protection = { locked: true };
+
+    // Row 2: Headers (LOCKED)
+    const headers = [
+      'Header Category *', 'Main Category *', 'Sub Category', 'Brand Name',
+      'Product Title *', 'Variant Name *', 'Pack Size / Unit', 'Price *', 'Sale Price', 'Stock *'
+    ];
+    sheet.addRow(headers);
+    const headerRow = sheet.getRow(2);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+    headerRow.eachCell(cell => { cell.protection = { locked: true }; });
+
+    // Row 3: Sample Row (LOCKED & READ-ONLY REFERENCE)
+    const sampleRowValues = [
+      catList[0]?.name || 'Electronics',
+      catList[0]?.children?.[0]?.name || 'Laptops',
+      catList[0]?.children?.[0]?.children?.[0]?.name || '',
+      brandList[0] || 'Generic',
+      titleList[0] || 'Sample Product',
+      variantList[0] || 'Default',
+      '1 unit',
+      500,
+      450,
+      10
+    ];
+    sheet.addRow(sampleRowValues);
+    const sampleRow = sheet.getRow(3);
+    sampleRow.font = { italic: true, color: { argb: 'FF555555' } };
+    sampleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F9F9' } };
+    sampleRow.eachCell(cell => { cell.protection = { locked: true }; });
+
+    // Adjust column widths
+    sheet.columns.forEach((col, i) => {
+      col.width = headers[i].length < 18 ? 18 : 25;
+      if (headers[i].includes('Price') || headers[i].includes('Stock')) {
+        col.numFmt = '#,##0.00';
+      }
+    });
+
+    // Rows 4 to 102: Seller Data Entry Rows (UNLOCKED + DATA VALIDATION)
+    for (let i = 4; i <= 102; i++) {
+      const row = sheet.getRow(i);
+      for (let col = 1; col <= headers.length; col++) {
+        row.getCell(col).protection = { locked: false };
+      }
+
+      // Col A (Header Category)
+      sheet.getCell(`A${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['MainCategories']
+      };
+
+      // Col B (Main Category)
+      sheet.getCell(`B${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`INDIRECT(VLOOKUP($A${i}, CategoryMap, 2, FALSE))`]
+      };
+
+      // Col C (Sub Category)
+      sheet.getCell(`C${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`INDIRECT(VLOOKUP($B${i}, CategoryMap, 2, FALSE))`]
+      };
+
+      // Col D (Brand Name)
+      sheet.getCell(`D${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['AdminBrands']
+      };
+
+      // Col E (Product Title *)
+      sheet.getCell(`E${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['MasterProducts']
+      };
+
+      // Col F (Variant Name *)
+      sheet.getCell(`F${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['AdminVariants']
+      };
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Product_Bulk_Upload_Template.xlsx"');
+
+    await workbook.xlsx.write(res);
+    return res.end();
+  } catch (error) {
+    console.error("Bulk template generation error:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -31,11 +31,14 @@ import {
     getCashSettlementHistory,
     getUsers,
     getUserById,
+    createCustomerByAdmin,
     getSellers,
     getSellerLocations,
     getPlatformSettings,
     updatePlatformSettings
 } from "../controller/adminController.js";
+import { adminCreateSeller } from "../controller/admin/sellerApplicationsController.js";
+import multer from "multer";
 import {
     exportAdminFinanceStatementController,
     getAdminFinanceLedgerController,
@@ -146,6 +149,7 @@ router.put(
     updatePlatformSettings
 );
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
+router.post("/users", verifyToken, allowRoles("admin"), createCustomerByAdmin);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);
 router.get("/sellers", verifyToken, allowRoles("admin"), getSellers);
 router.get("/sellers/locations", verifyToken, allowRoles("admin"), getSellerLocations);
@@ -153,6 +157,10 @@ router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers
 router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSellers);
 router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);
 router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSellerApplication);
+
+// Admin direct seller creation (bypasses OTP/approval flow)
+const adminUpload = multer({ storage: multer.memoryStorage() });
+router.post("/sellers/create", verifyToken, allowRoles("admin"), adminUpload.any(), adminCreateSeller);
 
 router.get(
     "/delivery-partners",

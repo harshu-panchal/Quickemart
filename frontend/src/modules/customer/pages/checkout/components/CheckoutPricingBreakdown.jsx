@@ -29,10 +29,18 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
   selectedCoupon,
   discountAmount,
 }) {
-  const deliveryFee = pricingPreview?.deliveryFeeCharged || 0;
+  const deliveryFee = (pricingPreview?.deliveryFeeCharged !== undefined && pricingPreview?.deliveryFeeCharged > 0)
+    ? pricingPreview.deliveryFeeCharged
+    : 30;
   const handlingFee = pricingPreview?.handlingFeeCharged || 0;
   const tipAmount = pricingPreview?.tipTotal || selectedTip || 0;
-  const taxAmount = pricingPreview?.taxTotal || 0;
+  const taxAmount = (pricingPreview?.taxTotal !== undefined && pricingPreview?.taxTotal > 0)
+    ? pricingPreview.taxTotal
+    : (Math.round((cartTotal * 0.05) * 100) / 100);
+
+  const displayTotalPayable = (pricingPreview?.grandTotal !== undefined && pricingPreview?.grandTotal > 0)
+    ? Math.max(0, pricingPreview.grandTotal - walletAmountToUse)
+    : Math.max(0, cartTotal + deliveryFee + taxAmount + tipAmount - discountAmount - walletAmountToUse);
 
   return (
     <>
@@ -104,12 +112,6 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
             )}
           <div className="flex justify-between items-center px-2">
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              Handling Fee
-            </span>
-            <span className="font-black text-slate-800">₹{handlingFee}</span>
-          </div>
-          <div className="flex justify-between items-center px-2">
-            <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
               Tax
             </span>
             <span className="font-black text-slate-800">₹{taxAmount}</span>
@@ -155,14 +157,14 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
             <div className="flex justify-between items-center">
               <div className="flex flex-col">
                 <span className="font-[1000] text-slate-800 text-lg uppercase tracking-tight">
-                  {finalAmountToPay === 0 ? "Fully Covered" : "Total Payable"}
+                  {displayTotalPayable === 0 ? "Fully Covered" : "Total Payable"}
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">
-                  {finalAmountToPay === 0 ? "Paid via Wallet" : "Safe & Secure Payment"}
+                  {displayTotalPayable === 0 ? "Paid via Wallet" : "Safe & Secure Payment"}
                 </span>
               </div>
               <span className="font-[1000] text-primary text-3xl tracking-tighter italic">
-                {isPreviewLoading ? "Calculating..." : `₹${Math.ceil(finalAmountToPay)}`}
+                {isPreviewLoading ? "Calculating..." : `₹${Math.ceil(displayTotalPayable)}`}
               </span>
             </div>
           </div>

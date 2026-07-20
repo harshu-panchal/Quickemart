@@ -249,61 +249,95 @@ const ProductDetailPage = () => {
                             {product.name}
                         </h1>
 
-                        <div className="flex items-baseline gap-4 mb-5">
-                            <span className="text-4xl font-black text-primary">₹{product.salePrice || product.price}</span>
-                            {(product.salePrice && product.salePrice < product.price) && (
-                                <span className="text-lg text-slate-400 line-through font-bold">₹{product.price}</span>
-                            )}
-                            {product.salePrice && product.salePrice < product.price && (
-                                <span className="text-xs bg-red-50 text-red-500 px-2 py-1 rounded-lg font-black uppercase">
-                                    {Math.round(((product.price - product.salePrice) / product.price) * 100)}% OFF
-                                </span>
-                            )}
-                        </div>
+                        {(() => {
+                            const priceVal = Number(product.salePrice || product.price || 0);
+                            const stockVal = Number(product.stock || 0);
+                            const totalVariantStock = Array.isArray(product?.variants) && product.variants.length > 0
+                              ? product.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)
+                              : stockVal;
+                            const effectiveStock = Math.max(stockVal, totalVariantStock);
+                            const isItemOutOfStock = product.isOutOfStock || effectiveStock <= 0 || priceVal <= 0;
+
+                            return (
+                                <div className="flex items-baseline gap-4 mb-5">
+                                    {isItemOutOfStock ? (
+                                        <span className="text-2xl md:text-3xl font-extrabold text-rose-500 bg-rose-50 px-4 py-1.5 rounded-2xl border border-rose-100 uppercase tracking-wide">
+                                            Out of Stock
+                                        </span>
+                                    ) : (
+                                        <>
+                                            <span className="text-4xl font-black text-primary">₹{product.salePrice || product.price}</span>
+                                            {(product.salePrice && product.salePrice < product.price) && (
+                                                <span className="text-lg text-slate-400 line-through font-bold">₹{product.price}</span>
+                                            )}
+                                            {product.salePrice && product.salePrice < product.price && (
+                                                <span className="text-xs bg-red-50 text-red-500 px-2 py-1 rounded-lg font-black uppercase">
+                                                    {Math.round(((product.price - product.salePrice) / product.price) * 100)}% OFF
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         <p className="text-slate-600 text-lg leading-relaxed mb-6 font-medium max-w-2xl">
                             {product.description || "Fresh and premium quality product sourced directly from local vendors."}
                         </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-6 p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100">
-                        {quantity > 0 ? (
-                            <div className="flex items-center bg-primary text-primary-foreground rounded-2xl h-16 w-full sm:w-auto px-2 shadow-xl shadow-brand-100">
-                                <button
-                                    onClick={() => updateQuantity(product.id, -1, "")}
-                                    className="w-12 h-12 flex items-center justify-center hover:bg-white/20 rounded-xl transition-all"
-                                >
-                                    <Minus size={24} strokeWidth={3} />
-                                </button>
-                                <span className="w-16 text-center font-black text-xl">{quantity}</span>
-                                <button
-                                    onClick={() => updateQuantity(product.id, 1, "")}
-                                    className="w-12 h-12 flex items-center justify-center hover:bg-white/20 rounded-xl transition-all"
-                                >
-                                    <Plus size={24} strokeWidth={3} />
-                                </button>
-                            </div>
-                        ) : (
-                            <Button
-                                onClick={() => {
-                                    addToCart(product);
-                                    showToast(`${product.name} added to cart`, 'success');
-                                }}
-                                className="h-16 w-full sm:w-64 bg-primary hover:bg-[var(--brand-400)] text-white text-lg font-black rounded-2xl shadow-xl transition-all hover:-translate-y-1"
-                            >
-                                <Plus className="mr-2" size={24} strokeWidth={3} /> ADD TO CART
-                            </Button>
-                        )}
+                    {(() => {
+                        const priceVal = Number(product.salePrice || product.price || 0);
+                        const stockVal = Number(product.stock || 0);
+                        const totalVariantStock = Array.isArray(product?.variants) && product.variants.length > 0
+                          ? product.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)
+                          : stockVal;
+                        const effectiveStock = Math.max(stockVal, totalVariantStock);
+                        const isItemOutOfStock = product.isOutOfStock || effectiveStock <= 0 || priceVal <= 0;
 
-                        <div className="flex flex-col gap-1 text-center sm:text-left">
-                            <span className="text-xs font-black text-primary uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1">
-                                <ShieldCheck size={14} /> Quality Guaranteed
-                            </span>
-                            <span className="text-sm font-bold text-slate-400 flex items-center justify-center sm:justify-start gap-1">
-                                <Clock size={14} /> Delivered in 10-15 mins
-                            </span>
-                        </div>
-                    </div>
+                        if (isItemOutOfStock) return null;
+
+                        return (
+                            <div className="flex flex-col sm:flex-row items-center gap-6 p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100">
+                                {quantity > 0 ? (
+                                    <div className="flex items-center bg-primary text-primary-foreground rounded-2xl h-16 w-full sm:w-auto px-2 shadow-xl shadow-brand-100">
+                                        <button
+                                            onClick={() => updateQuantity(product.id, -1, "")}
+                                            className="w-12 h-12 flex items-center justify-center hover:bg-white/20 rounded-xl transition-all"
+                                        >
+                                            <Minus size={24} strokeWidth={3} />
+                                        </button>
+                                        <span className="w-16 text-center font-black text-xl">{quantity}</span>
+                                        <button
+                                            onClick={() => updateQuantity(product.id, 1, "")}
+                                            className="w-12 h-12 flex items-center justify-center hover:bg-white/20 rounded-xl transition-all"
+                                        >
+                                            <Plus size={24} strokeWidth={3} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        onClick={() => {
+                                            addToCart(product);
+                                            showToast(`${product.name} added to cart`, 'success');
+                                        }}
+                                        className="h-16 w-full sm:w-64 bg-primary hover:bg-[var(--brand-400)] text-white text-lg font-black rounded-2xl shadow-xl transition-all hover:-translate-y-1"
+                                    >
+                                        <Plus className="mr-2" size={24} strokeWidth={3} /> ADD TO CART
+                                    </Button>
+                                )}
+
+                                <div className="flex flex-col gap-1 text-center sm:text-left">
+                                    <span className="text-xs font-black text-primary uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1">
+                                        <ShieldCheck size={14} /> Quality Guaranteed
+                                    </span>
+                                    <span className="text-sm font-bold text-slate-400 flex items-center justify-center sm:justify-start gap-1">
+                                        <Clock size={14} /> Delivered in 10-15 mins
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     <div className="grid grid-cols-3 gap-4">
                         <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
@@ -312,7 +346,9 @@ const ProductDetailPage = () => {
                         </div>
                         <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Stock</p>
-                            <p className="text-sm font-black text-slate-800">{product.stock > 0 ? 'In Stock' : 'Out of Stock'}</p>
+                            <p className="text-sm font-black text-slate-800">
+                              {((Number(product.stock || 0) > 0) || (Array.isArray(product?.variants) && product.variants.some(v => Number(v.stock || 0) > 0))) ? 'In Stock' : 'Out of Stock'}
+                            </p>
                         </div>
                         <div className="bg-white p-4 rounded-2xl border border-slate-100 text-center shadow-sm">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Brand</p>

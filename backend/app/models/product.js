@@ -64,6 +64,11 @@ const productSchema = new mongoose.Schema(
             type: String,
             trim: true,
         }],
+        masterProductId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "MasterProduct",
+            default: null, // Allow null for existing products during transition
+        },
         headerId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",
@@ -126,6 +131,12 @@ const productSchema = new mongoose.Schema(
                 sku: String,
             }
         ],
+        gstTax: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 28,
+        },
         isFeatured: {
             type: Boolean,
             default: false,

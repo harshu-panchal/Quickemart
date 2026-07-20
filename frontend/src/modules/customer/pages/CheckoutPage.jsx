@@ -276,7 +276,8 @@ const CheckoutPage = () => {
     }
   }, [useWallet, user?.walletBalance, pricingPreview?.grandTotal]);
 
-  const finalAmountToPay = Math.max(0, (pricingPreview?.grandTotal || 0) - walletAmountToUse);
+  const fallbackGrandTotal = cartTotal + (pricingPreview?.deliveryFeeCharged || 30) + (pricingPreview?.taxTotal || Math.round(cartTotal * 0.05 * 100) / 100) + (selectedTip || 0) - discountAmount;
+  const finalAmountToPay = Math.max(0, (pricingPreview?.grandTotal || fallbackGrandTotal) - walletAmountToUse);
 
   const buildAddressForOrder = () => {
     if (savedRecipient) {
@@ -1088,7 +1089,7 @@ const CheckoutPage = () => {
               <SlideToPay
                 amount={finalAmountToPay}
                 onSuccess={handlePlaceOrder}
-                isLoading={isPlacingOrder || isPreviewLoading || !pricingPreview}
+                isLoading={isPlacingOrder || isPreviewLoading}
                 text={finalAmountToPay === 0 ? "Place Free Order" : "Order Now"}
               />
               <p className="text-center text-[10px] text-slate-400 font-bold mt-4 uppercase tracking-[0.1em]">
@@ -1105,7 +1106,7 @@ const CheckoutPage = () => {
           <SlideToPay
             amount={finalAmountToPay}
             onSuccess={handlePlaceOrder}
-            isLoading={isPlacingOrder || isPreviewLoading || !pricingPreview}
+            isLoading={isPlacingOrder || isPreviewLoading}
             text={finalAmountToPay === 0 ? "Place Free Order" : "Slide to Pay"}
           />
         </div>

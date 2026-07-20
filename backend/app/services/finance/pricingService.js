@@ -113,6 +113,41 @@ export function calculateProductSubtotal(items = []) {
   );
 }
 
+export function calculateCustomerDisplayPrice(sellerBasePrice, categoryConfig) {
+  const basePrice = Math.max(0, Number(sellerBasePrice || 0));
+  if (basePrice === 0) {
+    return {
+      sellerBasePrice: 0,
+      commissionAmount: 0,
+      handlingFeeAmount: 0,
+      customerDisplayPrice: 0,
+    };
+  }
+
+  // 1. Commission percentage on base price (default 5% if category has no custom commission)
+  const { type: commType, value: commVal } = resolveCommissionConfig(categoryConfig);
+  const commissionRate = (commVal && commVal > 0) ? commVal : 5;
+  let commissionAmount = 0;
+  if (commType === COMMISSION_TYPE.PERCENTAGE) {
+    commissionAmount = percentOf(basePrice, commissionRate);
+  } else {
+    commissionAmount = roundCurrency(commissionRate);
+  }
+
+  // 2. Handling Fee in Rupees (₹)
+  const { value: handVal } = resolveHandlingConfig(categoryConfig);
+  const handlingFeeAmount = roundCurrency(handVal || 0);
+
+  // 3. Customer Display Price = Seller Base Price + Commission (%) + Handling Fee (₹)
+  const customerPrice = roundCurrency(basePrice + commissionAmount + handlingFeeAmount);
+  return {
+    sellerBasePrice: basePrice,
+    commissionAmount,
+    handlingFeeAmount,
+    customerDisplayPrice: customerPrice,
+  };
+}
+
 export function calculateCategoryCommission(item, categoryConfig) {
   const quantity = normalizeLineQuantity(item.quantity);
   const itemSubtotal = roundCurrency(normalizeLinePrice(item.price) * quantity);
@@ -218,6 +253,20 @@ export function calculateHandlingFee(cartItems, options = {}) {
   };
 }
 
+export function determineProductGST(productName = "", categoryName = "", subcategoryName = "") {
+  const name = String(productName).toLowerCase().trim();
+  const cat = String(categoryName).toLowerCase().trim();
+  const sub = String(subcategoryName).toLowerCase().trim();
+  const text = `${name} ${cat} ${sub}`;
+
+  if (/coca[\s-]*cola|pepsi|sprite|thums[\s-]*up|mountain[\s-]*dew|fanta|7up|seven[\s-]*up|carbonated|aerated|energy[\s-]*drink|red[\s-]*bull|monster[\s-]*energy|deodorant|perfume|cologne|body[\s-]*spray/.test(text)) return 28;
+  if (/fresh[\s-]*fruit|fresh[\s-]*veg|apple|banana|mango|orange|grape|papaya|guava|potato|tomato|onion|spinach|cucumber|carrot|brinjal|cauliflower|cabbage|fresh[\s-]*milk|fresh[\s-]*curd|lassi|buttermilk|fresh[\s-]*poultry|fresh[\s-]*meat|fresh[\s-]*fish|egg|unbranded[\s-]*rice|unbranded[\s-]*atta|common[\s-]*salt/.test(text)) return 0;
+  if (/rice|atta|flour|wheat|dal|pulses|besan|suji|maida|oats|poha|edible[\s-]*oil|mustard[\s-]*oil|sunflower[\s-]*oil|groundnut[\s-]*oil|olive[\s-]*oil|ghee|tea|chai|coffee|sugar|salt|turmeric|chilli|coriander|cumin|jeera|garam[\s-]*masala|spice|masala|almond|cashew|raisin|walnut|pistachio|dates|dry[\s-]*fruit|rusk|biscuit|frozen[\s-]*peas|frozen[\s-]*veg|t[\s-]*shirt|shirt|apparel|clothing/.test(text)) return 5;
+  if (/juice|real|tropicana|jam|jelly|ketchup|sauce|pickle|pickle|cheese|butter|condensed[\s-]*milk|ayurvedic|chyawanprash|cough[\s-]*syrup|stationery|notebook|pen|pencil|paper|namkeen|bhujia|ready[\s-]*to[\s-]*eat/.test(text)) return 12;
+  if (/soap|shampoo|conditioner|hair[\s-]*oil|face[\s-]*wash|lotion|cream|toothpaste|brush|detergent|surf|washing[\s-]*powder|dishwash|vim|harpic|cleaner|sanitary|pad|diaper|chocolate|dairy[\s-]*milk|kitkat|snickers|wafer|cake|chewing[\s-]*gum|electronic|headphone|earphone|charger|cable|battery|mobile|laptop/.test(text)) return 18;
+  return 5;
+}
+
 export function calculateCustomerDeliveryFee(distanceKm, deliverySettings) {
   const mode =
     deliverySettings.deliveryPricingMode || DELIVERY_PRICING_MODE.DISTANCE_BASED;
@@ -226,10 +275,11 @@ export function calculateCustomerDeliveryFee(distanceKm, deliverySettings) {
     ? Math.max(actualDistance, 0)
     : 0;
 
+  const rawBaseFee = Number(deliverySettings.customerBaseDeliveryFee ?? deliverySettings.fixedDeliveryFee ?? 0);
+  const baseFee = roundCurrency(rawBaseFee > 0 ? rawBaseFee : 30);
+
   if (mode === DELIVERY_PRICING_MODE.FIXED_PRICE) {
-    const fixedFee = roundCurrency(
-      deliverySettings.fixedDeliveryFee ?? deliverySettings.customerBaseDeliveryFee ?? 0,
-    );
+    const fixedFee = baseFee;
     return {
       deliveryFeeCharged: fixedFee,
       distanceKmActual: normalizedDistance,
@@ -241,7 +291,6 @@ export function calculateCustomerDeliveryFee(distanceKm, deliverySettings) {
     };
   }
 
-  const baseFee = roundCurrency(deliverySettings.customerBaseDeliveryFee ?? 0);
   const baseDistance = Math.max(Number(deliverySettings.baseDistanceCapacityKm || 0), 0);
   const surcharge = roundCurrency(deliverySettings.incrementalKmSurcharge ?? 0);
 
@@ -322,7 +371,7 @@ export async function hydrateOrderItems(
     .filter(Boolean);
 
   const productQuery = Product.find({ _id: { $in: productIds } })
-    .select("_id name salePrice price mainImage headerId sellerId status approvalStatus variants")
+    .select("_id name salePrice price mainImage headerId categoryId sellerId status approvalStatus variants gstTax")
     .lean();
   if (session) productQuery.session(session);
   const products = await productQuery;
@@ -332,6 +381,12 @@ export async function hydrateOrderItems(
   const sellerIds = [...new Set(products.map((p) => String(p.sellerId)).filter(Boolean))];
   const sellers = await Seller.find({ _id: { $in: sellerIds } }).select("_id isActive shopName").lean();
   const sellerMap = new Map(sellers.map((s) => [String(s._id), s]));
+
+  const categoryIds = [...new Set(products.map((p) => String(p.headerId || p.categoryId)).filter(Boolean))];
+  const categoryDocs = await Category.find({ _id: { $in: categoryIds } })
+    .select("_id name adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue")
+    .lean();
+  const categoryMap = new Map(categoryDocs.map((c) => [String(c._id), c]));
 
   return orderItems.map((item) => {
     const productId = String(item.product || item.productId || item._id || item.id);
@@ -366,20 +421,30 @@ export async function hydrateOrderItems(
     }
 
     const quantity = normalizeLineQuantity(item.quantity);
-    const serverUnitPrice = normalizeLinePrice(
+    const rawSellerUnitPrice = normalizeLinePrice(
       resolvedVariant
         ? resolvedVariant.salePrice || resolvedVariant.price || product.salePrice || product.price
         : product.salePrice || product.price,
     );
+
+    const categoryConfig = categoryMap.get(String(product.headerId)) || categoryMap.get(String(product.categoryId)) || null;
+    const customerDisplayUnitPrice = calculateCustomerDisplayPrice(rawSellerUnitPrice, categoryConfig).customerDisplayPrice;
+
     const inferredUnitPrice = enforceServerPricing
-      ? serverUnitPrice
-      : normalizeLinePrice(item.price) || serverUnitPrice;
+      ? customerDisplayUnitPrice
+      : normalizeLinePrice(item.price) || customerDisplayUnitPrice;
+
+    const resolvedGstRate = (product.gstTax !== undefined && product.gstTax !== null && Number(product.gstTax) > 0)
+      ? Number(product.gstTax)
+      : determineProductGST(product.name || '', categoryConfig?.name || '');
 
     return {
       productId,
       productName: item.name || product.name,
       quantity,
       price: inferredUnitPrice,
+      sellerBasePrice: rawSellerUnitPrice,
+      gstTax: resolvedGstRate,
       image: item.image || product.mainImage,
       headerCategoryId: String(product.headerId),
       sellerId: String(product.sellerId),
@@ -443,10 +508,15 @@ export async function generateOrderPaymentBreakdown({
   let productSubtotal = 0;
   let sellerPayoutTotal = 0;
   let adminProductCommissionTotal = 0;
+  let totalGstAmount = 0;
 
   const lineItems = normalizedItems.map((item) => {
     const category = categoryById.get(String(item.headerCategoryId));
     const commission = calculateCategoryCommission(item, category);
+    const lineGstRate = Number(item.gstTax || 0);
+    const lineGstAmount = roundCurrency((commission.itemSubtotal * lineGstRate) / 100);
+    totalGstAmount = addMoney(totalGstAmount, lineGstAmount);
+
     productSubtotal = addMoney(productSubtotal, commission.itemSubtotal);
     sellerPayoutTotal = addMoney(sellerPayoutTotal, commission.sellerPayout);
     adminProductCommissionTotal = addMoney(
@@ -462,11 +532,13 @@ export async function generateOrderPaymentBreakdown({
       itemSubtotal: commission.itemSubtotal,
       sellerPayout: commission.sellerPayout,
       adminProductCommission: commission.adminCommission,
+      gstTax: lineGstRate,
+      gstAmount: lineGstAmount,
       headerCategoryId: item.headerCategoryId,
       headerCategoryName: category?.name || "Unknown",
       appliedCommissionType: commission.appliedCommissionType,
       appliedCommissionValue: commission.appliedCommissionValue,
-      appliedCommissionFixedRule: commission.appliedFixedRule,
+      appliedFixedRule: commission.appliedFixedRule,
     };
   });
 
@@ -478,16 +550,15 @@ export async function generateOrderPaymentBreakdown({
   const rider = calculateRiderPayout(distanceKm, effectiveSettings);
 
   const normalizedDiscount = roundCurrency(discountTotal || 0);
-  const normalizedTax = roundCurrency(taxTotal || 0);
+  const normalizedTax = totalGstAmount > 0 ? roundCurrency(totalGstAmount) : roundCurrency(taxTotal || 0);
   const normalizedTip = roundCurrency(tipTotal || 0);
   const normalizedWallet = roundCurrency(walletAmount || 0);
 
   const grossTotal = roundCurrency(
     productSubtotal +
       delivery.deliveryFeeCharged +
-      handling.handlingFeeCharged -
+      normalizedTax -
       normalizedDiscount +
-      normalizedTax +
       normalizedTip,
   );
 
@@ -545,7 +616,7 @@ export async function generateOrderPaymentBreakdown({
     currency: "INR",
     productSubtotal,
     deliveryFeeCharged: delivery.deliveryFeeCharged,
-    handlingFeeCharged: handling.handlingFeeCharged,
+    handlingFeeCharged: 0,
     tipTotal: normalizedTip,
     discountTotal: normalizedDiscount,
     taxTotal: normalizedTax,

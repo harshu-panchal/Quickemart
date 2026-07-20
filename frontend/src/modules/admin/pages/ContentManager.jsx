@@ -662,22 +662,69 @@ const ContentManager = () => {
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <select
                                                         value={item.linkType || 'none'}
-                                                        onChange={(e) => updateBannerItem(idx, { linkType: e.target.value })}
+                                                        onChange={(e) => updateBannerItem(idx, { linkType: e.target.value, linkValue: '' })}
                                                         className="w-full p-2.5 bg-slate-50 rounded-xl text-xs font-black outline-none"
                                                     >
                                                         <option value="none">No link</option>
-                                                        <option value="header">Header</option>
+                                                        <option value="header">Header Category</option>
                                                         <option value="category">Category</option>
                                                         <option value="subcategory">Subcategory</option>
-                                                        <option value="product">Product</option>
+                                                        <option value="product">Product (enter ID)</option>
                                                         <option value="url">External URL</option>
                                                     </select>
-                                                    <input
-                                                        value={item.linkValue || ''}
-                                                        onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
-                                                        className="w-full p-2.5 bg-slate-50 rounded-xl text-xs font-bold border-none outline-none"
-                                                        placeholder={item.linkType === 'url' ? "https://..." : "Slug / ID"}
-                                                    />
+
+                                                    {/* Smart picker based on linkType */}
+                                                    {(item.linkType === 'url' || item.linkType === 'product') ? (
+                                                        <input
+                                                            value={item.linkValue || ''}
+                                                            onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                                            className="w-full p-2.5 bg-slate-50 rounded-xl text-xs font-bold border-none outline-none"
+                                                            placeholder={item.linkType === 'url' ? 'https://...' : 'Product ID'}
+                                                        />
+                                                    ) : item.linkType === 'header' ? (
+                                                        <select
+                                                            value={item.linkValue || ''}
+                                                            onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                                            className="w-full p-2.5 bg-slate-50 rounded-xl text-xs font-black outline-none"
+                                                        >
+                                                            <option value="">— Select header —</option>
+                                                            {headerCategories.map((h) => (
+                                                                <option key={h._id} value={h._id}>{h.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : item.linkType === 'category' ? (
+                                                        <select
+                                                            value={item.linkValue || ''}
+                                                            onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                                            className="w-full p-2.5 bg-slate-50 rounded-xl text-xs font-black outline-none"
+                                                        >
+                                                            <option value="">— Select category —</option>
+                                                            {headerCategories.flatMap((h) =>
+                                                                (h.children || []).map((cat) => (
+                                                                    <option key={cat._id} value={cat._id}>{h.name} → {cat.name}</option>
+                                                                ))
+                                                            )}
+                                                        </select>
+                                                    ) : item.linkType === 'subcategory' ? (
+                                                        <select
+                                                            value={item.linkValue || ''}
+                                                            onChange={(e) => updateBannerItem(idx, { linkValue: e.target.value })}
+                                                            className="w-full p-2.5 bg-slate-50 rounded-xl text-xs font-black outline-none"
+                                                        >
+                                                            <option value="">— Select subcategory —</option>
+                                                            {headerCategories.flatMap((h) =>
+                                                                (h.children || []).flatMap((cat) =>
+                                                                    (cat.children || []).map((sub) => (
+                                                                        <option key={sub._id} value={sub._id}>{cat.name} → {sub.name}</option>
+                                                                    ))
+                                                                )
+                                                            )}
+                                                        </select>
+                                                    ) : (
+                                                        <div className="w-full p-2.5 bg-slate-100 rounded-xl text-[10px] text-slate-400 flex items-center">
+                                                            Select a link type
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             {formData.bannerItems.length > 1 && (

@@ -102,7 +102,6 @@ export const requireApprovedSeller = async (req, res, next) => {
       seller.applicationStatus || (seller.isVerified ? "approved" : "pending");
     const isApproved =
       seller.isVerified === true &&
-      seller.isActive === true &&
       applicationStatus === "approved";
 
     if (!isApproved) {

@@ -303,7 +303,6 @@ export const loginSeller = async (req, res) => {
             seller.applicationStatus || (seller.isVerified ? "approved" : "pending");
         const isApproved =
             seller.isVerified === true &&
-            seller.isActive === true &&
             applicationStatus === "approved";
 
         if (!isApproved) {

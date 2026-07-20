@@ -362,7 +362,7 @@ const MainLocationHeader = ({
                     src={logoUrl}
                     alt={`${appName} Logo`}
                     loading="lazy"
-                    className="h-10 w-auto object-contain"
+                    className="h-24 md:h-28 w-auto object-contain"
                   />
                 </div>
               </div>

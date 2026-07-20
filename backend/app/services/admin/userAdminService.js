@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import User from "../../models/customer.js";
 import Order from "../../models/order.js";
+import { normalizeAndValidatePhone } from "../otpAuthService.js";
 
 export async function getUsersData({ page, limit, skip }) {
   const pipeline = [
@@ -124,5 +125,40 @@ export async function getUserByIdData(id) {
       date: order.createdAt,
       status: order.status,
     })),
+  };
+}
+
+export async function createCustomerByAdminData({ name, phone: rawPhone }) {
+  const phone = normalizeAndValidatePhone(rawPhone);
+  const trimmedName = String(name || "").trim() || "Customer";
+
+  let customer = await User.findOne({ phone });
+  if (customer) {
+    customer.name = trimmedName;
+    customer.isVerified = true;
+    customer.status = "active";
+    customer.isActive = true;
+    await customer.save();
+  } else {
+    customer = await User.create({
+      name: trimmedName,
+      phone,
+      role: "user",
+      isVerified: true,
+      status: "active",
+      isActive: true,
+    });
+  }
+
+  return {
+    id: String(customer._id),
+    _id: customer._id,
+    name: customer.name,
+    phone: customer.phone,
+    email: customer.email || "",
+    status: "active",
+    joinedDate: customer.createdAt,
+    totalOrders: 0,
+    totalSpent: 0,
   };
 }

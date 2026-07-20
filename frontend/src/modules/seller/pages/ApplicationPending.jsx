@@ -22,7 +22,6 @@ const ApplicationPending = () => {
   if (!isLoading && isAuthenticated && role === "seller") {
     const isApproved =
       user?.isVerified === true &&
-      user?.isActive === true &&
       applicationStatus === "approved";
 
     if (isApproved) {

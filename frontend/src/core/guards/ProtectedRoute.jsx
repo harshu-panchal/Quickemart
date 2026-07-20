@@ -33,7 +33,6 @@ const ProtectedRoute = ({ children }) => {
         const isApprovedSeller =
             Boolean(user) &&
             user.isVerified === true &&
-            user.isActive === true &&
             applicationStatus === 'approved';
 
         if (!isApprovedSeller) {

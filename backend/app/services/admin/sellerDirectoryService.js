@@ -283,7 +283,7 @@ export async function getActiveSellersData({
 
   if (category && category !== "all") {
     filters.push({
-      category: new RegExp(`^${escapeRegExp(category)}$`, "i"),
+      category: new RegExp(escapeRegExp(category), "i"),
     });
   }
 
@@ -448,6 +448,7 @@ export async function getActiveSellersData({
       serviceRadius: Number(seller.serviceRadius || 5),
       location: getSellerDisplayLocation(seller),
       city: seller.address || "Location not set",
+      documents: seller.documents || null,
       latitude: Array.isArray(seller.location?.coordinates)
         ? seller.location.coordinates[1] ?? null
         : null,

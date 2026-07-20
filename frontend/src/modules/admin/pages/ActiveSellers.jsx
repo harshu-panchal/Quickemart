@@ -17,11 +17,454 @@ import {
   HiOutlineArrowPath,
   HiOutlineDocumentText,
   HiOutlineTrash,
+  HiOutlinePlus,
+  HiOutlineUser,
+  HiOutlineShoppingBag,
+  HiOutlineLockClosed,
+  HiOutlineEyeSlash,
+  HiOutlineCloudArrowUp,
+  HiOutlineCheckCircle,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
+
+/* =====================================================
+   ADD SELLER MODAL
+===================================================== */
+const INITIAL_FORM = {
+  name: "",
+  email: "",
+  shopName: "",
+  password: "",
+  category: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+  radius: "5",
+};
+
+const DOC_LABELS = [
+  { field: "tradeLicense", label: "Trade License" },
+  { field: "gstCertificate", label: "GST Certificate" },
+  { field: "idProof", label: "ID Proof" },
+];
+
+const generatePreviewId = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let id = "SLR-";
+  for (let i = 0; i < 8; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
+  return id;
+};
+
+const AddSellerModal = ({ onClose, onSuccess }) => {
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [docs, setDocs] = useState({ tradeLicense: null, gstCertificate: null, idProof: null });
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [previewId] = useState(generatePreviewId);
+  const fileRefs = { tradeLicense: useRef(), gstCertificate: useRef(), idProof: useRef() };
+  const [categoryTree, setCategoryTree] = useState([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const categoryDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target)) {
+        setShowCategoryDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    
+    let active = true;
+    const loadCategoryTree = async () => {
+      try {
+        const res = await adminApi.getCategoryTree();
+        if (res.data.success && active) {
+          setCategoryTree(res.data.results || res.data.result || []);
+        }
+      } catch (err) {
+        console.error("Failed to load category tree", err);
+      }
+    };
+    loadCategoryTree();
+
+    return () => {
+      active = false;
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  const handleToggleCategory = (headerName, mainName) => {
+    setSelectedTypes(prev => {
+      const idx = prev.findIndex(t => t.headerName === headerName && t.mainName === mainName);
+      let newTypes = [];
+      if (idx > -1) {
+        newTypes = prev.filter((_, i) => i !== idx);
+      } else {
+        newTypes = [...prev, { headerName, mainName }];
+      }
+      setForm(p => ({
+        ...p,
+        category: newTypes.map(t => `${t.headerName} > ${t.mainName}`).join(", ")
+      }));
+      return newTypes;
+    });
+  };
+
+  const handleScrollWheel = (e) => {
+    const el = e.currentTarget;
+    if (
+      (e.deltaY < 0 && el.scrollTop === 0) ||
+      (e.deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight)
+    ) {
+      e.preventDefault();
+    }
+    e.stopPropagation();
+  };
+
+  const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+
+  const handleDoc = (field, file) => {
+    setDocs((p) => ({ ...p, [field]: file || null }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.email.trim() || !form.shopName.trim() || !form.password || !form.category) {
+      toast.error("Name, email, shop name, password and product type are required");
+      return;
+    }
+    if (form.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
+      // Attach optional documents
+      DOC_LABELS.forEach(({ field }) => {
+        if (docs[field]) fd.append(field, docs[field]);
+      });
+
+      const res = await adminApi.createSeller(fd);
+      const createdSellerId = res.data?.result?.sellerId || previewId;
+      toast.success(
+        <div>
+          <p className="font-bold">Seller created!</p>
+          <p className="text-xs opacity-70">ID: {createdSellerId}</p>
+        </div>
+      );
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to create seller");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.97 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl ring-1 ring-slate-100 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700">
+            <div>
+              <h2 className="text-lg font-black text-white tracking-tight">Add Seller</h2>
+              <p className="text-xs text-slate-300 mt-0.5">Create a seller account — immediately active &amp; approved</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
+            >
+              <HiOutlineXMark className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto max-h-[75vh]">
+            <form onSubmit={handleSubmit} className="px-7 py-6 space-y-6">
+
+              {/* Auto-generated Seller ID preview */}
+              <div className="flex items-center gap-3 bg-slate-50 rounded-2xl px-4 py-3 ring-1 ring-slate-100">
+                <HiOutlineCheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Auto-generated Seller ID</p>
+                  <p className="text-sm font-black text-slate-800 font-mono tracking-wider">{previewId}</p>
+                </div>
+              </div>
+
+              {/* Basic Info */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Basic Information</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="relative">
+                    <HiOutlineUser className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      name="name"
+                      value={form.name}
+                      onChange={handleChange}
+                      placeholder="Seller Name *"
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="relative">
+                    <HiOutlineEnvelope className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      name="email"
+                      type="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      placeholder="Email Address *"
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="relative">
+                    <HiOutlineShoppingBag className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      name="shopName"
+                      value={form.shopName}
+                      onChange={handleChange}
+                      placeholder="Shop Name *"
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="relative">
+                    <HiOutlineLockClosed className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={handleChange}
+                      placeholder="Password *"
+                      required
+                      minLength={6}
+                      className="w-full pl-10 pr-11 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((p) => !p)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                    >
+                      {showPassword ? <HiOutlineEyeSlash className="h-4 w-4" /> : <HiOutlineEye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  
+                  {/* Category Selection Dropdown */}
+                  <div className="sm:col-span-2 relative" ref={categoryDropdownRef}>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                      Sellers Product Type *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 border border-slate-200/60 rounded-2xl text-sm font-semibold text-slate-800 outline-none hover:border-slate-300 transition-all text-left"
+                    >
+                      <span className="truncate">
+                        {selectedTypes.length > 0
+                          ? selectedTypes.map(t => `${t.headerName} > ${t.mainName}`).join(", ")
+                          : "Select Sellers Product Type *"}
+                      </span>
+                      <svg className="w-4 h-4 text-slate-400 shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {showCategoryDropdown && (
+                      <div
+                        onWheel={handleScrollWheel}
+                        className="absolute left-0 right-0 mt-2 p-4 bg-white border border-slate-100 rounded-2xl shadow-xl z-[99999] max-h-60 overflow-y-auto overscroll-contain space-y-4"
+                      >
+                        {categoryTree.length === 0 ? (
+                          <p className="text-xs text-slate-400 font-bold text-center py-2">Loading categories...</p>
+                        ) : (
+                          categoryTree.map((header) => (
+                            <div key={header._id || header.id} className="space-y-2">
+                              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded-md">
+                                {header.name}
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-2">
+                                {header.children && header.children.length > 0 ? (
+                                  header.children.map((main) => {
+                                    const isChecked = selectedTypes.some(
+                                      (t) => t.headerName === header.name && t.mainName === main.name
+                                    );
+                                    return (
+                                      <label
+                                        key={main._id || main.id}
+                                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors text-xs font-bold text-slate-700"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          onChange={() => handleToggleCategory(header.name, main.name)}
+                                          className="h-4 w-4 text-slate-900 border-slate-300 rounded focus:ring-0 cursor-pointer"
+                                        />
+                                        <span>{main.name}</span>
+                                      </label>
+                                    );
+                                  })
+                                ) : (
+                                  <p className="text-[10px] text-slate-400 italic pl-2">No categories defined</p>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Location</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2 relative">
+                    <HiOutlineMapPin className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                    <input
+                      name="address"
+                      value={form.address}
+                      onChange={handleChange}
+                      placeholder="Full Address"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <input
+                    name="city"
+                    value={form.city}
+                    onChange={handleChange}
+                    placeholder="City"
+                    className="w-full px-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                  />
+                  <input
+                    name="state"
+                    value={form.state}
+                    onChange={handleChange}
+                    placeholder="State"
+                    className="w-full px-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                  />
+                  <input
+                    name="pincode"
+                    value={form.pincode}
+                    onChange={handleChange}
+                    placeholder="Pincode"
+                    className="w-full px-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                  />
+                  <div className="relative">
+                    <input
+                      name="radius"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={form.radius}
+                      onChange={handleChange}
+                      placeholder="Service Radius (km)"
+                      className="w-full px-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Documents (optional) */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documents</p>
+                  <span className="text-[10px] font-semibold text-slate-300 bg-slate-100 px-2 py-0.5 rounded-full">Optional</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {DOC_LABELS.map(({ field, label }) => (
+                    <div key={field}>
+                      <input
+                        ref={fileRefs[field]}
+                        type="file"
+                        accept="image/*,.pdf"
+                        className="hidden"
+                        onChange={(e) => handleDoc(field, e.target.files?.[0])}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileRefs[field].current?.click()}
+                        className={cn(
+                          "w-full flex flex-col items-center gap-2 px-3 py-4 rounded-2xl border-2 border-dashed text-center transition-all text-sm font-semibold",
+                          docs[field]
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                            : "border-slate-200 bg-slate-50 text-slate-400 hover:border-slate-300 hover:bg-slate-100"
+                        )}
+                      >
+                        {docs[field] ? (
+                          <HiOutlineCheckCircle className="h-6 w-6 text-emerald-500" />
+                        ) : (
+                          <HiOutlineCloudArrowUp className="h-6 w-6" />
+                        )}
+                        <span className="text-[11px] leading-tight">
+                          {docs[field] ? docs[field].name.slice(0, 20) + (docs[field].name.length > 20 ? "…" : "") : label}
+                        </span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={submitting}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-black shadow-lg hover:bg-black transition-all disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <HiOutlineArrowPath className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <HiOutlinePlus className="h-4 w-4" />
+                  )}
+                  {submitting ? "Creating..." : "Create Seller"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
 
 const SORT_OPTIONS = [
   { value: "recent", label: "Newest first" },
@@ -94,8 +537,27 @@ const ActiveSellers = () => {
   const [sellers, setSellers] = useState([]);
   const [stats, setStats] = useState(emptyStats);
   const [categories, setCategories] = useState([]);
+  const [headerCategories, setHeaderCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const fetchHeaders = async () => {
+      try {
+        const res = await adminApi.getCategories({ type: "header", limit: 100 });
+        if (res.data.success) {
+          const payload = res.data.result || {};
+          const list = Array.isArray(payload.items) ? payload.items : [];
+          const allCats = res.data.results || [];
+          const headers = list.length > 0 ? list : allCats.filter((c) => c.type === "header");
+          setHeaderCategories(headers);
+        }
+      } catch (err) {
+        console.error("Failed to load header categories for filter", err);
+      }
+    };
+    fetchHeaders();
+  }, []);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortBy, setSortBy] = useState("recent");
   const [page, setPage] = useState(1);
@@ -108,6 +570,99 @@ const ActiveSellers = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedSeller, setSelectedSeller] = useState(null);
+  const [showAddSeller, setShowAddSeller] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+
+  const handleDownloadReport = async () => {
+    setIsDownloadingReport(true);
+    try {
+      // Fetch both active and pending sellers concurrently
+      const [activeRes, pendingRes] = await Promise.all([
+        adminApi.getActiveSellers({ page: 1, limit: 10000 }),
+        adminApi.getPendingSellers({ page: 1, limit: 10000 }),
+      ]);
+
+      const activeList = activeRes.data?.result?.items || activeRes.data?.results || [];
+      const pendingList = pendingRes.data?.result?.items || pendingRes.data?.results || [];
+
+      // Combine both lists
+      const csvRows = [];
+      const headers = [
+        "Seller ID",
+        "Shop Name",
+        "Owner Name",
+        "Email",
+        "Phone",
+        "Category",
+        "Location",
+        "Service Radius (km)",
+        "Status",
+        "Joined Date",
+        "Total Orders",
+        "Total Revenue (Rs)",
+        "Product Count",
+      ];
+      csvRows.push(headers.join(","));
+
+      // Add Active Sellers
+      activeList.forEach((seller) => {
+        const row = [
+          seller.sellerId || seller.id || seller._id || "N/A",
+          `"${(seller.shopName || "").replace(/"/g, '""')}"`,
+          `"${(seller.ownerName || seller.name || "").replace(/"/g, '""')}"`,
+          `"${(seller.email || "").replace(/"/g, '""')}"`,
+          `"${(seller.phone || "").replace(/"/g, '""')}"`,
+          `"${(seller.category || "General").replace(/"/g, '""')}"`,
+          `"${(seller.location || "").replace(/"/g, '""')}"`,
+          seller.serviceRadius || 5,
+          "Active / Approved",
+          seller.joinedDate || "N/A",
+          seller.totalOrders || 0,
+          seller.totalRevenue || 0,
+          seller.productCount || 0,
+        ];
+        csvRows.push(row.join(","));
+      });
+
+      // Add Pending / Waiting Review Sellers
+      pendingList.forEach((seller) => {
+        const row = [
+          seller.sellerId || seller._id || "N/A",
+          `"${(seller.shopName || "").replace(/"/g, '""')}"`,
+          `"${(seller.name || "").replace(/"/g, '""')}"`,
+          `"${(seller.email || "").replace(/"/g, '""')}"`,
+          `"${(seller.phone || "").replace(/"/g, '""')}"`,
+          `"${(seller.category || "General").replace(/"/g, '""')}"`,
+          `"${(seller.address || "").replace(/"/g, '""')}"`,
+          seller.serviceRadius || 5,
+          "Pending / Waiting Review",
+          seller.createdAt ? new Date(seller.createdAt).toLocaleDateString("en-GB") : "N/A",
+          0,
+          0,
+          0,
+        ];
+        csvRows.push(row.join(","));
+      });
+
+      const csvContent = "\uFEFF" + csvRows.join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `sellers_report_${new Date().toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("Sellers report downloaded successfully!");
+    } catch (err) {
+      console.error("Failed to download report", err);
+      toast.error("Failed to download sellers report");
+    } finally {
+      setIsDownloadingReport(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -121,6 +676,17 @@ const ActiveSellers = () => {
   useEffect(() => {
     setPage(1);
   }, [categoryFilter, sortBy, pageSize]);
+
+  useEffect(() => {
+    if (selectedSeller) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedSeller]);
 
   useEffect(() => {
     const currentSeq = ++requestSeq.current;
@@ -244,6 +810,13 @@ const ActiveSellers = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowAddSeller(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black shadow-lg hover:bg-emerald-700 transition-all active:scale-95"
+          >
+            <HiOutlinePlus className="h-4 w-4" />
+            Add Seller
+          </button>
           <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl ring-1 ring-slate-100">
             <HiOutlineClock className="h-4 w-4 text-slate-500" />
             <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
@@ -302,16 +875,29 @@ const ActiveSellers = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+            <button
+              onClick={handleDownloadReport}
+              disabled={isDownloadingReport}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-white ring-1 ring-slate-200 rounded-2xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isDownloadingReport ? (
+                <HiOutlineArrowPath className="h-4 w-4 animate-spin text-slate-500" />
+              ) : (
+                <HiOutlineCloudArrowUp className="h-4 w-4 text-slate-500" />
+              )}
+              {isDownloadingReport ? "DOWNLOADING..." : "DOWNLOAD REPORT"}
+            </button>
+
             <select
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
               className="px-4 py-3 bg-white ring-1 ring-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
             >
-              <option value="all">All categories</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+              <option value="all">All Categories</option>
+              {headerCategories.map((cat) => (
+                <option key={cat._id || cat.id} value={cat.name}>
+                  {cat.name}
                 </option>
               ))}
             </select>
@@ -557,7 +1143,7 @@ const ActiveSellers = () => {
                     <p className="text-sm font-semibold text-slate-500">
                       Owned by {selectedSeller.ownerName}
                     </p>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <Badge
                         variant="success"
                         className="text-[8px] font-black uppercase tracking-widest"
@@ -570,6 +1156,14 @@ const ActiveSellers = () => {
                       >
                         {selectedSeller.category || "General"}
                       </Badge>
+                      {selectedSeller.phone?.startsWith("admin-") && (
+                        <Badge
+                          variant="warning"
+                          className="text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-800"
+                        >
+                          Seller added by the Admin
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -599,7 +1193,7 @@ const ActiveSellers = () => {
                         <div className="flex items-center gap-3 text-slate-700">
                           <HiOutlinePhone className="h-4 w-4 text-slate-400" />
                           <span className="text-xs font-semibold">
-                            {selectedSeller.phone || "N/A"}
+                            {selectedSeller.phone?.startsWith("admin-") ? "N/A" : (selectedSeller.phone || "N/A")}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 text-slate-700">
@@ -610,6 +1204,62 @@ const ActiveSellers = () => {
                         </div>
                       </div>
                     </div>
+
+                    {selectedSeller.documents && (Array.isArray(selectedSeller.documents) ? selectedSeller.documents.length > 0 : Object.values(selectedSeller.documents).some(Boolean)) && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                          Uploaded Documents
+                        </p>
+                        <div className="grid grid-cols-1 gap-2">
+                          {Array.isArray(selectedSeller.documents) ? (
+                            selectedSeller.documents.map((url, index) => {
+                              if (!url) return null;
+                              return (
+                                <a
+                                  key={index}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center justify-between p-3 bg-white rounded-2xl ring-1 ring-slate-100 hover:bg-slate-100 transition-all text-xs font-bold text-slate-700"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <HiOutlineDocumentText className="h-4 w-4 text-slate-400" />
+                                    Document #{index + 1}
+                                  </span>
+                                  <span className="text-[10px] text-brand-600 uppercase font-black tracking-wider">
+                                    View
+                                  </span>
+                                </a>
+                              );
+                            })
+                          ) : (
+                            Object.entries(selectedSeller.documents).map(([key, url]) => {
+                              if (!url) return null;
+                              const label = key
+                                .replace(/([A-Z])/g, " $1")
+                                .replace(/^./, (str) => str.toUpperCase());
+                              return (
+                                <a
+                                  key={key}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center justify-between p-3 bg-white rounded-2xl ring-1 ring-slate-100 hover:bg-slate-100 transition-all text-xs font-bold text-slate-700"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <HiOutlineDocumentText className="h-4 w-4 text-slate-400" />
+                                    {label}
+                                  </span>
+                                  <span className="text-[10px] text-brand-600 uppercase font-black tracking-wider">
+                                    View
+                                  </span>
+                                </a>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
@@ -719,6 +1369,13 @@ const ActiveSellers = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {showAddSeller && (
+        <AddSellerModal
+          onClose={() => setShowAddSeller(false)}
+          onSuccess={() => setRefreshTick((t) => t + 1)}
+        />
+      )}
     </div>
   );
 };

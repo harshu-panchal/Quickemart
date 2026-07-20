@@ -519,7 +519,15 @@ const ProductDetailSheet = () => {
                                                         const displayPrice = (variantSalePrice && variantSalePrice < variantPrice) ? variantSalePrice : variantPrice;
                                                         const hasDiscount = variantSalePrice && variantSalePrice < variantPrice;
                                                         const discountPct = hasDiscount ? Math.round(((variantPrice - variantSalePrice) / variantPrice) * 100) : 0;
-                                                        return (
+                                                        
+                                                        const stockVal = Number(selectedProduct.stock || 0);
+                                                        const isItemOutOfStock = selectedProduct.isOutOfStock || stockVal <= 0 || Number(displayPrice || 0) <= 0;
+
+                                                        return isItemOutOfStock ? (
+                                                            <span className="text-xl lg:text-2xl font-extrabold text-rose-500 uppercase tracking-tight">
+                                                                Out of Stock
+                                                            </span>
+                                                        ) : (
                                                             <>
                                                                 <div className="flex items-baseline gap-2">
                                                                     <span className="text-[28px] lg:text-[32px] font-[800] text-primary tracking-tight leading-none">
@@ -539,27 +547,37 @@ const ProductDetailSheet = () => {
                                                     })()}
                                                 </div>
                                                 <div>
-                                                    {quantity > 0 ? (
-                                                        <div className="flex items-center gap-1 bg-white border border-brand-200 rounded-xl p-1 shadow-sm">
-                                                            <motion.button whileTap={{ scale: 0.85 }} onClick={handleDecrement} className="w-9 h-9 bg-brand-50 rounded-lg flex items-center justify-center text-brand-700 hover:bg-brand-100 transition-colors">
-                                                                <Minus size={16} strokeWidth={2.5} />
+                                                    {(() => {
+                                                        const variantPrice = selectedVariant?.price ?? selectedProduct.price;
+                                                        const variantSalePrice = selectedVariant?.salePrice ?? selectedProduct.salePrice ?? null;
+                                                        const displayPrice = (variantSalePrice && variantSalePrice < variantPrice) ? variantSalePrice : variantPrice;
+                                                        const stockVal = Number(selectedProduct.stock || 0);
+                                                        const isItemOutOfStock = selectedProduct.isOutOfStock || stockVal <= 0 || Number(displayPrice || 0) <= 0;
+
+                                                        if (isItemOutOfStock) return null;
+
+                                                        return quantity > 0 ? (
+                                                            <div className="flex items-center gap-1 bg-white border border-brand-200 rounded-xl p-1 shadow-sm">
+                                                                <motion.button whileTap={{ scale: 0.85 }} onClick={handleDecrement} className="w-9 h-9 bg-brand-50 rounded-lg flex items-center justify-center text-brand-700 hover:bg-brand-100 transition-colors">
+                                                                    <Minus size={16} strokeWidth={2.5} />
+                                                                </motion.button>
+                                                                <span className="font-[800] text-base text-gray-800 w-8 text-center">{quantity}</span>
+                                                                <motion.button whileTap={{ scale: 0.85 }} onClick={handleIncrement} className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-white hover:bg-[var(--brand-400)] transition-colors shadow-sm">
+                                                                    <Plus size={16} strokeWidth={2.5} />
+                                                                </motion.button>
+                                                            </div>
+                                                        ) : (
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.02, y: -2 }}
+                                                                whileTap={{ scale: 0.98 }}
+                                                                onClick={handleAddToCart}
+                                                                className="bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-12 px-8 rounded-xl font-black text-[13px] flex items-center gap-2 shadow-lg shadow-brand-100 hover:shadow-brand-200 transition-all uppercase tracking-widest border border-white/20"
+                                                            >
+                                                                <ShoppingBag size={16} strokeWidth={3} />
+                                                                Add to Cart
                                                             </motion.button>
-                                                            <span className="font-[800] text-base text-gray-800 w-8 text-center">{quantity}</span>
-                                                            <motion.button whileTap={{ scale: 0.85 }} onClick={handleIncrement} className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-white hover:bg-[var(--brand-400)] transition-colors shadow-sm">
-                                                                <Plus size={16} strokeWidth={2.5} />
-                                                            </motion.button>
-                                                        </div>
-                                                    ) : (
-                                                    <motion.button
-                                                        whileHover={{ scale: 1.02, y: -2 }}
-                                                        whileTap={{ scale: 0.98 }}
-                                                        onClick={handleAddToCart}
-                                                        className="bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-12 px-8 rounded-xl font-black text-[13px] flex items-center gap-2 shadow-lg shadow-brand-100 hover:shadow-brand-200 transition-all uppercase tracking-widest border border-white/20"
-                                                    >
-                                                        <ShoppingBag size={16} strokeWidth={3} />
-                                                        Add to Cart
-                                                    </motion.button>
-                                                    )}
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -1055,35 +1073,59 @@ const ProductDetailSheet = () => {
                                         </div>
                                     </div>
 
-                                    {quantity > 0 ? (
-                                        <div className="flex items-center gap-1 bg-slate-50 border-2 border-slate-100 rounded-2xl p-1.5 shadow-inner flex-1 justify-between max-w-[170px]">
-                                            <motion.button
-                                                whileTap={{ scale: 0.9 }}
-                                                onClick={handleDecrement}
-                                                className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-white shadow-sm border border-slate-100 transition-all"
-                                            >
-                                                <Minus size={18} strokeWidth={3.5} />
-                                            </motion.button>
-                                            <span className="font-black text-xl text-slate-800 w-8 text-center tabular-nums">{quantity}</span>
-                                            <motion.button
-                                                whileTap={{ scale: 0.9 }}
-                                                onClick={handleIncrement}
-                                                className="w-10 h-10 bg-gradient-to-br from-primary to-[var(--brand-400)] rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-100/50 hover:shadow-brand-200 transition-all border border-white/20"
-                                            >
-                                                <Plus size={18} strokeWidth={3.5} />
-                                            </motion.button>
-                                        </div>
-                                    ) : (
-                                        <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.95 }}
-                                            onClick={handleAddToCart}
-                                            className="flex-1 bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-[56px] rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-brand-100 transition-all border border-white/20 uppercase tracking-[0.05em] whitespace-nowrap px-4"
-                                        >
-                                            <ShoppingBag size={18} strokeWidth={3} />
-                                            ADD TO CART
-                                        </motion.button>
-                                    )}
+                                    {(() => {
+                                         const variantPrice = Number(selectedVariant?.price ?? selectedProduct.price ?? 0);
+                                         const variantSalePrice = (selectedVariant?.salePrice !== undefined && selectedVariant?.salePrice !== null)
+                                           ? Number(selectedVariant.salePrice)
+                                           : (selectedProduct.salePrice ? Number(selectedProduct.salePrice) : null);
+                                         const displayPrice = (variantSalePrice && variantSalePrice < variantPrice) ? variantSalePrice : variantPrice;
+
+                                         const stockVal = Number(selectedVariant?.stock ?? selectedProduct.stock ?? 0);
+                                         const totalVariantStock = Array.isArray(selectedProduct?.variants) && selectedProduct.variants.length > 0
+                                           ? selectedProduct.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)
+                                           : stockVal;
+                                         const effectiveStock = Math.max(stockVal, totalVariantStock);
+
+                                         const isItemOutOfStock = selectedProduct.isOutOfStock || effectiveStock <= 0 || Number(displayPrice || 0) <= 0;
+
+                                         if (isItemOutOfStock) {
+                                             return (
+                                                 <div className="flex-1 text-center font-black text-rose-600 uppercase tracking-widest text-sm py-3.5 bg-rose-50 border border-rose-100 rounded-2xl">
+                                                     OUT OF STOCK
+                                                 </div>
+                                             );
+                                         }
+
+                                         return quantity > 0 ? (
+                                             <div className="flex items-center gap-2 bg-slate-50 rounded-2xl p-1.5 border border-slate-200/80 shadow-sm">
+                                                 <motion.button
+                                                     whileTap={{ scale: 0.9 }}
+                                                     onClick={handleDecrement}
+                                                     className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-white shadow-sm border border-slate-100 transition-all"
+                                                 >
+                                                     <Minus size={18} strokeWidth={3.5} />
+                                                 </motion.button>
+                                                 <span className="font-black text-xl text-slate-800 w-8 text-center tabular-nums">{quantity}</span>
+                                                 <motion.button
+                                                     whileTap={{ scale: 0.9 }}
+                                                     onClick={handleIncrement}
+                                                     className="w-10 h-10 bg-gradient-to-br from-primary to-[var(--brand-400)] rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-100/50 hover:shadow-brand-200 transition-all border border-white/20"
+                                                 >
+                                                     <Plus size={18} strokeWidth={3.5} />
+                                                 </motion.button>
+                                             </div>
+                                         ) : (
+                                             <motion.button
+                                                 whileHover={{ scale: 1.02 }}
+                                                 whileTap={{ scale: 0.95 }}
+                                                 onClick={handleAddToCart}
+                                                 className="flex-1 bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-[56px] rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-brand-100 transition-all border border-white/20 uppercase tracking-[0.05em] whitespace-nowrap px-4"
+                                             >
+                                                 <ShoppingBag size={18} strokeWidth={3} />
+                                                 ADD TO CART
+                                             </motion.button>
+                                         );
+                                     })()}
                                 </div>
 
                                 {/* View Cart Button */}

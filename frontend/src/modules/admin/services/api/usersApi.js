@@ -10,6 +10,7 @@ export const adminUsersApi = {
 
     getUsers: (params) => axiosInstance.get('/admin/users', { params }),
     getUserById: (id) => axiosInstance.get(`/admin/users/${id}`),
+    createCustomer: (data) => axiosInstance.post('/admin/users', data),
 
     getSellers: (params) => axiosInstance.get('/admin/sellers', { params }),
     getActiveSellers: (params) =>
@@ -21,6 +22,10 @@ export const adminUsersApi = {
     approveSeller: (id) => axiosInstance.patch(`/admin/sellers/approve/${id}`),
     rejectSeller: (id, data) =>
         axiosInstance.delete(`/admin/sellers/reject/${id}`, { data }),
+    createSeller: (formData) =>
+        axiosInstance.post('/admin/sellers/create', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
 };
 
 export default adminUsersApi;
