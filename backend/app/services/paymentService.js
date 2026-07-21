@@ -588,9 +588,9 @@ export async function verifyPhonePePaymentStatus({
 
   // Security check: only the owner or admin can verify
   if (userId && String(payment.customer) !== String(userId)) {
-      const err = new Error("Not authorized to verify this payment");
-      err.statusCode = 403;
-      throw err;
+    const err = new Error("Not authorized to verify this payment");
+    err.statusCode = 403;
+    throw err;
   }
 
   const provider = getActivePaymentProvider();
@@ -708,9 +708,9 @@ export async function processPhonePeWebhook({
 
 // Placeholder for Razorpay compatibility if needed by other services
 export async function verifyClientPaymentCallback(data) {
-    return verifyPhonePePaymentStatus({
-        merchantOrderId: data.gatewayOrderId || data.merchantOrderId,
-        userId: data.userId,
-        correlationId: data.correlationId
-    });
+  return verifyPhonePePaymentStatus({
+    merchantOrderId: data.gatewayOrderId || data.merchantOrderId,
+    userId: data.userId,
+    correlationId: data.correlationId
+  });
 }

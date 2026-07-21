@@ -68,9 +68,9 @@ export const verifyPaymentStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const merchantOrderId = id || req.query.merchantOrderId;
-    
+
     if (!merchantOrderId) {
-        return handleResponse(res, 400, "merchantOrderId is required");
+      return handleResponse(res, 400, "merchantOrderId is required");
     }
 
     const verification = await verifyPhonePePaymentStatus({
@@ -94,12 +94,12 @@ export const handlePhonePeWebhook = async (req, res) => {
     const rawBody = req.body;
 
     if (!authorization) {
-        logger.warn("PhonePe webhook missing verification header", {
-          scope: "PaymentController.handlePhonePeWebhook",
-          correlationId: req.correlationId || null,
-          ip: req.ip,
-        });
-        return res.status(401).send("Unauthorized");
+      logger.warn("PhonePe webhook missing verification header", {
+        scope: "PaymentController.handlePhonePeWebhook",
+        correlationId: req.correlationId || null,
+        ip: req.ip,
+      });
+      return res.status(401).send("Unauthorized");
     }
 
     const result = await processPhonePeWebhook({
@@ -111,7 +111,7 @@ export const handlePhonePeWebhook = async (req, res) => {
     if (result.accepted) {
       return res.status(200).send("OK");
     }
-    
+
     return res.status(400).send("Bad Request");
   } catch (error) {
     logger.error("PhonePe webhook processing failed", {
@@ -125,23 +125,23 @@ export const handlePhonePeWebhook = async (req, res) => {
 };
 
 export const getPaymentStatus = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const merchantOrderId = id;
-    
-        const verification = await verifyPhonePePaymentStatus({
-          merchantOrderId,
-          userId: req.user?.id,
-          correlationId: req.correlationId || null,
-        });
-    
-        return handleResponse(res, 200, "Payment status retrieved", {
-          status: verification.status,
-          merchantOrderId: verification.payment.gatewayOrderId,
-          amount: verification.payment.amount,
-          currency: verification.payment.currency,
-        });
-      } catch (error) {
-        return handleResponse(res, error.statusCode || 500, error.message);
-      }
+  try {
+    const { id } = req.params;
+    const merchantOrderId = id;
+
+    const verification = await verifyPhonePePaymentStatus({
+      merchantOrderId,
+      userId: req.user?.id,
+      correlationId: req.correlationId || null,
+    });
+
+    return handleResponse(res, 200, "Payment status retrieved", {
+      status: verification.status,
+      merchantOrderId: verification.payment.gatewayOrderId,
+      amount: verification.payment.amount,
+      currency: verification.payment.currency,
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
 };
