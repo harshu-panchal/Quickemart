@@ -1,6 +1,7 @@
 import Seller from "../../models/seller.js";
 import Order from "../../models/order.js";
 import Product from "../../models/product.js";
+import { getShopStatusMeta } from "../shopTimingService.js";
 import {
   computeMapBounds,
   computeMapCenter,
@@ -62,7 +63,7 @@ export async function getSellerLocationsData({
   const [sellers, allSellersBase] = await Promise.all([
     Seller.find(query)
       .select(
-        "_id sellerId name shopName email phone category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason",
+        "_id sellerId name shopName email phone category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason shopTiming",
       )
       .lean(),
     Seller.find({}).select("address category").lean()
@@ -458,6 +459,8 @@ export async function getActiveSellersData({
       avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
         seller.shopName || seller.name || seller.email || "seller",
       )}`,
+      shopTiming: seller.shopTiming || { openingTime: "08:00", closingTime: "20:00", isTimingEnabled: true, manualOverride: "auto" },
+      shopStatusMeta: getShopStatusMeta(seller),
     };
   });
 

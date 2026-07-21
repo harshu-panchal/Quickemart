@@ -16,7 +16,15 @@ import { useToast } from '@shared/components/ui/Toast';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 
 const CartPage = () => {
-    const { cart, removeFromCart, updateQuantity, cartTotal, clearCart } = useCart();
+    const {
+        cart,
+        removeFromCart,
+        updateQuantity,
+        cartTotal,
+        clearCart,
+        hasClosedStoreItems,
+        removeClosedStoreItems,
+    } = useCart();
     const { showToast } = useToast();
     const itemCount = cart.reduce((count, item) => count + item.quantity, 0);
     const [emptyBoxData, setEmptyBoxData] = useState(null);
@@ -44,6 +52,28 @@ const CartPage = () => {
             </div>
 
             <div className="relative mx-auto w-full max-w-[1440px] px-4 md:px-8 lg:px-12 py-6 md:py-8 lg:py-10">
+                {hasClosedStoreItems && (
+                    <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold text-lg">
+                                ⚠️
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-black text-rose-900">Store Currently Closed</h4>
+                                <p className="text-xs text-rose-700 font-medium">
+                                    One or more items in your cart belong to a shop that has closed or gone offline. Please remove them to proceed with your order.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={removeClosedStoreItems}
+                            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shrink-0"
+                        >
+                            Remove Closed Store Items
+                        </button>
+                    </div>
+                )}
+
                 {cart.length > 0 ? (
                     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
                         <section className="space-y-4">
@@ -78,6 +108,11 @@ const CartPage = () => {
                                                         <span className="inline-flex rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-brand-700">
                                                             {item.category}
                                                         </span>
+                                                        {item.isStoreOpen === false && (
+                                                            <span className="ml-2 inline-flex rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-rose-600">
+                                                                🔴 Store Closed ({item.storeStatusMeta?.reason || "Offline"})
+                                                            </span>
+                                                        )}
                                                         <h3 className="mt-2 truncate text-lg md:text-xl font-black tracking-tight text-slate-900">
                                                             {item.name}
                                                         </h3>
@@ -183,11 +218,20 @@ const CartPage = () => {
                                         </div>
                                     </div>
 
-                                    <Link to="/checkout" className="block">
-                                        <Button className="h-14 w-full rounded-full bg-brand-400 text-slate-950 hover:bg-brand-300 text-base font-black flex items-center justify-center gap-2 shadow-[0_18px_35px_rgba(16,185,129,0.3)] transition-all">
-                                            Place Order <ArrowRight size={18} />
+                                    {hasClosedStoreItems ? (
+                                        <Button
+                                            onClick={() => showToast("Please remove closed store items before placing your order.", "error")}
+                                            className="h-14 w-full rounded-full bg-slate-700 text-white/50 cursor-not-allowed text-base font-black flex items-center justify-center gap-2 transition-all opacity-80"
+                                        >
+                                            Store Closed - Cannot Proceed <ArrowRight size={18} />
                                         </Button>
-                                    </Link>
+                                    ) : (
+                                        <Link to="/checkout" className="block">
+                                            <Button className="h-14 w-full rounded-full bg-brand-400 text-slate-950 hover:bg-brand-300 text-base font-black flex items-center justify-center gap-2 shadow-[0_18px_35px_rgba(16,185,129,0.3)] transition-all">
+                                                Place Order <ArrowRight size={18} />
+                                            </Button>
+                                        </Link>
+                                    )}
 
                                     <div className="grid grid-cols-2 gap-3 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
                                         <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">

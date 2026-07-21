@@ -88,6 +88,8 @@ const CheckoutPage = () => {
     updateQuantity,
     removeFromCart,
     clearCart,
+    hasClosedStoreItems,
+    removeClosedStoreItems,
   } = useCart();
   const { wishlist, addToWishlist, fetchFullWishlist, isFullDataFetched } =
     useWishlist();
@@ -753,6 +755,10 @@ const CheckoutPage = () => {
   }, [cartProductIdKey, currentLocation?.latitude, currentLocation?.longitude]);
 
   const handlePlaceOrder = async () => {
+    if (hasClosedStoreItems) {
+      showToast("One or more items in your cart belong to a closed store. Please remove them to proceed.", "error");
+      return;
+    }
     setIsPlacingOrder(true);
     try {
       const taxAmount = pricingPreview?.taxTotal || 0;
@@ -1018,6 +1024,28 @@ const CheckoutPage = () => {
               displayPhone={displayPhone}
               displayAddress={displayAddress}
             />
+
+            {hasClosedStoreItems && (
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold text-lg">
+                    ⚠️
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-rose-900">Store Currently Closed</h4>
+                    <p className="text-xs text-rose-700 font-medium">
+                      One or more items in your cart belong to a shop that has closed or gone offline. Please remove them to place your order.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={removeClosedStoreItems}
+                  className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shrink-0"
+                >
+                  Remove Closed Store Items
+                </button>
+              </div>
+            )}
 
             {/* Cart Summary */}
             <CheckoutCartSummary

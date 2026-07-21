@@ -1,6 +1,7 @@
 import Product from "../../models/product.js";
 import Category from "../../models/category.js";
 import Seller from "../../models/seller.js";
+import { isShopCurrentlyOpen } from "../shopTimingService.js";
 import {
   PRODUCT_APPROVAL_STATUS,
   resolveProductApprovalStatus,
@@ -379,7 +380,7 @@ export async function hydrateOrderItems(
   const productMap = new Map(products.map((product) => [String(product._id), product]));
   
   const sellerIds = [...new Set(products.map((p) => String(p.sellerId)).filter(Boolean))];
-  const sellers = await Seller.find({ _id: { $in: sellerIds } }).select("_id isActive shopName").lean();
+  const sellers = await Seller.find({ _id: { $in: sellerIds } }).select("_id isActive shopName shopTiming applicationStatus").lean();
   const sellerMap = new Map(sellers.map((s) => [String(s._id), s]));
 
   const categoryIds = [...new Set(products.map((p) => String(p.headerId || p.categoryId)).filter(Boolean))];
@@ -395,8 +396,10 @@ export async function hydrateOrderItems(
       throw new Error(`Product not found for line item: ${productId}`);
     }
     const seller = sellerMap.get(String(product.sellerId));
-    if (!seller || !seller.isActive) {
-      throw new Error(`The shop "${seller?.shopName || "Seller"}" is currently closed and not accepting orders.`);
+    if (!seller || !isShopCurrentlyOpen(seller)) {
+      const err = new Error(`The shop "${seller?.shopName || "Seller"}" is currently closed and not accepting orders.`);
+      err.statusCode = 400;
+      throw err;
     }
     if (product.status !== "active") {
       throw new Error(`Product is not available for purchase: ${product.name}`);

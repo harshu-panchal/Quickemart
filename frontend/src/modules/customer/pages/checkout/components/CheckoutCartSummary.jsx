@@ -35,6 +35,13 @@ const CheckoutCartSummary = React.memo(function CheckoutCartSummary({
           </div>
           <div className="flex-1 min-w-0">
             <h4 className="font-bold text-slate-800 mb-1">{item.name}</h4>
+            {item.isStoreOpen === false && (
+              <div className="mb-1">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200">
+                  🔴 Store Closed ({item.storeStatusMeta?.reason || "Offline"})
+                </span>
+              </div>
+            )}
             {(item.variantName || item.variantSku) && (
               <p className="text-xs text-slate-500 mb-1">
                 Variant: {item.variantName || item.variantSku}

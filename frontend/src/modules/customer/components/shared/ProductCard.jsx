@@ -120,6 +120,11 @@ const ProductCard = React.memo(
         e.preventDefault();
         e.stopPropagation();
 
+        if (product.isStoreOpen === false) {
+          showToast(`The store for "${product.name}" is currently offline or closed.`, "error");
+          return;
+        }
+
         // If the product has multiple variants, open the product detail sheet
         // so the user can select which variant they want to add.
         const variants = Array.isArray(product?.variants) ? product.variants : [];
@@ -144,16 +149,20 @@ const ProductCard = React.memo(
           toggleWishlistGlobal(product);
         }
       },
-      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name, openProduct, isWishlistPage, isWishlisted, toggleWishlistGlobal],
+      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name, openProduct, isWishlistPage, isWishlisted, toggleWishlistGlobal, showToast],
     );
 
     const handleIncrement = React.useCallback(
       (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (product.isStoreOpen === false) {
+          showToast(`The store for "${product.name}" is currently offline or closed.`, "error");
+          return;
+        }
         updateQuantity(productId, 1, variantKey);
       },
-      [updateQuantity, productId, variantKey],
+      [updateQuantity, productId, variantKey, product.isStoreOpen, product.name, showToast],
     );
 
     const handleDecrement = React.useCallback(

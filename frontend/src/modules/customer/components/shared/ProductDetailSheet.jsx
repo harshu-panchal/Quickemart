@@ -659,6 +659,7 @@ const ProductDetailSheet = () => {
                                             )}
 
                                             {/* Product Details */}
+                                            {/* 
                                             <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                                 id="details" 
                                                 title="Product Details" 
@@ -678,6 +679,7 @@ const ProductDetailSheet = () => {
                                                     ))}
                                                 </div>
                                             </AccordionItem>
+                                            */}
 
                                             {/* Customer Reviews */}
                                             <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
@@ -943,7 +945,7 @@ const ProductDetailSheet = () => {
                                         </AccordionItem>
                                     )}
 
-                                    {/* Product Details */}
+                                    {/* Product Details - Static section commented out
                                     <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                         id="details" 
                                         title="Product Details" 
@@ -963,6 +965,7 @@ const ProductDetailSheet = () => {
                                             ))}
                                         </div>
                                     </AccordionItem>
+                                    */}
 
                                     {/* Customer Reviews */}
                                     <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}

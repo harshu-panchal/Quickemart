@@ -13,6 +13,7 @@ import {
   Globe,
   MapPin,
   CheckCircle,
+  Clock,
 } from "lucide-react";
 import { sellerApi } from "../services/sellerApi";
 import { toast } from "sonner";
@@ -35,6 +36,10 @@ const SellerProfile = () => {
     lng: null,
     radius: 5,
     address: "",
+    openingTime: "08:00",
+    closingTime: "20:00",
+    isTimingEnabled: true,
+    manualOverride: "auto",
   });
 
   useEffect(() => {
@@ -47,14 +52,18 @@ const SellerProfile = () => {
       const data = response.data.result;
       setProfile(data);
       setFormData({
-        name: data.name,
-        shopName: data.shopName,
-        phone: data.phone,
-        email: data.email,
+        name: data.name || "",
+        shopName: data.shopName || "",
+        phone: data.phone || "",
+        email: data.email || "",
         lat: data.location?.coordinates[1] || null,
         lng: data.location?.coordinates[0] || null,
         radius: data.serviceRadius || 5,
         address: data.address || "",
+        openingTime: data.shopTiming?.openingTime || "08:00",
+        closingTime: data.shopTiming?.closingTime || "20:00",
+        isTimingEnabled: data.shopTiming?.isTimingEnabled !== false,
+        manualOverride: data.shopTiming?.manualOverride || "auto",
       });
     } catch (error) {
       toast.error("Failed to fetch profile");
@@ -74,8 +83,10 @@ const SellerProfile = () => {
   };
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    if (name === "name") {
+    const { name, value, type, checked } = e.target;
+    if (type === "checkbox") {
+      setFormData({ ...formData, [name]: checked });
+    } else if (name === "name") {
       // Disallow numbers in seller name
       const cleaned = value.replace(/[0-9]/g, "");
       setFormData({ ...formData, [name]: cleaned });
@@ -106,15 +117,28 @@ const SellerProfile = () => {
     setIsSaving(true);
     try {
       const payload = {
-        ...formData,
+        name: formData.name,
+        shopName: formData.shopName,
+        phone: formData.phone,
+        email: formData.email,
         lat: formData.lat,
         lng: formData.lng,
         radius: formData.radius,
+        address: formData.address,
+        shopTiming: {
+          openingTime: formData.openingTime,
+          closingTime: formData.closingTime,
+          isTimingEnabled: formData.isTimingEnabled,
+          manualOverride: formData.manualOverride,
+        },
       };
-      await sellerApi.updateProfile(payload);
+      const response = await sellerApi.updateProfile(payload);
+      const updatedData = response.data?.result;
+      if (updatedData) {
+        setProfile(updatedData);
+      }
       toast.success("Profile updated successfully");
       setIsEditing(false);
-      fetchProfile();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update profile");
     } finally {
@@ -124,9 +148,14 @@ const SellerProfile = () => {
 
   const toggleStatus = async () => {
     try {
-      const newStatus = !profile.isActive;
-      await sellerApi.updateProfile({ isActive: newStatus });
-      setProfile((prev) => ({ ...prev, isActive: newStatus }));
+      const newStatus = !profile?.isActive;
+      const response = await sellerApi.updateProfile({ isActive: newStatus });
+      const updatedData = response.data?.result;
+      if (updatedData) {
+        setProfile(updatedData);
+      } else {
+        setProfile((prev) => ({ ...prev, isActive: newStatus }));
+      }
       toast.success(`Shop is now ${newStatus ? "Active" : "Inactive"}`);
     } catch (error) {
       toast.error("Failed to update shop status");
@@ -346,6 +375,183 @@ const SellerProfile = () => {
                 </div>
               </div>
             </form>
+          </Card>
+
+          {/* Shop Operating Hours Card */}
+          <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-lg">
+            <div className="flex flex-wrap justify-between items-center mb-8 border-b border-slate-50 pb-4 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">
+                    Shop Operating Hours
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Set daily store opening and closing times. Products are hidden when shop is closed.
+                  </p>
+                </div>
+              </div>
+
+              {/* Live Status & Quick Edit Actions */}
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 ${
+                  profile?.shopStatusMeta?.isOpen
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    : "bg-rose-100 text-rose-800 border border-rose-300"
+                }`}>
+                  <span className={`w-2.5 h-2.5 rounded-full ${profile?.shopStatusMeta?.isOpen ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                  {profile?.shopStatusMeta?.isOpen ? "🟢 OPEN (Online)" : "🔴 CLOSED (Offline)"}
+                </span>
+
+                {!isEditing ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(true);
+                      toast.info("Edit mode enabled. Change opening & closing times below, then click Save.");
+                    }}
+                    className="bg-slate-900 text-white hover:bg-black rounded-lg px-5 py-2.5 text-xs font-black tracking-[1px] flex items-center gap-2 shadow-sm transition-all hover:scale-105">
+                    <Edit2 size={14} /> EDIT TIMINGS
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={isSaving}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg px-5 py-2.5 text-xs font-black tracking-[1px] flex items-center gap-2 shadow-sm transition-all hover:scale-105">
+                    <Save size={14} /> {isSaving ? "SAVING..." : "SAVE TIMINGS"}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {!isEditing && (
+                <div 
+                  onClick={() => {
+                    setIsEditing(true);
+                    toast.info("Edit mode enabled. Adjust times and click Save Timings.");
+                  }}
+                  className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 flex items-center justify-between gap-3 cursor-pointer hover:bg-amber-100/70 transition-colors"
+                >
+                  <p className="text-xs font-bold text-amber-900 flex items-center gap-2">
+                    <Edit2 size={14} className="text-amber-700" />
+                    Inputs are currently locked. Click here or tap "EDIT TIMINGS" above to change store hours.
+                  </p>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 bg-amber-200 text-amber-900 rounded-md">
+                    Click to Edit
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1">
+                    Opening Time (Daily)
+                  </label>
+                  <input
+                    type="time"
+                    name="openingTime"
+                    value={formData.openingTime}
+                    onChange={handleChange}
+                    disabled={!isEditing}
+                    onClick={() => {
+                      if (!isEditing) {
+                        setIsEditing(true);
+                        toast.info("Edit mode enabled for Shop Operating Hours");
+                      }
+                    }}
+                    className={`w-full px-6 py-4 rounded-lg text-base font-black outline-none transition-all ${
+                      isEditing
+                        ? "bg-white border-2 border-slate-900 text-slate-900 shadow-sm"
+                        : "bg-slate-100 border-2 border-transparent text-slate-700 cursor-pointer hover:bg-slate-200"
+                    }`}
+                  />
+                  <span className="text-[11px] font-bold text-slate-400 block ml-1">
+                    Default: 08:00 AM (08:00)
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1">
+                    Closing Time (Daily)
+                  </label>
+                  <input
+                    type="time"
+                    name="closingTime"
+                    value={formData.closingTime}
+                    onChange={handleChange}
+                    disabled={!isEditing}
+                    onClick={() => {
+                      if (!isEditing) {
+                        setIsEditing(true);
+                        toast.info("Edit mode enabled for Shop Operating Hours");
+                      }
+                    }}
+                    className={`w-full px-6 py-4 rounded-lg text-base font-black outline-none transition-all ${
+                      isEditing
+                        ? "bg-white border-2 border-slate-900 text-slate-900 shadow-sm"
+                        : "bg-slate-100 border-2 border-transparent text-slate-700 cursor-pointer hover:bg-slate-200"
+                    }`}
+                  />
+                  <span className="text-[11px] font-bold text-slate-400 block ml-1">
+                    Default: 08:00 PM (20:00)
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                <div className="space-y-3">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1">
+                    Manual Mode Override
+                  </label>
+                  <select
+                    name="manualOverride"
+                    value={formData.manualOverride}
+                    onChange={handleChange}
+                    disabled={!isEditing}
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-900 transition-all disabled:opacity-70"
+                  >
+                    <option value="auto">Automatic (Follow Daily Hours)</option>
+                    <option value="open">Force Always Open</option>
+                    <option value="closed">Force Always Closed</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 pt-6">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="isTimingEnabled"
+                      checked={formData.isTimingEnabled}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                  <div>
+                    <span className="text-sm font-bold text-slate-900 block">
+                      Enforce Daily Operating Hours
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {formData.isTimingEnabled ? "Enabled - Store goes offline outside operating hours." : "Disabled - Store stays open continuously."}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {profile?.shopStatusMeta?.reason && (
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/60 flex items-center gap-3">
+                  <Clock size={16} className="text-slate-500 flex-shrink-0" />
+                  <p className="text-xs text-slate-700 font-bold">
+                    Current Operating Status: <span className="font-medium">{profile.shopStatusMeta.reason}</span>
+                  </p>
+                </div>
+              )}
+            </div>
           </Card>
 
           {/* Location & Radius Settings Card */}

@@ -4,7 +4,7 @@ import Card from "@shared/components/ui/Card";
 import PageHeader from "@shared/components/ui/PageHeader";
 import Badge from "@shared/components/ui/Badge";
 import {
-  DollarSign,
+  IndianRupee,
   Truck,
   Package,
   TrendingUp,
@@ -45,17 +45,22 @@ const Dashboard = () => {
     useSellerOrders();
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState(null);
+  const [sellerProfile, setSellerProfile] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const fetchStats = async () => {
+    const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const statsRes = await sellerApi.getStats();
+        const [statsRes, profileRes] = await Promise.all([
+          sellerApi.getStats().catch(() => ({ data: { success: false } })),
+          sellerApi.getProfile().catch(() => ({ data: { success: false } })),
+        ]);
         if (cancelled) return;
-        if (statsRes.data.success) setStatsData(statsRes.data.result);
+        if (statsRes.data?.success) setStatsData(statsRes.data.result);
+        if (profileRes.data?.success) setSellerProfile(profileRes.data.result);
       } catch (error) {
         if (!cancelled) {
           console.error("Dashboard Fetch Error:", error);
@@ -65,7 +70,7 @@ const Dashboard = () => {
         if (!cancelled) setLoading(false);
       }
     };
-    fetchStats();
+    fetchDashboardData();
     return () => { cancelled = true; };
   }, []);
 
@@ -96,7 +101,7 @@ const Dashboard = () => {
       value: statsData?.overview?.totalSales || "₹0",
       change: "+12.5%",
       changeType: "increase",
-      icon: DollarSign,
+      icon: IndianRupee,
       iconBg: "bg-brand-50",
       iconColor: "text-brand-600",
       description: "vs last month",
@@ -155,7 +160,7 @@ const Dashboard = () => {
     {
       title: "View Earnings",
       description: "Check your revenue and payouts",
-      icon: DollarSign,
+      icon: IndianRupee,
       path: "/seller/earnings",
       variant: "outline-emerald", // white bg, border, emerald accent
     },
@@ -248,6 +253,38 @@ const Dashboard = () => {
         title="Dashboard"
         description="Welcome back! Here's what's happening with your store today."
       />
+
+      {/* Store Operating Hours Status Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-lg ${sellerProfile?.shopStatusMeta?.isOpen ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-bold text-slate-900">Store Live Status:</h4>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wider ${
+                sellerProfile?.shopStatusMeta?.isOpen
+                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                  : "bg-rose-100 text-rose-800 border border-rose-300"
+              }`}>
+                {sellerProfile?.shopStatusMeta?.isOpen ? "🟢 OPEN (Online)" : "🔴 CLOSED (Offline)"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              {sellerProfile?.shopStatusMeta?.reason || "Operating Hours: 08:00 AM - 08:00 PM"}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => navigate("/seller/profile")}
+          className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+        >
+          Manage Operating Hours
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

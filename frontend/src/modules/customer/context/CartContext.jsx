@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { customerApi } from "../services/customerApi";
 import { useAuth } from "../../../core/context/AuthContext";
+import { useToast } from "@shared/components/ui/Toast";
 import { getJSON, setJSON, remove as removeStorage, STORAGE_KEYS } from "@core/utils/storage";
 
 const CartContext = createContext();
@@ -18,6 +19,7 @@ export const useCart = () => useContext(CartContext);
 
 export const CartProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
   const [cart, setCart] = useState(() => loadGuestCart());
 
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,8 @@ export const CartProvider = ({ children }) => {
         price,
         salePrice,
         image: product?.mainImage, // Handle mapping for frontend
+        isStoreOpen: product?.isStoreOpen !== false,
+        storeStatusMeta: product?.storeStatusMeta || null,
       };
     });
   };
@@ -126,6 +130,12 @@ export const CartProvider = ({ children }) => {
     const key = `${id}::${variantSku || ""}`;
     const { price, salePrice, variantName } = resolveVariantPricing(product, variantSku);
 
+    // Track previous item quantity for instant rollback if API call fails
+    const existingItemBefore = cart.find(
+      (item) => `${item.id || item._id}::${String(item.variantSku || "").trim()}` === key,
+    );
+    const previousQty = existingItemBefore ? existingItemBefore.quantity : 0;
+
     // Optimistic UI update for instant feedback
     setCart((prev) => {
       const existingItem = prev.find(
@@ -166,8 +176,28 @@ export const CartProvider = ({ children }) => {
         await syncCart(response.data.result.items);
       } catch (error) {
         pendingRequestsRef.current -= 1;
-        console.error("Error adding to cart on backend", error);
-        // Re-fetch entire cart to ensure consistency on error
+        const errorMsg =
+          error.response?.data?.message ||
+          "Store is offline or closed. Item cannot be added right now.";
+
+        // INSTANTLY rollback cart state (0ms delay, no 1-second pop-back flicker)
+        setCart((prev) => {
+          if (previousQty > 0) {
+            return prev.map((item) =>
+              `${item.id || item._id}::${String(item.variantSku || "").trim()}` === key
+                ? { ...item, quantity: previousQty }
+                : item,
+            );
+          }
+          return prev.filter(
+            (item) => `${item.id || item._id}::${String(item.variantSku || "").trim()}` !== key,
+          );
+        });
+
+        if (showToast) {
+          showToast(errorMsg, "error");
+        }
+
         if (pendingRequestsRef.current === 0) {
           await fetchCart();
         }
@@ -216,6 +246,7 @@ export const CartProvider = ({ children }) => {
     );
     if (!currentItem) return;
 
+    const previousQty = currentItem.quantity;
     const newQty = Math.max(0, currentItem.quantity + delta);
 
     if (newQty === 0) {
@@ -248,7 +279,27 @@ export const CartProvider = ({ children }) => {
         await syncCart(response.data.result.items);
       } catch (error) {
         pendingRequestsRef.current -= 1;
-        console.error("Error updating quantity on backend", error);
+        const errorMsg =
+          error.response?.data?.message ||
+          "Could not update cart quantity. Store may be offline.";
+
+        // Instant rollback
+        setCart((prev) =>
+          prev.map((item) => {
+            if (
+              `${item.id || item._id}::${String(item.variantSku || "").trim()}` ===
+              key
+            ) {
+              return { ...item, quantity: previousQty };
+            }
+            return item;
+          }),
+        );
+
+        if (showToast) {
+          showToast(errorMsg, "error");
+        }
+
         if (pendingRequestsRef.current === 0) {
           await fetchCart();
         }
@@ -266,6 +317,17 @@ export const CartProvider = ({ children }) => {
       }
     } else {
       setCart([]);
+    }
+  };
+
+  const hasClosedStoreItems = useMemo(() => {
+    return cart.some((item) => item.isStoreOpen === false);
+  }, [cart]);
+
+  const removeClosedStoreItems = async () => {
+    const closedItems = cart.filter((item) => item.isStoreOpen === false);
+    for (const item of closedItems) {
+      await removeFromCart(item.id || item._id, item.variantSku || "");
     }
   };
 
@@ -295,12 +357,15 @@ export const CartProvider = ({ children }) => {
     removeFromCart,
     updateQuantity,
     clearCart,
+    fetchCart,
+    hasClosedStoreItems,
+    removeClosedStoreItems,
     cartTotal,
     gstTotal,
     cartCount,
     loading,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cart, cartTotal, gstTotal, cartCount, loading]);
+  }), [cart, cartTotal, gstTotal, cartCount, loading, hasClosedStoreItems]);
 
   return (
     <CartContext.Provider value={cartValue}>

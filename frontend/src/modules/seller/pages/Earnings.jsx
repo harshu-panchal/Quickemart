@@ -5,7 +5,7 @@ import Button from "@shared/components/ui/Button";
 import {
   TrendingUp,
   BarChart3,
-  DollarSign,
+  IndianRupee,
   Download,
   Banknote,
   ArrowDownToLine,
@@ -131,7 +131,7 @@ const Earnings = () => {
                 <h3 className="text-4xl font-bold mt-2">₹{Number(data?.balances?.totalRevenue ?? 0).toLocaleString()}</h3>
               </div>
               <div className="p-3 bg-white/20 rounded-xl">
-                <DollarSign className="h-8 w-8 text-white" />
+                <IndianRupee className="h-8 w-8 text-white" />
               </div>
             </div>
             <div className="mt-8 flex items-center text-brand-100 bg-white/10 w-fit px-3 py-1 rounded-full text-sm">

@@ -1043,13 +1043,26 @@ const ActiveSellers = () => {
                     </td>
 
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2">
-                        <Badge
-                          variant="success"
-                          className="w-fit text-[8px] font-black uppercase tracking-widest"
-                        >
-                          Active
-                        </Badge>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge
+                            variant="success"
+                            className="w-fit text-[8px] font-black uppercase tracking-widest"
+                          >
+                            Active
+                          </Badge>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                            seller.shopStatusMeta?.isOpen
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-800"
+                          }`}>
+                            {seller.shopStatusMeta?.isOpen ? "🟢 OPEN" : "🔴 CLOSED"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-600">
+                          <HiOutlineClock className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                          <span>{seller.shopTiming?.openingTime || "08:00"} - {seller.shopTiming?.closingTime || "20:00"}</span>
+                        </div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                           Last order: {seller.lastOrderLabel || "No orders yet"}
                         </span>
@@ -1266,9 +1279,19 @@ const ActiveSellers = () => {
                         Store Health
                       </p>
                       <div className="p-4 bg-white rounded-2xl ring-1 ring-slate-100">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
                           <span>Verification</span>
                           <span className="text-brand-600">Verified</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
+                          <span>Live Store Status</span>
+                          <span className={selectedSeller.shopStatusMeta?.isOpen ? "text-emerald-600 font-black" : "text-rose-600 font-black"}>
+                            {selectedSeller.shopStatusMeta?.isOpen ? "🟢 OPEN (Online)" : "🔴 CLOSED (Offline)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
+                          <span>Operating Hours</span>
+                          <span>{selectedSeller.shopTiming?.openingTime || "08:00"} - {selectedSeller.shopTiming?.closingTime || "20:00"}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
                           <span>Joined</span>

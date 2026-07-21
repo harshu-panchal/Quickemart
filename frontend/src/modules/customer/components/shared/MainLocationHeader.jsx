@@ -357,12 +357,12 @@ const MainLocationHeader = ({
               <div
                 onClick={() => navigate("/")}
                 className="flex items-center gap-3 cursor-pointer group shrink-0">
-                <div className="group-hover:scale-110 transition-all duration-300 drop-shadow-[0_2px_8px_rgba(255,255,255,0.2)]">
+                <div className="group-hover:scale-110 transition-all duration-300 drop-shadow-[0_4px_14px_rgba(0,0,0,0.2)]">
                   <img
                     src={logoUrl}
                     alt={`${appName} Logo`}
                     loading="lazy"
-                    className="h-24 md:h-28 w-auto object-contain"
+                    className="h-32 sm:h-36 md:h-44 lg:h-52 xl:h-56 w-auto object-contain max-h-[200px]"
                   />
                 </div>
               </div>
@@ -474,7 +474,14 @@ const MainLocationHeader = ({
           <div className="md:hidden">
             <motion.div
               className="relative z-10 mb-4">
-              <div className="mb-1">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <img
+                  src={logoUrl}
+                  alt={`${appName} Logo`}
+                  loading="lazy"
+                  onClick={() => navigate("/")}
+                  className="h-16 sm:h-20 w-auto object-contain cursor-pointer transition-transform hover:scale-105 drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                />
                 <span 
                   className="inline-flex items-center rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"
                   style={{ color: headerFontColor }}

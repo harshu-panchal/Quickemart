@@ -4,6 +4,7 @@ import { handleResponse, calculateDistance } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
 import { buildKey, invalidate } from "../services/cacheService.js";
+import { getShopStatusMeta, isShopCurrentlyOpen } from "../services/shopTimingService.js";
 
 /* ===============================
    GET NEARBY SELLERS
@@ -20,8 +21,6 @@ export const getNearbySellers = async (req, res) => {
     const customerLng = Number(lng);
 
     // Fetch all active/verified sellers
-    // We could use $geoNear, but to strictly follow the requirement of individual radii,
-    // we'll fetch sellers within a reasonable max distance (e.g. 100km) and then filter.
     const sellers = await Seller.find({
       isActive: true,
       isVerified: true,
@@ -36,8 +35,10 @@ export const getNearbySellers = async (req, res) => {
       },
     }).lean();
 
-    // Filter based on individual service radius
+    // Filter based on individual service radius and shop timing
     const nearbySellers = sellers.filter((seller) => {
+      if (!isShopCurrentlyOpen(seller)) return false;
+
       const sellerLng = seller.location.coordinates[0];
       const sellerLat = seller.location.coordinates[1];
       const distance = calculateDistance(
@@ -49,6 +50,7 @@ export const getNearbySellers = async (req, res) => {
 
       // Add distance to seller object for frontend
       seller.distance = distance;
+      seller.shopStatusMeta = getShopStatusMeta(seller);
 
       return distance <= (seller.serviceRadius || 5);
     });
@@ -138,11 +140,14 @@ export const getSellerProfile = async (req, res) => {
     if (!seller) {
       return handleResponse(res, 404, "Seller not found");
     }
+    const sellerObj = seller.toObject();
+    sellerObj.shopStatusMeta = getShopStatusMeta(seller);
+
     return handleResponse(
       res,
       200,
       "Seller profile fetched successfully",
-      seller,
+      sellerObj,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -154,7 +159,21 @@ export const getSellerProfile = async (req, res) => {
 ================================ */
 export const updateSellerProfile = async (req, res) => {
   try {
-    const { name, shopName, phone, address, locality, pincode, city, state, lat, lng, radius, isActive } = req.body;
+    const {
+      name,
+      shopName,
+      phone,
+      address,
+      locality,
+      pincode,
+      city,
+      state,
+      lat,
+      lng,
+      radius,
+      isActive,
+      shopTiming,
+    } = req.body;
 
     // Find seller
     const seller = await Seller.findById(req.user.id);
@@ -172,6 +191,42 @@ export const updateSellerProfile = async (req, res) => {
     if (city !== undefined) seller.city = city;
     if (state !== undefined) seller.state = state;
     if (isActive !== undefined) seller.isActive = isActive;
+
+    let timingChanged = false;
+    if (shopTiming && typeof shopTiming === "object") {
+      if (!seller.shopTiming) {
+        seller.shopTiming = { openingTime: "08:00", closingTime: "20:00", isTimingEnabled: true, manualOverride: "auto" };
+      }
+
+      if (shopTiming.openingTime !== undefined) {
+        if (!/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/.test(String(shopTiming.openingTime).trim())) {
+          return handleResponse(res, 400, "Invalid opening time format. Use HH:mm (e.g. 08:00)");
+        }
+        seller.shopTiming.openingTime = String(shopTiming.openingTime).trim();
+        timingChanged = true;
+      }
+
+      if (shopTiming.closingTime !== undefined) {
+        if (!/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/.test(String(shopTiming.closingTime).trim())) {
+          return handleResponse(res, 400, "Invalid closing time format. Use HH:mm (e.g. 20:00)");
+        }
+        seller.shopTiming.closingTime = String(shopTiming.closingTime).trim();
+        timingChanged = true;
+      }
+
+      if (shopTiming.isTimingEnabled !== undefined) {
+        seller.shopTiming.isTimingEnabled = Boolean(shopTiming.isTimingEnabled);
+        timingChanged = true;
+      }
+
+      if (shopTiming.manualOverride !== undefined) {
+        if (!["auto", "open", "closed"].includes(shopTiming.manualOverride)) {
+          return handleResponse(res, 400, "Invalid manual override option. Allowed: auto, open, closed");
+        }
+        seller.shopTiming.manualOverride = shopTiming.manualOverride;
+        timingChanged = true;
+      }
+    }
 
     // Validate and update geo data
     if (lat !== undefined && lng !== undefined) {
@@ -199,7 +254,7 @@ export const updateSellerProfile = async (req, res) => {
       console.warn("[Seller] Name cache invalidation failed:", err.message);
     });
 
-    if (isActive !== undefined) {
+    if (isActive !== undefined || timingChanged) {
       Promise.all([
         invalidate(buildKey("sellers", "nearby", "*")),
         invalidate(buildKey("catalog", "productList", "*")),
@@ -210,11 +265,14 @@ export const updateSellerProfile = async (req, res) => {
       });
     }
 
+    const resObj = updatedSeller.toObject();
+    resObj.shopStatusMeta = getShopStatusMeta(updatedSeller);
+
     return handleResponse(
       res,
       200,
       "Profile updated successfully",
-      updatedSeller,
+      resObj,
     );
   } catch (error) {
     // Handle duplicate phone error

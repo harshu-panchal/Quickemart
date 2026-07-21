@@ -126,6 +126,27 @@ const sellerSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    shopTiming: {
+      openingTime: {
+        type: String,
+        default: "08:00",
+        trim: true,
+      },
+      closingTime: {
+        type: String,
+        default: "20:00",
+        trim: true,
+      },
+      isTimingEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      manualOverride: {
+        type: String,
+        enum: ["auto", "open", "closed"],
+        default: "auto",
+      },
+    },
     location: {
       type: {
         type: String,

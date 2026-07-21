@@ -1,10 +1,12 @@
 import Cart from "../models/cart.js";
 import Product from "../models/product.js";
+import Seller from "../models/seller.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 
 import Category from "../models/category.js";
 import { calculateCustomerDisplayPrice } from "../services/finance/pricingService.js";
+import { isShopCurrentlyOpen, getShopStatusMeta } from "../services/shopTimingService.js";
 
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants";
@@ -24,6 +26,12 @@ async function sanitizeCartItems(cart) {
     .lean();
   const categoryMap = new Map(categoryDocs.map(c => [String(c._id), c]));
 
+  const sellerIds = [...new Set(cart.items.map(item => String(item.productId?.sellerId || "")).filter(Boolean))];
+  const sellers = await Seller.find({ _id: { $in: sellerIds } })
+    .select("_id shopName shopTiming manualOverride isActive applicationStatus")
+    .lean();
+  const sellerMap = new Map(sellers.map(s => [String(s._id), s]));
+
   cart.items = cart.items.map((item) => {
     const p = item.productId;
     if (!p) return item;
@@ -34,6 +42,11 @@ async function sanitizeCartItems(cart) {
 
     const saleDisplay = calculateCustomerDisplayPrice(rawSale, catConfig).customerDisplayPrice;
     const regDisplay = calculateCustomerDisplayPrice(rawReg, catConfig).customerDisplayPrice;
+
+    const seller = sellerMap.get(String(p.sellerId));
+    const shopMeta = seller
+      ? getShopStatusMeta(seller)
+      : { isOpen: false, statusLabel: "Closed", reason: "Store unavailable" };
 
     const updatedVariants = (p.variants || []).map((v) => {
       const vSale = Number(v.salePrice || v.price || 0);
@@ -50,6 +63,8 @@ async function sanitizeCartItems(cart) {
       ...item,
       productId: {
         ...p,
+        isStoreOpen: shopMeta.isOpen,
+        storeStatusMeta: shopMeta,
         sellerBasePrice: rawSale,
         salePrice: saleDisplay,
         price: regDisplay,
@@ -67,7 +82,7 @@ async function getCustomerVisibleProductById(productId) {
     _id: productId,
     ...CUSTOMER_VISIBLE_PRODUCT_MATCH,
   })
-    .select("_id")
+    .select("_id sellerId")
     .lean();
 }
 
@@ -119,6 +134,18 @@ export const addToCart = async (req, res) => {
     const customerVisibleProduct = await getCustomerVisibleProductById(productId);
     if (!customerVisibleProduct) {
       return handleResponse(res, 404, "Product is not available for purchase");
+    }
+
+    const seller = await Seller.findById(customerVisibleProduct.sellerId)
+      .select("_id shopName shopTiming manualOverride isActive applicationStatus")
+      .lean();
+    if (!seller || !isShopCurrentlyOpen(seller)) {
+      const shopMeta = seller ? getShopStatusMeta(seller) : { reason: "Store closed" };
+      return handleResponse(
+        res,
+        400,
+        `The shop "${seller?.shopName || "Store"}" is currently offline or closed. Items cannot be added right now.`,
+      );
     }
 
     let cart = await Cart.findOne({ customerId });

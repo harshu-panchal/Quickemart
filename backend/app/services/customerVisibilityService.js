@@ -1,6 +1,7 @@
 import Seller from "../models/seller.js";
 import { calculateDistance } from "../utils/helper.js";
 import { buildKey, getOrSet, getTTL } from "./cacheService.js";
+import { isShopCurrentlyOpen } from "./shopTimingService.js";
 
 const MAX_SELLER_SEARCH_DISTANCE_M = 100000;
 
@@ -43,11 +44,12 @@ export async function getNearbySellerIdsForCustomer(lat, lng) {
         },
       },
     })
-      .select("_id location serviceRadius")
+      .select("_id location serviceRadius isActive shopTiming applicationStatus")
       .lean();
 
     return sellers
       .filter((seller) => {
+        if (!isShopCurrentlyOpen(seller)) return false;
         const coords = seller?.location?.coordinates;
         if (!Array.isArray(coords) || coords.length < 2) return false;
         const [sellerLng, sellerLat] = coords;
