@@ -38,6 +38,9 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
     ? pricingPreview.taxTotal
     : (Math.round((cartTotal * 0.05) * 100) / 100);
 
+  const productSubtotal = pricingPreview?.productSubtotal ?? cartTotal;
+  const gstPercentage = productSubtotal > 0 ? Math.round((taxAmount / productSubtotal) * 100) : 5;
+
   const displayTotalPayable = (pricingPreview?.grandTotal !== undefined && pricingPreview?.grandTotal > 0)
     ? Math.max(0, pricingPreview.grandTotal - walletAmountToUse)
     : Math.max(0, cartTotal + deliveryFee + taxAmount + tipAmount - discountAmount - walletAmountToUse);
@@ -112,9 +115,9 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
             )}
           <div className="flex justify-between items-center px-2">
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              Tax
+              GST TAX
             </span>
-            <span className="font-black text-slate-800">₹{taxAmount}</span>
+            <span className="font-black text-slate-800">{gstPercentage}%</span>
           </div>
 
           {selectedCoupon && (

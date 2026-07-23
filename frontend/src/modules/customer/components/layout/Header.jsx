@@ -100,12 +100,18 @@ const Header = () => {
                 </div>
 
                 {/* Main Header Capsule */}
-                <div className="px-4 md:px-8 h-18 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl flex items-center justify-between border border-white/20">
-                    {/* Logo */}
-                    <div className="flex items-center gap-6 mr-4 md:mr-12">
-                        <Link to="/" className="flex items-center gap-1">
-                            <span className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: settings?.primaryColor || 'var(--primary)' }}>{settings?.appName || 'App'}</span>
+                <div className="px-5 md:px-8 h-18 md:h-20 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl flex items-center justify-between border border-white/20">
+                    {/* Logo Box & Vertical Separator & Location */}
+                    <div className="flex items-center gap-4 mr-4">
+                        {/* Logo (No BG, Extra Large Text/Image) */}
+                        <Link to="/" className="flex items-center hover:opacity-90 transition-opacity">
+                            <span className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight" style={{ color: settings?.primaryColor || 'var(--primary)' }}>
+                                {settings?.appName || 'App'}
+                            </span>
                         </Link>
+
+                        {/* Vertical Separator Line */}
+                        <div className="hidden md:block h-8 border-r border-slate-200 shrink-0" />
 
                         {/* Location Selector (Desktop ONLY) */}
                         <button
@@ -116,63 +122,65 @@ const Header = () => {
                                 refreshLocation();
                                 setIsLocationOpen(true);
                             }}
-                            className="hidden md:flex items-center gap-2 pl-6 border-l border-slate-200 cursor-pointer active:scale-95 transition-transform border-0 bg-transparent p-0"
+                            className="hidden md:flex items-center gap-2 cursor-pointer active:scale-95 transition-transform border-0 bg-transparent p-0"
                         >
-                            <div className="flex flex-col items-start leading-none group">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 group-hover:text-[var(--primary)] transition-colors">
-                                    Delivery in {currentLocation.time}
+                            <div className="flex flex-col items-start leading-tight group">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-[var(--primary)] transition-colors">
+                                    {currentLocation.time || '12-15 MINS'}
                                 </span>
-                                <div className="flex items-center gap-1 font-bold text-slate-700 text-sm group-hover:text-[var(--primary)] transition-colors">
-                                    <span className="max-w-[150px] truncate">{currentLocation.name}</span> <MapPin size={14} className="fill-current" />
+                                <div className="flex items-center gap-1 font-extrabold text-slate-700 text-xs group-hover:text-[var(--primary)] transition-colors">
+                                    <span className="max-w-[140px] truncate">{currentLocation.name}</span> <MapPin size={13} className="fill-current" />
                                 </div>
                             </div>
                         </button>
                     </div>
 
                     {/* Desktop Navigation */}
-                    <nav className="hidden md:flex items-center gap-6">
-                        <Link to="/" className="text-sm font-medium transition-colors hover:text-[var(--primary)]">Home</Link>
-
-                        <Link to="/categories" className="text-sm font-medium transition-colors hover:text-[var(--primary)]">Categories</Link>
-                        <Link to="/offers" className="text-sm font-medium transition-colors hover:text-[var(--primary)]">Offers</Link>
+                    <nav className="hidden lg:flex items-center gap-6">
+                        <Link to="/" className="text-sm font-semibold transition-colors hover:text-[var(--primary)]">Home</Link>
+                        <Link to="/categories" className="text-sm font-semibold transition-colors hover:text-[var(--primary)]">Categories</Link>
+                        <Link to="/offers" className="text-sm font-semibold transition-colors hover:text-[var(--primary)]">Offers</Link>
                     </nav>
 
                     {/* Search Bar - Hidden on checkout page */}
                     {!isCheckoutPage && (
-                        <div className="flex-1 flex items-center max-w-sm ml-4 md:ml-8 mr-4 md:mr-8">
-                            <div className="relative w-full">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <div className="flex-1 flex items-center max-w-sm ml-4 md:ml-6 mr-4 md:mr-6">
+                            <div className="relative w-full flex items-center bg-slate-100/80 rounded-full border border-slate-200/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-primary/40 transition-all">
+                                <Search className="h-4 w-4 text-slate-500 shrink-0 mr-2" />
                                 <input
                                     type="search"
                                     placeholder={searchPlaceholder}
-                                    className="w-full rounded-full border-none bg-slate-100/50 md:bg-white md:border md:border-slate-200 pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-primary transition-all outline-none"
+                                    className="w-full border-none bg-transparent text-sm focus:outline-none text-slate-800 font-medium placeholder:text-slate-500"
                                 />
+                                <div className="pl-2 border-l border-slate-300 ml-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {/* Desktop Right Icons */}
-                    <div className="hidden md:flex items-center gap-4">
-                        <Link to="/wishlist" className="relative flex items-center justify-center p-2 hover:bg-slate-50 rounded-full transition-colors group">
-                            <Heart className="h-6 w-6 text-slate-600 group-hover:text-[var(--primary)] transition-colors" />
+                    <div className="hidden md:flex items-center gap-3">
+                        <Link to="/wishlist" className="relative flex items-center justify-center p-2 hover:bg-slate-100/80 rounded-full transition-colors group">
+                            <Heart className="h-5 w-5 text-slate-600 group-hover:text-[var(--primary)] transition-colors" />
                             {wishlistCount > 0 && (
-                                <span className="absolute top-0 right-0 h-5 w-5 rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center border-2 border-white shadow-sm animate-in zoom-in duration-300">
+                                <span className="absolute top-0 right-0 h-4 w-4 rounded-full bg-primary text-[9px] font-bold text-white flex items-center justify-center border border-white shadow-sm">
                                     {wishlistCount}
                                 </span>
                             )}
                         </Link>
 
-                        <Link to="/checkout" id="header-cart-icon" className="relative flex items-center justify-center p-2 hover:bg-slate-50 rounded-full transition-colors group">
-                            <ShoppingCart className="h-6 w-6 text-slate-600 group-hover:text-[var(--primary)] transition-colors" />
+                        <Link to="/checkout" id="header-cart-icon" className="relative flex items-center justify-center p-2 hover:bg-slate-100/80 rounded-full transition-colors group">
+                            <ShoppingCart className="h-5 w-5 text-slate-600 group-hover:text-[var(--primary)] transition-colors" />
                             {cartCount > 0 && (
-                                <span className="absolute top-0 right-0 h-5 w-5 rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center border-2 border-white shadow-sm animate-in zoom-in duration-300">
+                                <span className="absolute top-0 right-0 h-4 w-4 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center border border-white shadow-sm">
                                     {cartCount}
                                 </span>
                             )}
                         </Link>
 
-                        <Link to="/profile" className="flex items-center justify-center">
-                            <User className="h-6 w-6 text-slate-600 hover:text-[var(--primary)] transition-colors" />
+                        <Link to="/profile" className="flex items-center justify-center p-1 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors">
+                            <User className="h-5 w-5 text-slate-700 hover:text-[var(--primary)] transition-colors" />
                         </Link>
                     </div>
                 </div>

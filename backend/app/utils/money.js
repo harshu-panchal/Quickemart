@@ -16,7 +16,7 @@ export function fromPaise(paise) {
 }
 
 export function roundCurrency(value) {
-  return fromPaise(toPaise(value));
+  return Math.ceil(Number(value || 0));
 }
 
 export function addMoney(...values) {

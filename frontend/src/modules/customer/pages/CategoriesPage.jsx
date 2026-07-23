@@ -139,7 +139,7 @@ const CategoriesPage = () => {
     return (
         <div className="min-h-screen bg-white">
             <MainLocationHeader />
-            <div className="max-w-[1280px] mx-auto px-4 pt-[140px] md:pt-[150px] pb-20">
+            <div className="max-w-[1280px] mx-auto px-4 pt-6 md:pt-8 pb-20">
                 {groups.map((group, groupIdx) => (
                     <div key={groupIdx} className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${groupIdx * 100}ms` }}>
                         {/* Group Title */}

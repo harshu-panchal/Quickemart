@@ -64,7 +64,7 @@ export const signupDelivery = async (req, res) => {
         const normalizedAadhar = String(req.body?.aadharUrl || req.body?.aadhar || "").trim();
         const normalizedPan = String(req.body?.panUrl || req.body?.pan || "").trim();
         const normalizedDl = String(
-          req.body?.drivingLicenseUrl || req.body?.dlUrl || req.body?.dl || "",
+            req.body?.drivingLicenseUrl || req.body?.dlUrl || req.body?.dl || "",
         ).trim();
         const normalizedProfileImage = String(req.body?.profileImageUrl || req.body?.profileImage || "").trim();
 
@@ -247,7 +247,7 @@ export const updateDeliveryProfile = async (req, res) => {
         // Fire-and-forget — never blocks the HTTP response. A failed cleanup
         // is also safe: the scheduled sweep job will pick it up on TTL.
         if (willGoOffline) {
-            clearRiderPresence(String(delivery._id)).catch(() => {});
+            clearRiderPresence(String(delivery._id)).catch(() => { });
         }
 
         return handleResponse(res, 200, "Profile updated successfully", delivery);

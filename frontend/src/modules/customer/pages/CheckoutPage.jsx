@@ -232,7 +232,7 @@ const CheckoutPage = () => {
       : [
           {
             id: "cash",
-            label: "Cash on Delivery",
+            label: "Pay on Delivery",
             icon: Banknote,
             sublabel: "Pay after delivery",
           },

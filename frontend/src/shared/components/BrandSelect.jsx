@@ -224,7 +224,7 @@ export const BrandSelect = ({
               </div>
 
               {/* Brands Options List */}
-              <div className="max-h-56 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
+              <div className="max-h-56 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5" data-lenis-prevent>
                 {filteredBrands.length > 0 ? (
                   filteredBrands.map((b) => {
                     const isSelected = b.toLowerCase() === (value || '').toLowerCase();

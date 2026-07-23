@@ -205,7 +205,7 @@ const AddSellerModal = ({ onClose, onSuccess }) => {
             </button>
           </div>
 
-          <div className="overflow-y-auto max-h-[75vh]">
+          <div className="overflow-y-auto max-h-[75vh]" data-lenis-prevent>
             <form onSubmit={handleSubmit} className="px-7 py-6 space-y-6">
 
               {/* Auto-generated Seller ID preview */}

@@ -222,7 +222,7 @@ const Dashboard = () => {
       status: order.status || "pending",
       payment:
         order.payment?.method === "cash" || order.payment?.method === "cod"
-          ? "Cash on Delivery"
+          ? "Pay on Delivery"
           : "Online Paid",
     };
   };

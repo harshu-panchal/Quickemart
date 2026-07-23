@@ -1035,7 +1035,7 @@ const OrderDetailPage = () => {
                 </p>
                 <p className="text-sm font-bold text-slate-900">
                   {order.payment.method === "cash"
-                    ? "Cash on Delivery"
+                    ? "Pay on Delivery"
                     : order.payment.method}
                 </p>
               </div>

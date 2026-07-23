@@ -232,6 +232,10 @@ const AddProduct = () => {
         toast.error(`Please enter a valid price for variant "${v.name}"`);
         return;
       }
+      if (v.salePrice && Number(v.salePrice) > Number(v.price)) {
+        toast.error(`Sale price cannot be greater than regular price for variant "${v.name}"`);
+        return;
+      }
       if (v.stock === "" || Number(v.stock) < 0) {
         toast.error(`Please enter stock for variant "${v.name}"`);
         return;
@@ -512,8 +516,17 @@ const AddProduct = () => {
                             setVariants(copy);
                           }}
                           placeholder="e.g. 179"
-                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500/40 text-slate-800"
+                          className={`w-full px-4 py-2.5 bg-white border rounded-xl text-xs font-bold outline-none text-slate-800 transition-all ${
+                            v.salePrice && Number(v.salePrice) > Number(v.price)
+                              ? "border-rose-300 focus:ring-rose-500/10 focus:border-rose-500"
+                              : "border-slate-200 focus:ring-emerald-500/10 focus:border-emerald-500/40"
+                          }`}
                         />
+                        {v.salePrice && Number(v.salePrice) > Number(v.price) && (
+                          <span className="text-[10px] text-rose-500 font-bold block mt-1">
+                            Sale price cannot be greater than regular price
+                          </span>
+                        )}
                       </div>
 
                       <div className="space-y-1">

@@ -43,18 +43,22 @@ export function mixHexWithWhite(hex, t) {
     .join("")}`;
 }
 
-/** Search field surface: tinted header theme, a bit darker than near-white. */
+/** Search field surface: soft light surface derived from theme color. */
 export function buildSearchBarBackgroundColor(baseHeaderColor) {
   const base = baseHeaderColor || DEFAULT_BASE;
-  return mixHexWithWhite(base, 0.7);
+  if (!base || base.startsWith("var(")) return "rgba(255, 255, 255, 0.85)";
+  return mixHexWithWhite(base, 0.72);
 }
 
 /**
- * Same gradient as the main location header (category-driven).
+ * Header background gradient based on project theme color.
  */
 export function buildHeaderGradient(baseHeaderColor) {
   const base = baseHeaderColor || DEFAULT_BASE;
-  return `linear-gradient(to bottom, ${shiftHex(base, -18)} 0%, ${shiftHex(base, 20)} 54%, ${shiftHex(base, 165)} 100%)`;
+  if (!base || base.startsWith("var(")) {
+    return "linear-gradient(to bottom, var(--primary), var(--brand-400))";
+  }
+  return `linear-gradient(180deg, ${shiftHex(base, -18)} 0%, ${base} 54%, ${shiftHex(base, 120)} 100%)`;
 }
 
 /** Solid fill for floating cart pill: header mid tone, slightly darker. */

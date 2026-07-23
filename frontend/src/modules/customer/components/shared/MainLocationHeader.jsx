@@ -6,6 +6,8 @@ import LocationDrawer from "./LocationDrawer";
 import { useLocation } from "../../context/LocationContext";
 import { useProductDetail } from "../../context/ProductDetailContext";
 import { useSettings } from "@core/context/SettingsContext";
+import { useCart } from "../../context/CartContext";
+import { useWishlist } from "../../context/WishlistContext";
 import { cn } from "@/lib/utils";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 import {
@@ -164,6 +166,8 @@ const MainLocationHeader = ({
     useLocation();
   const { isOpen: isProductDetailOpen } = useProductDetail();
   const { settings } = useSettings();
+  const { cartCount = 0 } = useCart ? useCart() : {};
+  const { count: wishlistCount = 0 } = useWishlist ? useWishlist() : {};
   const appName = settings?.appName || "App";
   const logoUrl = settings?.logoUrl || LogoImage;
   const navigate = useNavigate();
@@ -255,8 +259,8 @@ const MainLocationHeader = ({
   }, [typingState]);
 
   // Smooth scroll interpolations
-  const headerTopPadding = useTransform(scrollY, [0, 160], [16, 16]);
-  const headerBottomPadding = useTransform(scrollY, [0, 160], [4, 4]);
+  const headerTopPadding = useTransform(scrollY, [0, 160], [12, 10]);
+  const headerBottomPadding = useTransform(scrollY, [0, 160], [2, 2]);
   const headerRoundness = useTransform(scrollY, [0, 160], [0, 0]);
   const bgOpacity = useTransform(scrollY, [0, 160], [1, 1]);
 
@@ -297,7 +301,7 @@ const MainLocationHeader = ({
     <>
       <div
         className={cn(
-          "fixed top-0 left-0 right-0 z-[200]",
+          "relative w-full z-[200]",
           isProductDetailOpen && "hidden md:block",
         )}>
         <motion.div
@@ -351,199 +355,191 @@ const MainLocationHeader = ({
           </motion.button>
 
           {/* Desktop/Tablet Header Layout (md and above) */}
-          <div className="hidden md:flex items-center justify-between relative z-20 px-2 lg:px-6 mb-4 mt-1">
-            {/* Left Section: Logo + Location row */}
-            <div className="flex items-center gap-4 lg:gap-8">
+          <div className="hidden md:flex items-center justify-between relative z-20 px-1 lg:px-4 mb-1.5 mt-0.5">
+            {/* Left Section: Logo + Vertical Separator + Location Block */}
+            <div className="flex items-center gap-2 lg:gap-4 shrink-0">
+              {/* Logo (Jumbo Display Size, Zero Extra Padding) */}
               <div
                 onClick={() => navigate("/")}
-                className="flex items-center gap-3 cursor-pointer group shrink-0">
-                <div className="group-hover:scale-110 transition-all duration-300 drop-shadow-[0_4px_14px_rgba(0,0,0,0.2)]">
-                  <img
-                    src={logoUrl}
-                    alt={`${appName} Logo`}
-                    loading="lazy"
-                    className="h-32 sm:h-36 md:h-44 lg:h-52 xl:h-56 w-auto object-contain max-h-[200px]"
-                  />
-                </div>
+                className="cursor-pointer shrink-0 flex items-center p-0 m-0 border-0">
+                <img
+                  src={logoUrl}
+                  alt={`${appName} Logo`}
+                  loading="lazy"
+                  className="h-28 sm:h-32 md:h-36 lg:h-44 max-h-[160px] w-auto object-contain drop-shadow-md scale-150 origin-left border-0 p-0 m-0"
+                />
               </div>
 
-              {/* Location Block (Desktop inline row) */}
-              <div className="flex flex-col border-l border-black/10 pl-4 lg:pl-8 h-10 justify-center">
-                <div className="flex items-center gap-1.5 opacity-70">
+              {/* Vertical Separator Line */}
+              <div className="h-12 md:h-14 border-r border-black/15 dark:border-white/25 shrink-0" />
+
+              {/* Location & Delivery Time Block */}
+              <div className="flex flex-col justify-center leading-tight">
+                <div className="flex items-center gap-1 opacity-80 text-[11px] font-black uppercase tracking-wider">
                   <AccessTimeIcon sx={{ fontSize: 13, color: headerFontColor }} />
-                  <span 
-                    className="text-[11px] font-bold uppercase tracking-wider leading-none"
-                    style={{ color: headerFontColor }}
-                  >
-                    {currentLocation.time}
+                  <span style={{ color: headerFontColor }}>
+                    {currentLocation.time || "12-15 MINS"}
                   </span>
                 </div>
                 <button
                   type="button"
                   data-lenis-prevent
                   data-lenis-prevent-touch
-                  onClick={() => {
-                    setIsLocationOpen(true);
-                  }}
-                  className="flex items-center gap-1 text-slate-900 hover:text-slate-700 cursor-pointer group active:scale-95 transition-all border-0 bg-transparent p-0 text-left">
+                  onClick={() => setIsLocationOpen(true)}
+                  className="flex items-center gap-1 cursor-pointer active:scale-95 transition-all border-0 bg-transparent p-0 text-left font-extrabold text-[13px]"
+                  style={{ color: headerFontColor }}>
                   <LocationOnIcon sx={{ fontSize: 14, color: "inherit" }} />
-                  <div 
-                    className="text-[13px] font-bold leading-tight max-w-[250px] lg:max-w-[320px] truncate"
-                    style={{ color: headerFontColor }}
-                  >
-                    {isFetchingLocation
-                      ? "Detecting location..."
-                      : currentLocation.name}
-                  </div>
-                  <ChevronDownIcon
-                    sx={{ fontSize: 12, opacity: 0.5, color: headerFontColor }}
-                  />
+                  <span className="max-w-[260px] lg:max-w-[360px] truncate">
+                    {isFetchingLocation ? "Detecting location..." : currentLocation.name}
+                  </span>
+                  <ChevronDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
                 </button>
               </div>
             </div>
 
-            {/* Center Section: Search Bar */}
-            <div className="flex-1 max-w-[450px] lg:max-w-2xl px-6">
+            {/* Center Section: Pill Search Bar - Fills Middle Space Comfortably */}
+            <div className="flex-1 mx-4 lg:mx-8">
               <motion.div
                 onClick={handleSearchClick}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                whileHover={{ scale: 1.005 }}
+                whileTap={{ scale: 0.995 }}
                 style={{ backgroundColor: searchBarBg }}
-                className="rounded-full px-4 h-11 shadow-md flex items-center border border-white/50 transition-all duration-200 focus-within:ring-2 focus-within:ring-brand-400/60 cursor-pointer">
-                <SearchIcon sx={{ color: "#000000", fontSize: 20 }} />
+                className="rounded-full px-4 h-10 shadow-sm flex items-center border border-black/10 transition-all duration-200 cursor-pointer w-full">
+                <SearchIcon sx={{ color: "#1e293b", fontSize: 19 }} />
                 <input
                   type="text"
-                  placeholder={searchPlaceholder || "Search Products..."}
+                  placeholder={searchPlaceholder || 'Search "milk"'}
                   readOnly
-                  className="flex-1 bg-transparent border-none outline-none pl-2 text-slate-800 font-semibold placeholder:text-black text-[15px] cursor-pointer"
+                  className="flex-1 bg-transparent border-none outline-none pl-3 text-slate-900 font-semibold placeholder:text-slate-700 text-[14px] cursor-pointer"
                 />
-                <div className="flex items-center gap-2 border-l border-slate-100 pl-3">
-                  <MicIcon sx={{ color: "#000000", fontSize: 20 }} />
+                <div className="flex items-center gap-2 border-l border-black/15 pl-3">
+                  <MicIcon sx={{ color: "#1e293b", fontSize: 19 }} />
                 </div>
               </motion.div>
             </div>
 
-            {/* Right Section: Action Icons */}
-            <div className="flex items-center gap-5 lg:gap-8 shrink-0">
+            {/* Right Section: Action Icons Row */}
+            <div className="flex items-center gap-4 lg:gap-6 shrink-0">
               <motion.button
-                whileHover={{ scale: 1.15, rotate: 5 }}
+                whileHover={{ scale: 1.15 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => navigate("/wishlist")}
-                className="transition-all hover:text-red-500"
+                className="p-1.5 rounded-full hover:bg-black/5 transition-all relative"
                 style={{ color: headerFontColor }}
               >
                 <FavoriteBorderOutlinedIcon sx={{ fontSize: 24 }} />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-sm">
+                    {wishlistCount}
+                  </span>
+                )}
               </motion.button>
 
               <motion.button
-                whileHover={{ scale: 1.15, rotate: 5 }}
+                whileHover={{ scale: 1.15 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => navigate("/notifications")}
-                className="transition-all hover:text-slate-700 relative group"
+                className="p-1.5 rounded-full hover:bg-black/5 transition-all"
                 style={{ color: headerFontColor }}
               >
                 <NotificationsNoneOutlinedIcon sx={{ fontSize: 24 }} />
               </motion.button>
 
               <motion.button
-                whileHover={{ scale: 1.15, rotate: -5 }}
+                whileHover={{ scale: 1.15 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => navigate("/checkout")}
-                className="transition-all hover:text-slate-700 relative group"
+                className="p-1.5 rounded-full hover:bg-black/5 transition-all relative"
                 style={{ color: headerFontColor }}
               >
                 <ShoppingCartOutlinedIcon sx={{ fontSize: 24 }} />
-                <span className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-brand-900 text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-brand-800 shadow-sm transition-transform group-hover:-translate-y-0.5">
-                  0
+                <span className="absolute -top-1 -right-1 bg-amber-400 text-slate-950 text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                  {cartCount || 0}
                 </span>
               </motion.button>
 
               <motion.button
-                whileHover={{ scale: 1.15 }}
+                whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => navigate("/profile")}
-                className="lg:bg-white/30 p-1.5 lg:rounded-full hover:bg-white transition-all"
+                className="bg-white/25 hover:bg-white/40 backdrop-blur-sm p-1.5 rounded-full border border-white/40 shadow-sm transition-all flex items-center justify-center"
                 style={{ color: headerFontColor }}
               >
-                <AccountCircleOutlinedIcon sx={{ fontSize: 28 }} />
+                <AccountCircleOutlinedIcon sx={{ fontSize: 26 }} />
               </motion.button>
             </div>
           </div>
 
           {/* Collapsible Delivery Info & Location (MOBILE ONLY) */}
           <div className="md:hidden">
-            <motion.div
-              className="relative z-10 mb-4">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <img
-                  src={logoUrl}
-                  alt={`${appName} Logo`}
-                  loading="lazy"
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                {/* Logo (Jumbo Display Size, Zero Extra Padding) */}
+                <div 
                   onClick={() => navigate("/")}
-                  className="h-16 sm:h-20 w-auto object-contain cursor-pointer transition-transform hover:scale-105 drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                />
-                <span 
-                  className="inline-flex items-center rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"
-                  style={{ color: headerFontColor }}
-                >
-                  {appName}
-                </span>
-              </div>
-              <div className="flex justify-between items-start">
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <AccessTimeIcon sx={{ fontSize: 16, color: headerFontColor }} />
-                    <span 
-                      className="text-base font-bold tracking-tight leading-none"
-                      style={{ color: headerFontColor }}
-                    >
-                      {currentLocation.time}
-                    </span>
+                  className="cursor-pointer shrink-0 flex items-center p-0 m-0 border-0">
+                  <img
+                    src={logoUrl}
+                    alt={`${appName} Logo`}
+                    className="h-22 sm:h-26 max-h-[110px] w-auto object-contain drop-shadow-md scale-150 origin-left border-0 p-0 m-0"
+                  />
+                </div>
+                {/* Vertical Separator */}
+                <div className="h-10 border-r border-black/15 dark:border-white/25 shrink-0" />
+                {/* Location Block */}
+                <div className="flex flex-col justify-center leading-tight">
+                  <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider" style={{ color: headerFontColor }}>
+                    <AccessTimeIcon sx={{ fontSize: 12 }} />
+                    <span>{currentLocation.time || "12-15 MINS"}</span>
                   </div>
                   <button
                     type="button"
-                    data-lenis-prevent
-                    data-lenis-prevent-touch
-                    onClick={() => {
-                      setIsLocationOpen(true);
-                    }}
-                    className="flex items-center gap-1 text-slate-800 cursor-pointer group active:scale-95 transition-transform border-0 bg-transparent p-0 text-left">
-                    <LocationOnIcon sx={{ fontSize: 14, color: headerFontColor }} />
-                    <div 
-                      className="text-[10px] font-medium leading-tight max-w-[280px] truncate"
-                      style={{ color: headerFontColor }}
-                    >
-                      {isFetchingLocation
-                        ? "Detecting location..."
-                        : currentLocation.name}
-                    </div>
-                    <ChevronDownIcon
-                      sx={{ fontSize: 12, opacity: 0.5, color: headerFontColor }}
-                    />
+                    onClick={() => setIsLocationOpen(true)}
+                    className="flex items-center gap-1 text-[12px] font-bold max-w-[150px] truncate p-0 bg-transparent border-0"
+                    style={{ color: headerFontColor }}>
+                    <LocationOnIcon sx={{ fontSize: 13 }} />
+                    <span className="truncate">{currentLocation.name}</span>
+                    <ChevronDownIcon sx={{ fontSize: 11, opacity: 0.7 }} />
                   </button>
                 </div>
               </div>
-            </motion.div>
-          </div>
 
-          {/* Search Bar (MOBILE ONLY) */}
-          <div className="relative z-10 mt-[1.5px] flex items-center gap-2 md:hidden">
-            <motion.div
-              onClick={handleSearchClick}
-              whileTap={{ scale: 0.98 }}
-              style={{ backgroundColor: searchBarBg }}
-              className="flex-1 rounded-[10px] px-3 h-10 shadow-md flex items-center border border-white/50 transition-all duration-200 focus-within:ring-2 focus-within:ring-brand-400/60 cursor-pointer">
-              <SearchIcon sx={{ color: "#000000", fontSize: 18 }} />
-              <input
-                type="text"
-                placeholder={searchPlaceholder || "Search Products..."}
-                readOnly
-                className="flex-1 bg-transparent border-none outline-none pl-2 text-slate-800 font-semibold placeholder:text-black text-[14px] cursor-pointer"
-              />
-              <div className="flex items-center gap-2 border-l border-slate-100 pl-2.5">
-                <MicIcon sx={{ color: "#000000", fontSize: 18 }} />
+              {/* Mobile Right Action Icons */}
+              <div className="flex items-center gap-2">
+                <button onClick={() => navigate("/notifications")} style={{ color: headerFontColor }} className="p-1">
+                  <NotificationsNoneOutlinedIcon sx={{ fontSize: 22 }} />
+                </button>
+                <button onClick={() => navigate("/checkout")} className="relative p-1" style={{ color: headerFontColor }}>
+                  <ShoppingCartOutlinedIcon sx={{ fontSize: 22 }} />
+                  <span className="absolute -top-0.5 -right-0.5 bg-amber-400 text-slate-950 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white">
+                    {cartCount || 0}
+                  </span>
+                </button>
+                <button onClick={() => navigate("/profile")} style={{ color: headerFontColor }} className="p-1">
+                  <AccountCircleOutlinedIcon sx={{ fontSize: 24 }} />
+                </button>
               </div>
-            </motion.div>
+            </div>
+
+            {/* Mobile Search Bar */}
+            <div className="relative z-10 flex items-center gap-2">
+              <motion.div
+                onClick={handleSearchClick}
+                whileTap={{ scale: 0.98 }}
+                style={{ backgroundColor: searchBarBg }}
+                className="flex-1 rounded-full px-3 h-10 shadow-sm flex items-center border border-black/10 cursor-pointer">
+                <SearchIcon sx={{ color: "#1e293b", fontSize: 18 }} />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder || 'Search "milk"'}
+                  readOnly
+                  className="flex-1 bg-transparent border-none outline-none pl-2 text-slate-900 font-semibold placeholder:text-slate-700 text-[14px] cursor-pointer"
+                />
+                <div className="flex items-center gap-2 border-l border-black/15 pl-2">
+                  <MicIcon sx={{ color: "#1e293b", fontSize: 18 }} />
+                </div>
+              </motion.div>
+            </div>
           </div>
 
           {/* Categories Navigation - Smooth Collapse */}
@@ -558,7 +554,7 @@ const MainLocationHeader = ({
                   mass: 0.6,
                 },
               }}
-              className="relative flex items-end md:justify-center gap-0 overflow-x-auto no-scrollbar -mx-2 px-2 md:mx-0 md:px-0 z-10 snap-x pt-1 min-h-[68px] md:min-h-[76px] pb-0.5 mt-3">
+              className="relative flex items-end md:justify-center gap-0 overflow-x-auto no-scrollbar -mx-2 px-2 md:mx-0 md:px-0 z-10 snap-x pt-0.5 min-h-[64px] md:min-h-[70px] pb-0.5 mt-1">
               {categories.map((cat) => {
                 const isActive = activeCategory?.id === cat.id;
                 return (
