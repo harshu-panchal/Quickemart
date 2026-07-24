@@ -6,6 +6,7 @@ import ExcelJS from "exceljs";
 import axios from "axios";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { slugify } from "../utils/slugify.js"; // assumes standard slugify exists
+import { invalidate, buildKey } from "../services/cacheService.js";
 
 // Helper to fetch image from URL and upload to cloudinary
 const uploadImageFromUrl = async (imageUrl) => {
@@ -420,6 +421,39 @@ export const updateMasterProduct = async (req, res) => {
         
         if (!updatedProduct) {
             return res.status(404).json({ success: false, message: "Product not found" });
+        }
+
+        // Propagate image & metadata updates to all linked seller Product documents
+        const syncUpdate = {};
+        if (updatedProduct.mainImage) syncUpdate.mainImage = updatedProduct.mainImage;
+        if (updatedProduct.galleryImages) syncUpdate.galleryImages = updatedProduct.galleryImages;
+        if (updatedProduct.galleryLabels) syncUpdate.galleryLabels = updatedProduct.galleryLabels;
+        if (updatedProduct.name) syncUpdate.name = updatedProduct.name;
+        if (updatedProduct.brand) syncUpdate.brand = updatedProduct.brand;
+        if (updatedProduct.description) syncUpdate.description = updatedProduct.description;
+        if (updatedProduct.headerId) syncUpdate.headerId = updatedProduct.headerId;
+        if (updatedProduct.categoryId) syncUpdate.categoryId = updatedProduct.categoryId;
+        if (updatedProduct.subcategoryId) syncUpdate.subcategoryId = updatedProduct.subcategoryId;
+
+        if (Object.keys(syncUpdate).length > 0) {
+            await Product.updateMany(
+                { masterProductId: id },
+                { $set: syncUpdate }
+            );
+        }
+
+        // Full Multi-Portal Cache Invalidation (Master UI, Seller UI, User UI)
+        try {
+            await invalidate(`cache:catalog:product:${id}`);
+            if (updatedProduct.slug) {
+                await invalidate(`cache:catalog:product:slug-${updatedProduct.slug.toLowerCase()}`);
+            }
+            await invalidate("cache:catalog:productList:*");
+            await invalidate(buildKey("catalog", "productList", "*"));
+            await invalidate("cache:sellers:nearby:*");
+            await invalidate(buildKey("sellers", "nearby", "*"));
+        } catch (_cacheErr) {
+            // Log silently
         }
 
         res.status(200).json({ success: true, result: updatedProduct });

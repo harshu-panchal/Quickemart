@@ -1126,10 +1126,24 @@ export const updateProduct = async (req, res) => {
       delete productData.sellerId;
     }
 
+    // Handle existing gallery image URLs if sent from form
+    let existingGallery = [];
+    if (productData.existingGalleryImages) {
+      try {
+        existingGallery = JSON.parse(productData.existingGalleryImages);
+      } catch (err) {
+        existingGallery = [];
+      }
+    }
+
+    if (productData.mainImageUrl) {
+      productData.mainImage = productData.mainImageUrl;
+    }
+
     // Handle multipart files (mainImage and galleryImages)
     const files = req.files || [];
     if (files.length > 0) {
-      const galleryUrls = [];
+      const galleryUrls = [...existingGallery];
       for (const file of files) {
         try {
           if (file.fieldname === "mainImage") {
@@ -1155,6 +1169,8 @@ export const updateProduct = async (req, res) => {
       if (galleryUrls.length > 0) {
         productData.galleryImages = galleryUrls;
       }
+    } else if (existingGallery.length > 0) {
+      productData.galleryImages = existingGallery;
     }
 
     // Parse JSON fields

@@ -323,6 +323,29 @@ const ProductManagement = () => {
         setFormData({ ...formData, galleryLabels: nextLabels });
     };
 
+    const handleMainImageUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setFormData(prev => ({
+                ...prev,
+                mainImage: reader.result,
+                mainImageFile: file,
+            }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleRemoveMainImage = (e) => {
+        if (e) e.stopPropagation();
+        setFormData(prev => ({
+            ...prev,
+            mainImage: null,
+            mainImageFile: null,
+        }));
+    };
+
     const handleSlotImageUpload = (slotIdx, e) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -1295,10 +1318,20 @@ const ProductManagement = () => {
                                                          type="file"
                                                          accept="image/*"
                                                          className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                                         onChange={(e) => handleImageUpload(e, 'main')}
+                                                         onChange={handleMainImageUpload}
                                                      />
                                                      {formData.mainImage ? (
-                                                         <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
+                                                         <div className="w-full h-full relative group">
+                                                             <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
+                                                             <button
+                                                                 type="button"
+                                                                 onClick={handleRemoveMainImage}
+                                                                 className="absolute top-2 right-2 p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-rose-600 transition-colors z-20 shadow-md"
+                                                                 title="Remove cover photo"
+                                                             >
+                                                                 <HiOutlineTrash className="h-4 w-4" />
+                                                             </button>
+                                                         </div>
                                                      ) : (
                                                          <div className="flex flex-col items-center p-3 text-center">
                                                              <HiOutlinePhoto className="h-9 w-9 text-slate-300 group-hover:text-primary transition-colors mb-1" />
