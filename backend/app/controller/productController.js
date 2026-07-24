@@ -862,9 +862,19 @@ export const createSellerListing = async (req, res) => {
       ...moderationUpdate,
     });
 
-    // Invalidate cache
+    // Invalidate cache comprehensively for master product, new listing, product lists, and nearby sellers
     await invalidate(`cache:catalog:product:${master._id.toString()}`);
+    if (master.slug) {
+      await invalidate(`cache:catalog:product:slug-${master.slug.toLowerCase()}`);
+    }
+    await invalidate(`cache:catalog:product:${newProduct._id.toString()}`);
+    if (newProduct.slug) {
+      await invalidate(`cache:catalog:product:slug-${newProduct.slug.toLowerCase()}`);
+    }
     await invalidate("cache:catalog:productList:*");
+    await invalidate(buildKey("catalog", "productList", "*"));
+    await invalidate("cache:sellers:nearby:*");
+    await invalidate(buildKey("sellers", "nearby", "*"));
 
     const approvalStatus = newProduct.approvalStatus;
     const message = approvalStatus === "pending"
@@ -1439,31 +1449,8 @@ export const getProductById = async (req, res) => {
     const cacheKey = buildKey("catalog", "product", isObjectId ? id : `slug-${id.toLowerCase()}`);
     let product = await getOrSet(
       cacheKey,
-      async () =>
-        Product.findOne(query)
-          .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
-          )
-          .populate("headerId", "name")
-          .populate("categoryId", "name")
-          .populate("subcategoryId", "name")
-          .populate("sellerId", "shopName")
-          .sort({ price: 1 })
-          .lean(),
-      getTTL("product"),
-    );
-
-    if (!product) {
-      const masterQuery = isObjectId ? { _id: id } : { slug: id.toLowerCase() };
-      const masterProduct = await MasterProduct.findOne(masterQuery)
-        .populate("headerId", "name")
-        .populate("categoryId", "name")
-        .populate("subcategoryId", "name")
-        .lean();
-
-      if (masterProduct) {
-        // Check if any seller listed stock/price for this master product
-        const sellerOffer = await Product.findOne({ masterProductId: masterProduct._id, status: "active" })
+      async () => {
+        let p = await Product.findOne(query)
           .select(
             "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
           )
@@ -1474,39 +1461,64 @@ export const getProductById = async (req, res) => {
           .sort({ price: 1 })
           .lean();
 
-        if (sellerOffer) {
-          product = sellerOffer;
-        } else {
-          const payload = normalizeProductDocumentModeration({
-            _id: masterProduct._id,
-            name: masterProduct.name,
-            slug: masterProduct.slug,
-            description: masterProduct.description || '',
-            sku: masterProduct.sku || '',
-            price: 0,
-            salePrice: 0,
-            stock: 0,
-            brand: masterProduct.brand || '',
-            weight: masterProduct.packSize || '',
-            mainImage: masterProduct.mainImage || '',
-            galleryImages: masterProduct.galleryImages || [],
-            headerId: masterProduct.headerId,
-            categoryId: masterProduct.categoryId,
-            subcategoryId: masterProduct.subcategoryId,
-            sellerId: null,
-            status: 'active',
-            approvalStatus: 'approved',
-            isFeatured: false,
-            variants: (masterProduct.variants || []).map(v => ({ ...v, price: 0, salePrice: 0, stock: 0 })),
-            createdAt: masterProduct.createdAt,
-            isMasterProduct: true,
-            isOutOfStock: true
-          });
-          return handleResponse(res, 200, "Product details fetched successfully", payload);
+        if (!p) {
+          const masterQuery = isObjectId ? { _id: id } : { slug: id.toLowerCase() };
+          const masterProduct = await MasterProduct.findOne(masterQuery)
+            .populate("headerId", "name")
+            .populate("categoryId", "name")
+            .populate("subcategoryId", "name")
+            .lean();
+
+          if (masterProduct) {
+            const sellerOffer = await Product.findOne({ masterProductId: masterProduct._id, status: "active" })
+              .select(
+                "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
+              )
+              .populate("headerId", "name")
+              .populate("categoryId", "name")
+              .populate("subcategoryId", "name")
+              .populate("sellerId", "shopName")
+              .sort({ price: 1 })
+              .lean();
+
+            if (sellerOffer) {
+              p = sellerOffer;
+            } else {
+              p = {
+                _id: masterProduct._id,
+                name: masterProduct.name,
+                slug: masterProduct.slug,
+                description: masterProduct.description || '',
+                sku: masterProduct.sku || '',
+                price: 0,
+                salePrice: 0,
+                stock: 0,
+                brand: masterProduct.brand || '',
+                weight: masterProduct.packSize || '',
+                mainImage: masterProduct.mainImage || '',
+                galleryImages: masterProduct.galleryImages || [],
+                headerId: masterProduct.headerId,
+                categoryId: masterProduct.categoryId,
+                subcategoryId: masterProduct.subcategoryId,
+                sellerId: null,
+                status: 'active',
+                approvalStatus: 'approved',
+                isFeatured: false,
+                variants: (masterProduct.variants || []).map(v => ({ ...v, price: 0, salePrice: 0, stock: 0 })),
+                createdAt: masterProduct.createdAt,
+                isMasterProduct: true,
+                isOutOfStock: true
+              };
+            }
+          }
         }
-      } else {
-        return handleResponse(res, 404, "Product not found");
-      }
+        return p;
+      },
+      getTTL("product"),
+    );
+
+    if (!product) {
+      return handleResponse(res, 404, "Product not found");
     }
 
     if (enforceRadius) {

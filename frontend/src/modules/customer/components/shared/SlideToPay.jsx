@@ -63,12 +63,12 @@ const SlideToPay = ({
 
     return (
         <div
-            className="relative h-16 w-full rounded-full overflow-hidden select-none touch-none bg-linear-to-r from-primary via-primary to-primary shadow-[0_18px_45px_rgba(4,120,87,0.35)] border border-white/10"
+            className="relative h-16 w-full rounded-full overflow-hidden select-none touch-none bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 shadow-xl shadow-purple-500/30 border border-white/20"
             ref={(el) => el && setContainerWidth(el.offsetWidth)}
         >
             {/* Progress Fill */}
             <motion.div
-                className="absolute inset-y-0 left-0 bg-white/15"
+                className="absolute inset-y-0 left-0 bg-white/20"
                 style={{ width: fillWidth }}
             />
 
@@ -78,7 +78,7 @@ const SlideToPay = ({
                 style={{ opacity: shimmerOpacity }}
             >
                 <motion.div
-                    className="absolute inset-y-0 -inset-x-1 bg-linear-to-r from-transparent via-white/35 to-transparent skew-x-[-20deg]"
+                    className="absolute inset-y-0 -inset-x-1 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg]"
                     initial={{ x: "-100%" }}
                     animate={{ x: "100%" }}
                     transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}

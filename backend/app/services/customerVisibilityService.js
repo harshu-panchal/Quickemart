@@ -32,8 +32,14 @@ function buildNearbySellersKey(lat, lng) {
 
 export async function getNearbySellerIdsForCustomer(lat, lng) {
   const fetchFn = async () => {
-    const sellers = await Seller.find({
+    // 1. Fetch sellers matching location geometry within 100km
+    const geoSellers = await Seller.find({
       isActive: true,
+      $or: [
+        { applicationStatus: "approved" },
+        { applicationStatus: { $exists: false } },
+        { applicationStatus: null },
+      ],
       location: {
         $near: {
           $geometry: {
@@ -47,14 +53,39 @@ export async function getNearbySellerIdsForCustomer(lat, lng) {
       .select("_id location serviceRadius isActive shopTiming applicationStatus")
       .lean();
 
-    return sellers
+    // 2. Fetch sellers with default [0, 0] or missing coordinates (e.g. admin-created sellers)
+    const defaultSellers = await Seller.find({
+      isActive: true,
+      $or: [
+        { applicationStatus: "approved" },
+        { applicationStatus: { $exists: false } },
+        { applicationStatus: null },
+      ],
+      $or: [
+        { location: { $exists: false } },
+        { "location.coordinates": { $eq: [0, 0] } },
+        { "location.coordinates": { $exists: false } },
+      ],
+    })
+      .select("_id location serviceRadius isActive shopTiming applicationStatus")
+      .lean();
+
+    const sellerMap = new Map();
+    for (const s of [...geoSellers, ...defaultSellers]) {
+      sellerMap.set(String(s._id), s);
+    }
+
+    return Array.from(sellerMap.values())
       .filter((seller) => {
         if (!isShopCurrentlyOpen(seller)) return false;
         const coords = seller?.location?.coordinates;
-        if (!Array.isArray(coords) || coords.length < 2) return false;
+        // If unconfigured/default [0, 0] or missing, seller is available by default
+        if (!Array.isArray(coords) || coords.length < 2 || (coords[0] === 0 && coords[1] === 0)) {
+          return true;
+        }
         const [sellerLng, sellerLat] = coords;
         if (!Number.isFinite(sellerLat) || !Number.isFinite(sellerLng)) {
-          return false;
+          return true;
         }
         const distanceKm = calculateDistance(lat, lng, sellerLat, sellerLng);
         return distanceKm <= (seller.serviceRadius || 5);

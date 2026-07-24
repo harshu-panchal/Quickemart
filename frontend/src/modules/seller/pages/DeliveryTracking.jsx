@@ -448,7 +448,7 @@ const DeliveryTracking = () => {
               className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 font-['Outfit']"
             >
               {/* Header card with gradient background */}
-              <div className="bg-linear-to-r from-slate-900 via-slate-950 to-black p-6 text-white relative">
+              <div className="bg-gradient-to-r from-slate-900 via-slate-950 to-black p-6 text-white relative">
                 <button
                   onClick={() => setActiveTrackingDetail(null)}
                   className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
