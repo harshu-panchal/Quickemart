@@ -276,19 +276,36 @@ const OrderDetailPage = () => {
     };
 
     const offStatus = onOrderStatusUpdate(getToken, (payload) => {
+      // Guard: only process events that belong to the order currently on screen.
+      // The customer personal room (customer:<id>) receives updates for ALL of a
+      // customer's orders — without this filter the wrong order's state would be
+      // silently overwritten in production when a customer has multiple active orders.
+      if (!matchesOrderIdentifier(payload?.orderId, identifiersRef.current)) return;
+
       // Immediately update order state from socket payload — no waiting for API re-fetch
       const ws = String(payload?.workflowStatus || "").toUpperCase();
       if (ws) {
+        // Map every workflow status to its legacy status so all components
+        // that read order.status also update in real-time without a page refresh.
+        const workflowToLegacy = {
+          CREATED: "pending",
+          SELLER_PENDING: "pending",
+          SELLER_ACCEPTED: "confirmed",
+          DELIVERY_SEARCH: "confirmed",
+          DELIVERY_ASSIGNED: "confirmed",
+          PICKUP_READY: "confirmed",
+          OUT_FOR_DELIVERY: "out_for_delivery",
+          DELIVERED: "delivered",
+          CANCELLED: "cancelled",
+        };
+        const legacyStatus = workflowToLegacy[ws];
         setOrder((prev) => {
           if (!prev) return prev;
           return {
             ...prev,
             workflowStatus: ws,
             // Keep legacy status in sync for components that read order.status
-            ...(ws === "DELIVERED" && { status: "delivered" }),
-            ...(ws === "DELIVERY_SEARCH" && { status: "confirmed" }),
-            ...(ws === "OUT_FOR_DELIVERY" && { status: "out_for_delivery" }),
-            ...(ws === "CANCELLED" && { status: "cancelled" }),
+            ...(legacyStatus ? { status: legacyStatus } : {}),
           };
         });
       }

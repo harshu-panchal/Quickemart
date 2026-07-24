@@ -78,7 +78,7 @@ const CheckoutPage = () => {
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries: placesLibrary,
   });
-  
+
   const autocompleteRef = useRef(null);
   const {
     cart,
@@ -178,7 +178,7 @@ const CheckoutPage = () => {
           .filter(Boolean)
           .join(", "),
         ...(typeof currentLocation.latitude === "number" &&
-        typeof currentLocation.longitude === "number"
+          typeof currentLocation.longitude === "number"
           ? { location: { lat: currentLocation.latitude, lng: currentLocation.longitude } }
           : {}),
       }));
@@ -212,7 +212,7 @@ const CheckoutPage = () => {
     if (cart.length === 0) {
       import("../../../assets/lottie/Empty box.json")
         .then((m) => setEmptyBoxData(m.default))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [cart.length === 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -220,23 +220,23 @@ const CheckoutPage = () => {
     ...(settings?.onlineEnabled === false
       ? []
       : [
-          {
-            id: "online",
-            label: "Pay Online",
-            icon: CreditCard,
-            sublabel: "UPI / Cards / NetBanking",
-          },
-        ]),
+        {
+          id: "online",
+          label: "Pay Online",
+          icon: CreditCard,
+          sublabel: "UPI / Cards / NetBanking",
+        },
+      ]),
     ...(settings?.codEnabled === false
       ? []
       : [
-          {
-            id: "cash",
-            label: "Pay on Delivery",
-            icon: Banknote,
-            sublabel: "Pay after delivery",
-          },
-        ]),
+        {
+          id: "cash",
+          label: "Pay on Delivery",
+          icon: Banknote,
+          sublabel: "Pay after delivery",
+        },
+      ]),
   ];
 
   const tipAmounts = [
@@ -406,8 +406,8 @@ const CheckoutPage = () => {
       } catch (e) {
         showToast(
           e?.__serverMsg ||
-            e?.message ||
-            "Could not fetch coordinates for this address. Delivery charges may not update.",
+          e?.message ||
+          "Could not fetch coordinates for this address. Delivery charges may not update.",
           "error",
         );
       }
@@ -501,7 +501,7 @@ const CheckoutPage = () => {
     } catch (e) {
       showToast(
         e.response?.data?.message ||
-          "Could not fetch coordinates for this address. Delivery charges may be inaccurate.",
+        "Could not fetch coordinates for this address. Delivery charges may be inaccurate.",
         "error",
       );
     }
@@ -529,7 +529,7 @@ const CheckoutPage = () => {
           .filter(Boolean)
           .join(", "),
         ...(typeof liveLocation.latitude === "number" &&
-        typeof liveLocation.longitude === "number"
+          typeof liveLocation.longitude === "number"
           ? { location: { lat: liveLocation.latitude, lng: liveLocation.longitude } }
           : {}),
       }));
@@ -546,7 +546,7 @@ const CheckoutPage = () => {
           .filter(Boolean)
           .join(", "),
         ...(typeof currentLocation.latitude === "number" &&
-        typeof currentLocation.longitude === "number"
+          typeof currentLocation.longitude === "number"
           ? { location: { lat: currentLocation.latitude, lng: currentLocation.longitude } }
           : {}),
       }));
@@ -737,8 +737,8 @@ const CheckoutPage = () => {
 
     const cartIds = new Set(cart.map((i) => i.id || i._id));
     customerApi
-      .getProducts({ 
-        categoryId, 
+      .getProducts({
+        categoryId,
         limit: 10,
         lat: currentLocation.latitude,
         lng: currentLocation.longitude
@@ -751,7 +751,7 @@ const CheckoutPage = () => {
           setRecommendedProducts(items.slice(0, 8));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [cartProductIdKey, currentLocation?.latitude, currentLocation?.longitude]);
 
   const handlePlaceOrder = async () => {
@@ -820,7 +820,7 @@ const CheckoutPage = () => {
             setIsPlacingOrder(false);
             showToast(
               payError.message ||
-                "Order created but payment gateway failed. Please pay from order details.",
+              "Order created but payment gateway failed. Please pay from order details.",
               "error"
             );
             navigate(`/orders/${mainOrderId}`);
@@ -850,7 +850,7 @@ const CheckoutPage = () => {
       setIsPlacingOrder(false);
       showToast(
         error.response?.data?.message ||
-          "Failed to place order. Please try again.",
+        "Failed to place order. Please try again.",
         "error"
       );
     }
@@ -884,7 +884,7 @@ const CheckoutPage = () => {
       .then((r) => {
         if (r.data?.result) applyCancelled(r.data.result);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     const off = onOrderStatusUpdate(getToken, (order) => applyCancelled(order));
 
@@ -1153,11 +1153,10 @@ const CheckoutPage = () => {
                 key={addr.id}
                 onClick={() => handleSelectSavedAddress(addr)}
                 disabled={isResolvingAddressCoords}
-                className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${
-                  currentAddress.id === addr.id
+                className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${currentAddress.id === addr.id
                     ? "border-primary bg-brand-50 shadow-sm"
                     : "border-slate-100 bg-white hover:border-slate-200"
-                }`}>
+                  }`}>
                 <div className="flex items-center gap-3 mb-2">
                   <div className={`p-2 rounded-full ${currentAddress.id === addr.id ? "bg-primary text-primary-foreground" : "bg-slate-100 text-slate-500"}`}>
                     <MapPin size={16} />
@@ -1208,8 +1207,8 @@ const CheckoutPage = () => {
                       if (autocompleteRef.current !== null) {
                         const place = autocompleteRef.current.getPlace();
                         if (place && place.formatted_address) {
-                          setEditAddressForm((prev) => ({ 
-                            ...prev, 
+                          setEditAddressForm((prev) => ({
+                            ...prev,
                             address: place.formatted_address,
                           }));
                         }

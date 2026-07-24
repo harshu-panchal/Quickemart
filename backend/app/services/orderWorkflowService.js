@@ -1086,6 +1086,7 @@ async function resolveRiderLocation(deliveryId, bodyLat, bodyLng) {
 }
 
 export async function requestHandoffOtpAtomic(deliveryId, orderId, lat, lng) {
+  orderId = await requireCanonicalOrderId(orderId);
   const order = await Order.findOne({
     orderId,
     deliveryBoy: deliveryId,

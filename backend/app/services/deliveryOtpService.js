@@ -3,6 +3,7 @@ import Order from '../models/order.js';
 import OrderOtp from '../models/orderOtp.js';
 import { checkProximity } from './proximityService.js';
 import { emitToCustomer, emitOrderStatusUpdate } from './orderSocketEmitter.js';
+import { resolveCanonicalOrderId } from '../utils/orderLookup.js';
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -55,6 +56,8 @@ export async function generateDeliveryOtp(orderId, deliveryLocation) {
         error: 'Valid orderId is required'
       };
     }
+
+    orderId = (await resolveCanonicalOrderId(orderId)) || orderId;
 
     if (!deliveryLocation || typeof deliveryLocation !== 'object') {
       return {
@@ -210,6 +213,8 @@ export async function validateDeliveryOtp(orderId, enteredOtp) {
       };
     }
 
+    orderId = (await resolveCanonicalOrderId(orderId)) || orderId;
+
     if (!enteredOtp || typeof enteredOtp !== 'string') {
       return {
         valid: false,
@@ -316,6 +321,7 @@ export async function validateDeliveryOtp(orderId, enteredOtp) {
  */
 export async function generateReturnPickupOtp(orderId, requester = {}) {
   try {
+    orderId = (await resolveCanonicalOrderId(orderId)) || orderId;
     const order = await Order.findOne({ orderId });
     if (!order) {
       return { success: false, error: 'Order not found' };
@@ -404,6 +410,8 @@ export async function validateReturnPickupOtp(orderId, enteredOtp) {
       return { valid: false, error: 'INVALID_FORMAT', message: 'orderId and OTP are required' };
     }
 
+    orderId = (await resolveCanonicalOrderId(orderId)) || orderId;
+
     // Find the latest return_pickup OTP record
     const otpRecord = await OrderOtp.findOne({ orderId, type: 'return_pickup' }).sort({
       lastGeneratedAt: -1,
@@ -454,6 +462,7 @@ export async function validateReturnPickupOtp(orderId, enteredOtp) {
  */
 export async function generateReturnDropOtp(orderId) {
   try {
+    orderId = (await resolveCanonicalOrderId(orderId)) || orderId;
     const order = await Order.findOne({ orderId });
     if (!order) {
       return { success: false, error: 'Order not found' };
@@ -506,6 +515,8 @@ export async function validateReturnDropOtp(orderId, enteredOtp) {
     if (!orderId || !enteredOtp) {
       return { valid: false, error: 'INVALID_FORMAT', message: 'orderId and OTP are required' };
     }
+
+    orderId = (await resolveCanonicalOrderId(orderId)) || orderId;
 
     const otpRecord = await OrderOtp.findOne({ orderId, type: 'return_drop' }).sort({
       lastGeneratedAt: -1,

@@ -1,4 +1,5 @@
 import Order from "../models/order.js";
+import OrderOtp from "../models/orderOtp.js";
 import Delivery from "../models/delivery.js";
 import Seller from "../models/seller.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
@@ -573,6 +574,20 @@ export async function getOrderWithAccess(orderId, userId, role) {
       "Access denied. You are not authorized to view this order.",
       403,
     );
+  }
+
+  if (order.workflowStatus === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
+    const otpDoc = await OrderOtp.findOne({
+      orderId: order.orderId,
+      type: "delivery",
+      consumedAt: null,
+      expiresAt: { $gt: new Date() },
+    })
+      .sort({ lastGeneratedAt: -1, createdAt: -1 })
+      .lean();
+    if (otpDoc && otpDoc.code) {
+      order.deliveryOtp = otpDoc.code;
+    }
   }
 
   return {

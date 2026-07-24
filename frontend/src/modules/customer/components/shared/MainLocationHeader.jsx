@@ -343,16 +343,6 @@ const MainLocationHeader = ({
             )}
           </motion.button>
 
-          {/* Notification Icon (Mobile) */}
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate("/notifications")}
-            className="absolute top-5 right-20 sm:top-6 sm:right-24 md:hidden z-20 cursor-pointer"
-            style={{ color: headerFontColor }}
-          >
-            <NotificationsNoneOutlinedIcon sx={{ fontSize: 28 }} />
-          </motion.button>
 
           {/* Desktop/Tablet Header Layout (md and above) */}
           <div className="hidden md:flex items-center justify-between relative z-20 px-1 lg:px-4 mb-1.5 mt-0.5">

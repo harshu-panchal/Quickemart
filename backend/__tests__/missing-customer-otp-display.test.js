@@ -44,7 +44,7 @@ async function createTestCustomer(customerId = null) {
     email: `test.customer.${Date.now()}@test.com`,
     phone: "1234567890",
     password: "hashedpassword",
-    role: "customer",
+    role: "user",
     walletBalance: 0,
   });
 
@@ -114,6 +114,8 @@ async function createValidOtp(orderId, orderMongoId, code = "1234") {
     orderId,
     orderMongoId,
     codeHash,
+    code,
+    type: "delivery",
     expiresAt,
     lastGeneratedAt: new Date(),
     consumedAt: null,
