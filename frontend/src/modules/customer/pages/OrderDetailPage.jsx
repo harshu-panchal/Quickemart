@@ -1008,37 +1008,51 @@ const OrderDetailPage = () => {
           className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100"
         >
           <h3 className="text-base font-bold text-slate-800 mb-4">Bill Summary</h3>
-          <div className="space-y-2.5 text-sm">
-            <div className="flex justify-between text-slate-600">
-              <span>Item Total</span>
-              <span className="font-semibold">₹{order.pricing.subtotal}</span>
-            </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Delivery Fee</span>
-              <span
-                className={
-                  order.pricing.deliveryFee === 0 ? "text-brand-600 font-bold" : "font-semibold"
-                }>
-                {order.pricing.deliveryFee === 0
-                  ? "FREE"
-                  : `₹${order.pricing.deliveryFee}`}
-              </span>
-            </div>
-            {order.pricing.tip > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Tip</span>
-                <span className="font-semibold">₹{order.pricing.tip}</span>
+          {(() => {
+            const subtotal = Number(order?.pricing?.subtotal || 0);
+            const gstAmount = Number(order?.pricing?.gst || 0);
+            const gstPct = subtotal > 0 && gstAmount > 0
+              ? Math.round((gstAmount / subtotal) * 100)
+              : (gstAmount > 0 ? 5 : 5);
+
+            return (
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between text-slate-600">
+                  <span>Item Total</span>
+                  <span className="font-semibold">₹{subtotal}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Delivery Fee</span>
+                  <span
+                    className={
+                      order?.pricing?.deliveryFee === 0 ? "text-brand-600 font-bold" : "font-semibold"
+                    }>
+                    {order?.pricing?.deliveryFee === 0
+                      ? "FREE"
+                      : `₹${order?.pricing?.deliveryFee || 0}`}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>GST Tax</span>
+                  <span className="font-semibold">{gstPct}%</span>
+                </div>
+                {Number(order?.pricing?.tip || 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Tip</span>
+                    <span className="font-semibold">₹{order.pricing.tip}</span>
+                  </div>
+                )}
+                <div className="border-t border-slate-100 mt-3 pt-3 flex justify-between items-center">
+                  <span className="text-base font-bold text-slate-900">
+                    Total Amount
+                  </span>
+                  <span className="text-xl font-black text-brand-600">
+                    ₹{order?.pricing?.total || 0}
+                  </span>
+                </div>
               </div>
-            )}
-            <div className="border-t border-slate-100 mt-3 pt-3 flex justify-between items-center">
-              <span className="text-base font-bold text-slate-900">
-                Total Amount
-              </span>
-              <span className="text-xl font-black text-brand-600">
-                ₹{order.pricing.total}
-              </span>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Payment Method */}
           <div className="mt-4 bg-slate-50 rounded-2xl p-3.5 flex items-center justify-between">
@@ -1060,18 +1074,20 @@ const OrderDetailPage = () => {
           </div>
         </motion.div>
 
-        {/* Action Buttons - Redesigned */}
+        {/* Action Buttons */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
-          className="grid grid-cols-2 gap-3"
+          className={(status === "delivered" || order?.workflowStatus === "DELIVERED") ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}
         >
-          <button
-            onClick={() => setShowInvoice(true)}
-            className="py-3.5 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2 text-sm shadow-sm hover:shadow-md active:scale-[0.98]">
-            <Download size={18} /> Invoice
-          </button>
+          {(status === "delivered" || order?.workflowStatus === "DELIVERED") && (
+            <button
+              onClick={() => setShowInvoice(true)}
+              className="py-3.5 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2 text-sm shadow-sm hover:shadow-md active:scale-[0.98]">
+              <Download size={18} /> Download Invoice
+            </button>
+          )}
           <button
             onClick={() => setShowHelp(true)}
             className="py-3.5 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2 text-sm shadow-sm hover:shadow-md active:scale-[0.98]">
