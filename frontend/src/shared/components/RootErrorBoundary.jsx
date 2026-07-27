@@ -20,6 +20,14 @@ const RootErrorBoundary = () => {
         errorMessage = error.message;
     }
 
+    // Intercept dynamic module loading/network connection errors
+    if (
+        errorMessage.includes("Failed to fetch dynamically imported module") || 
+        errorMessage.includes("dynamically imported module")
+    ) {
+        errorMessage = "A network connection error occurred while loading this page. Please check your internet connection and try reloading the page.";
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-outfit">
             <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center border border-gray-100">
@@ -28,12 +36,12 @@ const RootErrorBoundary = () => {
                 </div>
 
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">Oops!</h1>
-                <p className="text-gray-500 mb-6"> {errorMessage} </p>
+                <p className="text-gray-500 mb-6 font-medium leading-relaxed"> {errorMessage} </p>
 
                 <div className="space-y-3">
                     <button
                         onClick={() => window.location.reload()}
-                        className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary-200"
+                        className="w-full bg-primary hover:bg-[#0a6d1a] text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
                     >
                         <RefreshCw className="w-5 h-5" />
                         Refresh Page
