@@ -2,23 +2,44 @@ import React from 'react';
 import { ChevronLeft, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '@core/context/SettingsContext';
+import { useAuth } from '@core/context/AuthContext';
 
 const PrivacyPage = () => {
     const navigate = useNavigate();
     const { settings } = useSettings();
+    const { isAuthenticated, user } = useAuth();
     const appName = settings?.appName || 'App';
+    const role = String(user?.role || '').toLowerCase();
+
+    const handleBack = () => {
+        if (window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+        } else {
+            const path = window.location.pathname;
+            if (path.startsWith('/seller')) {
+                if (isAuthenticated && (role === 'seller' || role === 'store')) {
+                    navigate('/seller');
+                } else {
+                    navigate('/seller/auth');
+                }
+            } else if (path.startsWith('/delivery')) {
+                if (isAuthenticated && (role === 'delivery' || role === 'driver')) {
+                    navigate('/delivery');
+                } else {
+                    navigate('/delivery/auth');
+                }
+            } else {
+                navigate('/');
+            }
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-10">
             {/* Header */}
             <div className="bg-white sticky top-0 z-30 px-4 py-3 flex items-center gap-1 shadow-sm">
                 <button
-                    onClick={() => {
-                        if (window.history.state && window.history.state.idx > 0) {
-                            navigate(-1);
-                        } else {
-                            navigate('/');
-                        }
-                    }}
+                    onClick={handleBack}
                     className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors"
                 >
                     <ChevronLeft size={24} className="text-slate-600" />

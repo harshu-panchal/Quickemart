@@ -847,25 +847,25 @@ const Auth = () => {
                       )}
                     </div>
                     {!isLogin && verifications.email.isOtpVisible && verifications.email.status !== "verified" && (
-                      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="relative w-full">
                         <input
                           type="text"
                           inputMode="numeric"
                           maxLength={4}
                           placeholder="Enter email OTP"
+                          className="w-full pl-5 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
                           value={verifications.email.otp}
                           onChange={(e) =>
                             updateVerificationState("email", {
                               otp: e.target.value.replace(/\D/g, "").slice(0, 4),
                             })
                           }
-                          className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none placeholder:text-slate-400"
                         />
                         <button
                           type="button"
                           onClick={() => handleVerifyOtp("email")}
                           disabled={verifications.email.isVerifying || verifications.email.otp.length !== 4}
-                          className="rounded-md bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-50"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-50"
                         >
                           {verifications.email.isVerifying ? "Checking..." : "Confirm OTP"}
                         </button>
@@ -919,25 +919,25 @@ const Auth = () => {
                           </button>
                         </div>
                         {verifications.phone.isOtpVisible && verifications.phone.status !== "verified" && (
-                          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="relative w-full">
                             <input
                               type="text"
                               inputMode="numeric"
                               maxLength={4}
                               placeholder="Enter phone OTP"
+                              className="w-full pl-5 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
                               value={verifications.phone.otp}
                               onChange={(e) =>
                                 updateVerificationState("phone", {
                                   otp: e.target.value.replace(/\D/g, "").slice(0, 4),
                                 })
                               }
-                              className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none placeholder:text-slate-400"
                             />
                             <button
                               type="button"
                               onClick={() => handleVerifyOtp("phone")}
                               disabled={verifications.phone.isVerifying || verifications.phone.otp.length !== 4}
-                              className="rounded-md bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-50"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-50"
                             >
                               {verifications.phone.isVerifying ? "Checking..." : "Confirm OTP"}
                             </button>
@@ -1211,11 +1211,11 @@ const Auth = () => {
                 </p>
                 <p className="text-xs text-slate-500 font-semibold">
                   By continuing, you agree to our{" "}
-                  <Link to="/terms" target="_blank" className="text-slate-900 font-bold hover:underline">
+                  <Link to="/seller/terms" target="_blank" className="text-slate-900 font-bold hover:underline">
                     Terms &amp; Conditions
                   </Link>{" "}
                   and{" "}
-                  <Link to="/privacy" target="_blank" className="text-slate-900 font-bold hover:underline">
+                  <Link to="/seller/privacy" target="_blank" className="text-slate-900 font-bold hover:underline">
                     Privacy Policy
                   </Link>
                   .

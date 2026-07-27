@@ -502,11 +502,14 @@ export const getImportTemplate = async (req, res) => {
             { header: "Unit", key: "unit", width: 10 },
             { header: "Pack Size", key: "packSize", width: 15 },
             { header: "Product Description", key: "description", width: 30 },
-            { header: "Key Features", key: "keyFeatures", width: 30 },
             { header: "Specifications", key: "specifications", width: 30 },
             { header: "Search Tags", key: "searchTags", width: 25 },
             { header: "Primary Image URL", key: "primaryImage", width: 35 },
-            { header: "Additional Image URLs", key: "additionalImages", width: 35 },
+            { header: "Front Image URL", key: "frontImage", width: 35 },
+            { header: "Back Image URL", key: "backImage", width: 35 },
+            { header: "Details Image URL", key: "detailsImage", width: 35 },
+            { header: "Right Side Image URL", key: "rightSideImage", width: 35 },
+            { header: "Left Side Image URL", key: "leftSideImage", width: 35 },
             { header: "GST Tax (%)", key: "gstTax", width: 15 },
             { header: "Status", key: "status", width: 12 }
         ];
@@ -534,11 +537,14 @@ export const getImportTemplate = async (req, res) => {
             unit: "ml",
             packSize: "500",
             description: "Fresh Pasteurised Milk",
-            keyFeatures: "High in Fat | Pasteurized",
             specifications: "Fat: 4.5% | SNF: 8.5%",
             searchTags: "milk, amul, dairy, fresh milk",
             primaryImage: "https://example.com/amul-milk.jpg",
-            additionalImages: "https://example.com/amul-milk-back.jpg",
+            frontImage: "https://example.com/amul-milk-front.jpg",
+            backImage: "https://example.com/amul-milk-back.jpg",
+            detailsImage: "https://example.com/amul-milk-details.jpg",
+            rightSideImage: "https://example.com/amul-milk-right.jpg",
+            leftSideImage: "https://example.com/amul-milk-left.jpg",
             gstTax: 5,
             status: "Active"
         };
@@ -550,9 +556,9 @@ export const getImportTemplate = async (req, res) => {
             cell.font = { italic: true, color: { argb: "FF94A3B8" } }; // Slate-400 color
         });
 
-        // Unlock all input cells for rows 3 to 500 (16 columns now)
+        // Unlock all input cells for rows 3 to 500 (19 columns now)
         for (let r = 3; r <= 500; r++) {
-            for (let c = 1; c <= 16; c++) {
+            for (let c = 1; c <= 19; c++) {
                 const cell = ws.getCell(r, c);
                 cell.protection = { locked: false };
             }
@@ -594,8 +600,8 @@ export const getImportTemplate = async (req, res) => {
                 error: "Please select a sub category from the dropdown list."
             };
 
-            // Col O (Column 15): GST Tax Validation
-            ws.getCell(`O${r}`).dataValidation = {
+            // Col R (Column 18): GST Tax Validation
+            ws.getCell(`R${r}`).dataValidation = {
                 type: "list",
                 allowBlank: true,
                 formulae: ['"0,5,12,18,28"'],
@@ -604,8 +610,8 @@ export const getImportTemplate = async (req, res) => {
                 error: "Please select a standard GST tax rate (0%, 5%, 12%, 18%, 28%)."
             };
 
-            // Col P (Column 16): Status Validation
-            ws.getCell(`P${r}`).dataValidation = {
+            // Col S (Column 19): Status Validation
+            ws.getCell(`S${r}`).dataValidation = {
                 type: "list",
                 allowBlank: true,
                 formulae: ['"Active,Inactive"'],
@@ -661,6 +667,13 @@ export const bulkImportMasterProducts = async (req, res) => {
             const row = data[i];
             const rowNum = i + 2; // Excel is 1-indexed, row 1 is header
             
+            // Row 2 is the sample data row in the excel template.
+            // We skip it completely so it is never treated as a product.
+            if (rowNum === 2) {
+                report.total--;
+                continue;
+            }
+
             // Skip rows that are completely empty or have no product details filled
             const hasNoProductDetails = !row['Product Name'] && !row['Header Category'] && !row['Main Category'] && !row['Brand'];
             if (hasNoProductDetails) {
@@ -754,17 +767,34 @@ export const bulkImportMasterProducts = async (req, res) => {
                 }
 
                 let galleryImages = [];
-                if (row['Additional Image URLs']) {
-                    const urls = String(row['Additional Image URLs']).split(',');
-                    for (const url of urls) {
+                let galleryLabels = [];
+
+                const getRowVal = (keys) => {
+                    for (const key of keys) {
+                        if (row[key] !== undefined) return row[key];
+                    }
+                    return null;
+                };
+
+                const addImage = async (url, label) => {
+                    if (url) {
                         try {
-                            const uploaded = await uploadImageFromUrl(url.trim());
-                            if (uploaded) galleryImages.push(uploaded);
+                            const uploaded = await uploadImageFromUrl(String(url).trim());
+                            if (uploaded) {
+                                galleryImages.push(uploaded);
+                                galleryLabels.push(label);
+                            }
                         } catch (imgErr) {
-                            // Non-blocking but log it or ignore
+                            console.error(`Failed to upload ${label} image:`, imgErr);
                         }
                     }
-                }
+                };
+
+                await addImage(getRowVal(['Front Image URL', 'Front Image', 'frontImage', 'FrontImageUrl']), 'Front');
+                await addImage(getRowVal(['Back Image URL', 'Back Image', 'backImage', 'BackImageUrl']), 'Back');
+                await addImage(getRowVal(['Details Image URL', 'Details Image', 'detailsImage', 'DetailsImageUrl']), 'Product details image');
+                await addImage(getRowVal(['Right Side Image URL', 'Right Side Image', 'rightSideImage', 'RightSideImageUrl']), 'Right side');
+                await addImage(getRowVal(['Left Side Image URL', 'Left Side Image', 'leftSideImage', 'LeftSideImageUrl']), 'Left side');
 
                 // Parse specifications if present (Format: Key: Value | Key2: Value2)
                 let specifications = [];
@@ -796,6 +826,7 @@ export const bulkImportMasterProducts = async (req, res) => {
                     searchTags: row['Search Tags'] ? String(row['Search Tags']).split(',').map(t => t.trim()) : [],
                     mainImage,
                     galleryImages,
+                    galleryLabels,
                     gstTax: Number(row['GST Tax (%)'] ?? row['GST Tax'] ?? row['GST'] ?? 0) || 0,
                     status: row['Status'] ? String(row['Status']).trim().toLowerCase() : 'active',
                     variants: []

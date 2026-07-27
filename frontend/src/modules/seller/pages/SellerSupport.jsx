@@ -11,12 +11,14 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useSettings } from "@core/context/SettingsContext";
+import { useAuth } from "@core/context/AuthContext";
 import Card from "@shared/components/ui/Card";
 import PageHeader from "@shared/components/ui/PageHeader";
 
 const SellerSupport = () => {
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const { isAuthenticated, user } = useAuth();
   const appName = settings?.appName || "Platform";
   const supportEmail = settings?.supportEmail || "seller-support@quickemart.com";
   const supportPhone = settings?.supportPhone || "+91 98765 43210";
@@ -63,7 +65,12 @@ const SellerSupport = () => {
             if (window.history.state && window.history.state.idx > 0) {
               navigate(-1);
             } else {
-              navigate("/");
+              const role = String(user?.role || '').toLowerCase();
+              if (isAuthenticated && (role === 'seller' || role === 'store')) {
+                navigate('/seller');
+              } else {
+                navigate('/seller/auth');
+              }
             }
           }}
           className="p-2 -ml-2 rounded-full hover:bg-slate-200/60 transition-colors"

@@ -1044,9 +1044,9 @@ const DeliveryAuth = () => {
 
                       <p className="text-center text-xs text-gray-400 font-semibold pt-1">
                         By joining, you agree to our{" "}
-                        <Link to="/terms" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms &amp; Conditions</Link>{" "}
+                        <Link to="/delivery/terms" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms &amp; Conditions</Link>{" "}
                         &amp;{" "}
-                        <Link to="/privacy" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
+                        <Link to="/delivery/privacy" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
                       </p>
                     </div>
                   )}
@@ -1092,9 +1092,9 @@ const DeliveryAuth = () => {
 
                       <p className="text-center text-xs text-gray-400 font-semibold pt-2">
                         By logging in, you agree to our{" "}
-                        <Link to="/terms" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms</Link>{" "}
+                        <Link to="/delivery/terms" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Terms</Link>{" "}
                         &amp;{" "}
-                        <Link to="/privacy" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
+                        <Link to="/delivery/privacy" target="_blank" className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</Link>
                       </p>
                     </div>
                   )}
@@ -1159,8 +1159,8 @@ const DeliveryAuth = () => {
                     />
                     <label htmlFor="terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
                       I confirm my phone number is correct and I agree to the{" "}
-                      <Link to="/terms" onClick={(e) => e.stopPropagation()} className="text-brand-600 font-bold hover:underline relative z-10">Terms of Service</Link> &amp;{" "}
-                      <Link to="/privacy" onClick={(e) => e.stopPropagation()} className="text-brand-600 font-bold hover:underline relative z-10">Privacy Policy</Link>.
+                      <Link to="/delivery/terms" onClick={(e) => e.stopPropagation()} className="text-brand-600 font-bold hover:underline relative z-10">Terms of Service</Link> &amp;{" "}
+                      <Link to="/delivery/privacy" onClick={(e) => e.stopPropagation()} className="text-brand-600 font-bold hover:underline relative z-10">Privacy Policy</Link>.
                     </label>
                   </div>
 

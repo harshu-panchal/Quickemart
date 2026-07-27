@@ -8,12 +8,14 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { useAuth } from "@core/context/AuthContext";
 import Button from "@/shared/components/ui/Button";
 import Card from "@/shared/components/ui/Card";
 import { motion, AnimatePresence } from "framer-motion";
 
 const HelpSupport = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
 
   const faqs = [
     {
@@ -50,7 +52,18 @@ const HelpSupport = () => {
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="flex items-center p-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                const role = String(user?.role || '').toLowerCase();
+                if (isAuthenticated && (role === 'delivery' || role === 'driver')) {
+                  navigate('/delivery');
+                } else {
+                  navigate('/delivery/auth');
+                }
+              }
+            }}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors mr-2">
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
