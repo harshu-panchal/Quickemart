@@ -576,18 +576,29 @@ export async function getOrderWithAccess(orderId, userId, role) {
     );
   }
 
-  if (order.workflowStatus === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
-    const otpDoc = await OrderOtp.findOne({
-      orderId: order.orderId,
-      type: "delivery",
-      consumedAt: null,
-      expiresAt: { $gt: new Date() },
-    })
-      .sort({ lastGeneratedAt: -1, createdAt: -1 })
-      .lean();
-    if (otpDoc && otpDoc.code) {
-      order.deliveryOtp = otpDoc.code;
-    }
+  logger.info("[getOrderWithAccess] Checking delivery OTP for order", {
+    orderId: order.orderId,
+    workflowStatus: order.workflowStatus,
+  });
+
+  const otpDoc = await OrderOtp.findOne({
+    $or: [
+      { orderId: order.orderId },
+      { orderMongoId: order._id },
+    ],
+    type: "delivery",
+    consumedAt: null,
+  })
+    .sort({ lastGeneratedAt: -1, createdAt: -1 })
+    .lean();
+
+  logger.info("[getOrderWithAccess] OTP doc search result", {
+    found: !!otpDoc,
+    code: otpDoc?.code,
+  });
+
+  if (otpDoc && otpDoc.code) {
+    order.deliveryOtp = otpDoc.code;
   }
 
   return {

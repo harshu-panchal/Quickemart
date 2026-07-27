@@ -1160,28 +1160,61 @@ export async function requestHandoffOtpAtomic(deliveryId, orderId, lat, lng) {
     }
   }
 
-  const code = String(Math.floor(1000 + Math.random() * 9000)).padStart(4, "0");
-  const codeHash = OrderOtp.hashCode(code);
-
-  // Mark previous OTPs as consumed (legacy parity) instead of deleting,
-  // so attempt history remains queryable for forensics.
-  await OrderOtp.updateMany(
-    { orderId, type: "delivery", consumedAt: null },
-    { $set: { consumedAt: new Date() } },
-  );
-
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS());
-  await OrderOtp.create({
-    orderId,
-    orderMongoId: order._id,
+  // Check if there is an existing active (unconsumed) OTP for this delivery.
+  // We intentionally do NOT filter by expiresAt here — if an unconsumed OTP
+  // already exists, we always reuse the same code and simply extend its expiry.
+  // This guarantees the rider and customer always see the same 4-digit code
+  // for the entire delivery, regardless of how much time has passed.
+  const existingOtp = await OrderOtp.findOne({
+    $or: [
+      { orderId },
+      { orderMongoId: order._id },
+    ],
     type: "delivery",
-    codeHash,
-    code,
-    expiresAt,
-    attempts: 0,
-    maxAttempts: 3,
-    lastGeneratedAt: new Date(),
-  });
+    consumedAt: null,
+  }).sort({ lastGeneratedAt: -1, createdAt: -1 });
+
+
+  let code;
+  let expiresAt;
+
+  if (existingOtp && existingOtp.code) {
+    code = existingOtp.code;
+    // Renew the expiration time to give it another full cycle
+    expiresAt = new Date(Date.now() + OTP_EXPIRY_MS());
+    existingOtp.expiresAt = expiresAt;
+    existingOtp.lastGeneratedAt = new Date();
+    await existingOtp.save();
+  } else {
+    code = String(Math.floor(1000 + Math.random() * 9000)).padStart(4, "0");
+    const codeHash = OrderOtp.hashCode(code);
+
+    // Mark previous OTPs as consumed
+    await OrderOtp.updateMany(
+      {
+        $or: [
+          { orderId },
+          { orderMongoId: order._id },
+        ],
+        type: "delivery",
+        consumedAt: null,
+      },
+      { $set: { consumedAt: new Date() } },
+    );
+
+    expiresAt = new Date(Date.now() + OTP_EXPIRY_MS());
+    await OrderOtp.create({
+      orderId,
+      orderMongoId: order._id,
+      type: "delivery",
+      codeHash,
+      code,
+      expiresAt,
+      attempts: 0,
+      maxAttempts: 3,
+      lastGeneratedAt: new Date(),
+    });
+  }
 
   const customerId =
     order.customer && typeof order.customer.toString === "function"

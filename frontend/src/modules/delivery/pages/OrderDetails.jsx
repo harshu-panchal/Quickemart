@@ -186,7 +186,7 @@ const OrderDetails = () => {
         const ord = response.data.result;
         setOrder(ord);
 
-        setStep(getPersistedRiderStep(ord));
+        setStep((prev) => Math.max(prev, getPersistedRiderStep(ord)));
       } catch (error) {
         toast.error("Failed to fetch order details");
         navigate("/delivery/dashboard");
@@ -445,6 +445,9 @@ const OrderDetails = () => {
           setStep(3);
           toast.success(`${currentStep.action} Confirmed!`);
         } else if (step === 3) {
+          const res = await deliveryApi.advanceDeliveryRiderUi(order.orderId);
+          const updated = res.data.result;
+          setOrder((prev) => ({ ...(prev || {}), ...updated }));
           setStep(4);
           toast.success(`${currentStep.action} Confirmed!`);
         } else {
@@ -1261,51 +1264,9 @@ const OrderDetails = () => {
         </div>
       )}
 
-      {/* Go Back button: shown when step > 1 and order not yet complete */}
-      {!isReturn && step > 1 && step < 4 && (
-        <div
-          className={`fixed ${
-            step <= 2 ? "bottom-24" : "bottom-4"
-          } left-0 right-0 z-39 flex justify-center pointer-events-none`}
-        >
-          <button
-            onClick={() => {
-              setStep((s) => Math.max(1, s - 1));
-              setIsSlideComplete(false);
-              setDragX(0);
-              setShowOtpInput(false);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className="pointer-events-auto flex items-center gap-1.5 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-bold shadow-md hover:bg-slate-50 active:scale-95 transition-all"
-          >
-            <ChevronDown className="rotate-90" size={14} />
-            Go Back
-          </button>
-        </div>
-      )}
 
-      {/* Go Back for return flow */}
-      {isReturn && isAssignedRider && (step === 2 || step === 4) && (
-        <div
-          className="fixed bottom-4 left-0 right-0 z-39 flex justify-center pointer-events-none"
-        >
-          <button
-            onClick={() => {
-              setStep((s) => Math.max(1, s - 1));
-              setIsSlideComplete(false);
-              setDragX(0);
-              setShowOtpInput(false);
-              setPickupProofSubmitted(false);
-              setShowDropOtpInput(false);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className="pointer-events-auto flex items-center gap-1.5 px-4 py-2 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-bold shadow-md hover:bg-slate-50 active:scale-95 transition-all"
-          >
-            <ChevronDown className="rotate-90" size={14} />
-            Go Back
-          </button>
-        </div>
-      )}
+
+
     </div>
   );
 };

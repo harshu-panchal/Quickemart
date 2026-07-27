@@ -25,15 +25,45 @@ function parseEnvUrl(rawUrl) {
   }
 }
 
+function isLocalUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "[::1]" ||
+      host.startsWith("192.168.") ||
+      host.startsWith("10.") ||
+      host.startsWith("172.")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function resolveApiBaseUrl() {
   const envUrl =
     parseEnvUrl(import.meta.env.VITE_API_URL) ||
     parseEnvUrl(import.meta.env.VITE_API_BASE_URL);
 
   const browserHostname = window.location.hostname;
-  if (!envUrl) {
+  const isCurrentLocal =
+    browserHostname === "localhost" ||
+    browserHostname === "127.0.0.1" ||
+    browserHostname === "[::1]";
+
+  // If we are running on a remote live site (or remote dev network IP), but the envUrl
+  // points to localhost/127.0.0.1, we ignore the local envUrl and use the current page's origin.
+  const shouldIgnoreLocalEnv = !isCurrentLocal && envUrl && isLocalUrl(envUrl);
+
+  if (!envUrl || shouldIgnoreLocalEnv) {
     const fallbackHost = browserHostname || "localhost";
-    return buildLocalApiUrl(fallbackHost);
+    if (isCurrentLocal) {
+      return buildLocalApiUrl(fallbackHost);
+    }
+    const protocol = window.location.protocol || "https:";
+    return `${protocol}//${browserHostname}${DEFAULT_API_PATH}`;
   }
 
   try {

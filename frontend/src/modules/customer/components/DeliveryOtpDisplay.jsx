@@ -25,18 +25,32 @@ import { STORAGE_KEYS } from "@core/utils/storage";
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 7.5, 9.4
  */
 const matchesOrderIdentifier = (payloadOrderId, identifiers = []) => {
-  const normalizedPayloadId = String(payloadOrderId || "").trim();
+  const normalizedPayloadId = String(payloadOrderId || "").trim().toLowerCase();
   if (!normalizedPayloadId) return false;
   return identifiers
-    .map((value) => String(value || "").trim())
+    .map((value) => String(value || "").trim().toLowerCase())
     .filter(Boolean)
     .includes(normalizedPayloadId);
 };
 
-const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
-  const [otpData, setOtpData] = useState(null);
+const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null, initialOtp = null }) => {
+  console.log(`[DeliveryOtpDisplay] Mounted/Rendered with initialOtp prop: "${initialOtp}"`);
+
+  const [otpData, setOtpData] = useState(() => {
+    if (initialOtp) {
+      console.log(`[DeliveryOtpDisplay] Initializing state with initialOtp: "${initialOtp}"`);
+      return {
+        otp: initialOtp,
+        expiresAt: new Date(Date.now() + 600000).toISOString(), // 10 min default
+        deliveryPersonNearby: true,
+      };
+    }
+    return null;
+  });
   const [isDelivered, setIsDelivered] = useState(false);
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(() => {
+    return initialOtp ? 600 : 0;
+  });
   const [isVisible, setIsVisible] = useState(true);
   const timerRef = useRef(null);
 
@@ -47,6 +61,21 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
     const diff = Math.floor((expiry - now) / 1000);
     return Math.max(0, diff);
   };
+
+  // Sync initialOtp changes (e.g. when order details API request finishes loading)
+  useEffect(() => {
+    console.log(`[DeliveryOtpDisplay] useEffect sync triggered with initialOtp prop: "${initialOtp}", current otpData:`, otpData);
+    if (initialOtp && (!otpData || otpData.otp !== initialOtp)) {
+      console.log(`[DeliveryOtpDisplay] Syncing state dynamically with initialOtp: "${initialOtp}"`);
+      setOtpData({
+        otp: initialOtp,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        deliveryPersonNearby: true,
+      });
+      setRemainingSeconds(600);
+      setIsDelivered(false);
+    }
+  }, [initialOtp]);
 
   // Format seconds to MM:SS
   const formatTime = (seconds) => {
@@ -76,7 +105,7 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
 
     const getToken = createSocketTokenReader(STORAGE_KEYS.AUTH_CUSTOMER);
     const socket = getOrderSocket(getToken);
-    
+
     console.log(`[DeliveryOtpDisplay] Socket connection status:`, socket?.connected);
     console.log(`[DeliveryOtpDisplay] Socket ID:`, socket?.id);
     const acceptedOrderIds = [orderId, checkoutGroupId];
@@ -205,18 +234,16 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
         {/* Requirement 4.2: Display OTP in prominent, easily readable format */}
         {/* Requirement 4.3: Display with font size at least 24 points */}
         <div
-          className={`border rounded-2xl p-6 text-center transition-colors duration-300 ${
-            isExpiringSoon
+          className={`border rounded-2xl p-6 text-center transition-colors duration-300 ${isExpiringSoon
               ? "bg-amber-50 border-amber-300"
               : "bg-gradient-to-br from-purple-50 to-brand-50 border-purple-200"
-          }`}
+            }`}
         >
           <div className="flex items-center justify-center gap-2 mb-2">
             <Shield className={`w-5 h-5 ${isExpiringSoon ? "text-amber-600" : "text-purple-600"}`} />
             <p
-              className={`text-xs font-bold uppercase tracking-wider ${
-                isExpiringSoon ? "text-amber-800" : "text-purple-800"
-              }`}
+              className={`text-xs font-bold uppercase tracking-wider ${isExpiringSoon ? "text-amber-800" : "text-purple-800"
+                }`}
             >
               Delivery OTP
             </p>
@@ -225,9 +252,8 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
           {/* OTP Value - Minimum 24pt font (32px = 24pt) */}
           {/* Requirement 4.3: Font size at least 24 points */}
           <div
-            className={`text-5xl font-black font-mono tracking-[0.3em] mb-3 ${
-              isExpiringSoon ? "text-amber-950" : "text-purple-950"
-            }`}
+            className={`text-5xl font-black font-mono tracking-[0.3em] mb-3 ${isExpiringSoon ? "text-amber-950" : "text-purple-950"
+              }`}
             style={{ fontSize: "48px" }} // 36pt = 48px (exceeds 24pt requirement)
           >
             {otpData.otp}
@@ -241,11 +267,10 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
         {/* Countdown Timer */}
         {/* Requirement 7.5: Display countdown timer showing remaining validity */}
         <div
-          className={`border rounded-xl p-4 flex items-center justify-between transition-colors duration-300 ${
-            isExpiringSoon
+          className={`border rounded-xl p-4 flex items-center justify-between transition-colors duration-300 ${isExpiringSoon
               ? "bg-amber-50 border-amber-200"
               : "bg-gray-50 border-gray-200"
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <Clock className={`w-4 h-4 ${isExpiringSoon ? "text-amber-600" : "text-gray-600"}`} />
@@ -254,9 +279,8 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
             </span>
           </div>
           <span
-            className={`text-lg font-bold font-mono ${
-              isExpiringSoon ? "text-amber-950" : "text-gray-900"
-            }`}
+            className={`text-lg font-bold font-mono ${isExpiringSoon ? "text-amber-950" : "text-gray-900"
+              }`}
           >
             {formatTime(remainingSeconds)}
           </span>

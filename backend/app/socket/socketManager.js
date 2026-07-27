@@ -4,6 +4,8 @@
 import { verifySocketToken } from "./socketAuth.js";
 import mongoose from "mongoose";
 import Ticket from "../models/ticket.js";
+import Order from "../models/order.js";
+
 
 let _io = null;
 
@@ -56,9 +58,40 @@ export const initSocket = (io) => {
       socket.join(`admin:${userId}`);
     }
 
-    socket.on("join_order", (orderId) => {
+    socket.on("join_order", async (orderId) => {
       if (!orderId || typeof orderId !== "string") return;
-      socket.join(`order:${orderId}`);
+      const raw = orderId.trim();
+      if (!raw) return;
+
+      // Always join the room keyed by whatever the client sent first (instant, no DB hit).
+      // This covers the common case where the URL already contains the canonical orderId.
+      socket.join(`order:${raw}`);
+
+      // Then resolve the canonical orderId from the DB so that events emitted to
+      // `order:<canonicalId>` are received even when the client joined by Mongo ObjectId
+      // or checkoutGroupId. This is the root-cause fix for real-time status updates
+      // not reaching customers who navigated from a non-canonical URL.
+      try {
+        const isObjectId =
+          raw.length === 24 &&
+          mongoose.Types.ObjectId.isValid(raw) &&
+          new mongoose.Types.ObjectId(raw).toString() === raw;
+
+        if (isObjectId) {
+          const doc = await Order.findById(raw).select("orderId").lean();
+          if (doc?.orderId && doc.orderId !== raw) {
+            socket.join(`order:${doc.orderId}`);
+          }
+        } else {
+          // Could be a checkoutGroupId — resolve by checkoutGroupId match
+          const doc = await Order.findOne({ checkoutGroupId: raw }).select("orderId").lean();
+          if (doc?.orderId && doc.orderId !== raw) {
+            socket.join(`order:${doc.orderId}`);
+          }
+        }
+      } catch {
+        // Non-critical: if DB lookup fails, client stays in the raw room joined above
+      }
     });
 
     socket.on("leave_order", (orderId) => {

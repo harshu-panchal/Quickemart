@@ -127,10 +127,10 @@ const getTrackingRoutePhase = (order) => {
 };
 
 const matchesOrderIdentifier = (payloadOrderId, identifiers = []) => {
-  const normalizedPayloadId = String(payloadOrderId || "").trim();
+  const normalizedPayloadId = String(payloadOrderId || "").trim().toLowerCase();
   if (!normalizedPayloadId) return false;
   return identifiers
-    .map((value) => String(value || "").trim())
+    .map((value) => String(value || "").trim().toLowerCase())
     .filter(Boolean)
     .includes(normalizedPayloadId);
 };
@@ -219,6 +219,8 @@ const OrderDetailPage = () => {
         refreshRef.current.inFlight = true;
         const response = await customerApi.getOrderDetails(orderId);
         const ord = response.data.result;
+        console.log("[OrderDetailPage] Loaded order details response:", ord);
+        console.log("[OrderDetailPage] Active delivery OTP from DB:", ord?.deliveryOtp);
         setOrder(ord);
 
         try {
@@ -251,11 +253,6 @@ const OrderDetailPage = () => {
     getOrderSocket(getToken);
     joinOrderRoom(orderId, getToken);
 
-    // Also join using the canonical order.orderId once loaded (may differ from URL param)
-    if (order?.orderId && order.orderId !== orderId) {
-      joinOrderRoom(order.orderId, getToken);
-    }
-
     const refresh = () => {
       if (refreshRef.current.timer) clearTimeout(refreshRef.current.timer);
       refreshRef.current.timer = setTimeout(() => {
@@ -276,14 +273,15 @@ const OrderDetailPage = () => {
     };
 
     const offStatus = onOrderStatusUpdate(getToken, (payload) => {
-      // Guard: only process events that belong to the order currently on screen.
-      // The customer personal room (customer:<id>) receives updates for ALL of a
-      // customer's orders — without this filter the wrong order's state would be
-      // silently overwritten in production when a customer has multiple active orders.
-      if (!matchesOrderIdentifier(payload?.orderId, identifiersRef.current)) return;
+      console.log("[OrderDetailPage] Socket order:status:update received:", payload);
+      if (!matchesOrderIdentifier(payload?.orderId, identifiersRef.current)) {
+        console.warn("[OrderDetailPage] Ignored socket order:status:update due to ID mismatch. Expected one of:", identifiersRef.current, "Got:", payload?.orderId);
+        return;
+      }
 
       // Immediately update order state from socket payload — no waiting for API re-fetch
       const ws = String(payload?.workflowStatus || "").toUpperCase();
+      console.log("[OrderDetailPage] Status match confirmed. Workflow status:", ws);
       if (ws) {
         // Map every workflow status to its legacy status so all components
         // that read order.status also update in real-time without a page refresh.
@@ -312,12 +310,25 @@ const OrderDetailPage = () => {
       refresh();
     });
     const offOtp = onCustomerOtp(getToken, (payload) => {
+      console.log("[OrderDetailPage] Socket order:otp received:", payload);
       if (matchesOrderIdentifier(payload?.orderId, identifiersRef.current) && (payload?.code || payload?.otp)) {
+        console.log("[OrderDetailPage] Syncing OTP dynamically to Out for Delivery state:", payload.code || payload.otp);
         setHandoffOtp(payload.code || payload.otp);
         toast.info("Delivery OTP received — share with rider if asked.");
+        setOrder((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            workflowStatus: "OUT_FOR_DELIVERY",
+            status: "out_for_delivery",
+          };
+        });
+      } else {
+        console.warn("[OrderDetailPage] Ignored socket order:otp due to mismatch or empty code. Expected one of:", identifiersRef.current);
       }
     });
     const offReturnOtp = onReturnPickupOtp(getToken, (payload) => {
+      console.log("[OrderDetailPage] Socket return:pickup:otp received:", payload);
       if (matchesOrderIdentifier(payload?.orderId, identifiersRef.current) && payload?.otp) {
         setHandoffOtp(payload.otp);
         toast.info("Return pickup OTP received — share with rider.");
@@ -355,6 +366,16 @@ const OrderDetailPage = () => {
       }
     };
   }, [orderId, extraRoomId]);
+
+  // Dynamically join the canonical order.orderId Socket room once loaded (since it may differ from the URL param)
+  useEffect(() => {
+    if (!order?.orderId || order.orderId === orderId) return undefined;
+    const getToken = createSocketTokenReader(STORAGE_KEYS.AUTH_CUSTOMER);
+    joinOrderRoom(order.orderId, getToken);
+    return () => {
+      leaveOrderRoom(order.orderId, getToken);
+    };
+  }, [order?.orderId, orderId]);
 
   // Subscribe to live tracking from Firebase (if available).
   //
@@ -394,9 +415,54 @@ const OrderDetailPage = () => {
     return () => clearInterval(iv);
   }, []);
 
+  // ─── POLLING FALLBACK FOR TRANSIENT STATES ────────────────────────────────
+  // Socket events are the primary update mechanism, but they can be missed if:
+  //   - the backend was not restarted after a socketManager change
+  //   - the socket temporarily disconnected and the event was emitted in the gap
+  //   - the client joined the room AFTER the event was already emitted
+  // This polling loop guarantees that the UI always reflects the real DB state
+  // within a few seconds, regardless of socket reliability.
+  // Polling ONLY runs for transient states where the user is waiting for an update.
   useEffect(() => {
-    // Timer removed
-  }, [order]);
+    if (!orderId || !order) return;
+
+    const ws = String(order.workflowStatus || "").toUpperCase();
+    const legacySt = String(order.status || "").toLowerCase();
+
+    // Only poll for states where the order is waiting to transition
+    const isTransient =
+      ws === "SELLER_PENDING" ||
+      ws === "DELIVERY_SEARCH" ||
+      legacySt === "pending";
+
+    if (!isTransient) return;
+
+    console.log(`[OrderDetailPage] 🔄 Polling enabled for transient state: ${ws || legacySt}`);
+
+    const iv = setInterval(async () => {
+      try {
+        const r = await customerApi.getOrderDetails(orderId);
+        const ord = r.data.result;
+        const newWs = String(ord.workflowStatus || "").toUpperCase();
+        const oldWs = String(order.workflowStatus || "").toUpperCase();
+
+        // Only update state if the status actually changed (avoid noisy re-renders)
+        if (newWs !== oldWs || ord.status !== order.status) {
+          console.log(`[OrderDetailPage] 🔄 Poll detected status change: ${oldWs} → ${newWs}`);
+          setOrder(ord);
+        }
+      } catch {
+        // Silently ignore polling errors — socket is the primary channel
+      }
+    }, 4000); // Poll every 4 seconds
+
+    return () => {
+      console.log(`[OrderDetailPage] 🔄 Polling stopped (status changed or component unmounted)`);
+      clearInterval(iv);
+    };
+  }, [orderId, order?.workflowStatus, order?.status]);
+
+
 
   const handleOpenInMaps = () => {
     const loc = order?.address?.location;
@@ -832,8 +898,10 @@ const OrderDetailPage = () => {
           <DeliveryOtpDisplay
             orderId={order?.orderId || orderId}
             checkoutGroupId={order?.checkoutGroupId || orderId}
+            initialOtp={order?.deliveryOtp || null}
           />
         )}
+
 
         {/* Delivery Partner Card - Redesigned */}
         {(order.deliveryBoy || (status !== "delivered" && status !== "cancelled" && status !== "pending")) && (
@@ -866,8 +934,8 @@ const OrderDetailPage = () => {
                 <p className="text-xs font-semibold text-primary-foreground/80 uppercase tracking-wider">Your Courier</p>
                 <h3 className="font-bold text-primary-foreground text-lg">{order.deliveryBoy?.name || "Assigning Partner..."}</h3>
                 <p className="text-xs text-primary-foreground/90 mt-0.5">
-                  {order.deliveryBoy 
-                    ? (status === "delivered" ? "Order Delivered" : "On the way to you") 
+                  {order.deliveryBoy
+                    ? (status === "delivered" ? "Order Delivered" : "On the way to you")
                     : "Searching for nearby rider"}
                 </p>
               </div>

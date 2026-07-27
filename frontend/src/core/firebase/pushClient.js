@@ -296,10 +296,40 @@ export async function startForegroundPushListener() {
 
   const messaging = getMessaging(app);
   const unsubscribe = onMessage(messaging, async (payload) => {
+    console.log("[PushClient] Foreground push notification received:", payload);
     const title =
       payload?.notification?.title || payload?.data?.title || "Notification";
     const body =
       payload?.notification?.body || payload?.data?.body || "";
+
+    // 1. Play standard Mixkit notification chime sound
+    try {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(() => {});
+    } catch (e) {
+      // Ignore audio playback failure (e.g. browser autoplay restrictions)
+    }
+
+    // 2. Surfaced as a styled toast notification using Sonner
+    try {
+      const { toast } = await import('sonner');
+      const link = payload?.data?.link;
+      toast(title, {
+        description: body,
+        duration: 8000,
+        position: 'top-center',
+        action: link ? {
+          label: 'View',
+          onClick: () => {
+            window.location.href = link;
+          }
+        } : undefined
+      });
+    } catch (e) {
+      // Ignore toast trigger failures
+    }
+
+    // 3. Fallback to system-level tray notification
     await showSystemNotification({
       title,
       body,
