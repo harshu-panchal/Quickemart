@@ -8,7 +8,7 @@ import { customerApi } from '../services/customerApi';
 
 const EditProfilePage = () => {
     const navigate = useNavigate();
-    const { user, login } = useAuth();
+    const { user, setUser } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: user?.name || '',
@@ -29,7 +29,7 @@ const EditProfilePage = () => {
             const updatedUser = response.data.result;
 
             // Update local auth state
-            login({ ...user, ...updatedUser });
+            setUser({ ...user, ...updatedUser });
 
             toast.success('Profile updated successfully!');
             navigate('/profile');
@@ -90,17 +90,20 @@ const EditProfilePage = () => {
 
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Phone Number</label>
-                            <div className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all">
+                            <div className="flex items-center gap-3 bg-slate-100 opacity-60 px-4 py-3 rounded-xl border border-slate-200 cursor-not-allowed select-none">
                                 <Phone size={20} className="text-slate-400" />
                                 <input
                                     type="tel"
                                     name="phone"
                                     value={formData.phone}
-                                    onChange={handleChange}
-                                    className="bg-transparent w-full text-slate-800 font-bold outline-none placeholder:font-medium"
-                                    placeholder="Enter phone number"
+                                    readOnly={true}
+                                    className="bg-transparent w-full text-slate-500 font-bold outline-none cursor-not-allowed select-none"
+                                    placeholder="Phone number"
                                 />
                             </div>
+                            <p className="text-[10px] text-slate-400 mt-1 font-bold">
+                                Phone number cannot be changed. Contact support if needed.
+                            </p>
                         </div>
 
                         <div>

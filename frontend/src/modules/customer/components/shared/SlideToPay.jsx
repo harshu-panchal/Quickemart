@@ -63,27 +63,35 @@ const SlideToPay = ({
 
     return (
         <div
-            className="relative h-16 w-full rounded-full overflow-hidden select-none touch-none bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 shadow-xl shadow-purple-500/30 border border-white/20"
+            className={`relative h-16 w-full rounded-full overflow-hidden select-none touch-none shadow-xl transition-all duration-300 ${
+                disabled
+                    ? "bg-gradient-to-r from-slate-300 via-slate-400 to-slate-500 border-slate-200 cursor-not-allowed opacity-60"
+                    : "bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 shadow-purple-500/30 border-white/20"
+            }`}
             ref={(el) => el && setContainerWidth(el.offsetWidth)}
         >
             {/* Progress Fill */}
-            <motion.div
-                className="absolute inset-y-0 left-0 bg-white/20"
-                style={{ width: fillWidth }}
-            />
+            {!disabled && (
+                <motion.div
+                    className="absolute inset-y-0 left-0 bg-white/20"
+                    style={{ width: fillWidth }}
+                />
+            )}
 
             {/* Shimmer Effect Background (continuous sweep) */}
-            <motion.div
-                className="absolute inset-0 overflow-hidden pointer-events-none"
-                style={{ opacity: shimmerOpacity }}
-            >
+            {!disabled && (
                 <motion.div
-                    className="absolute inset-y-0 -inset-x-1 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg]"
-                    initial={{ x: "-100%" }}
-                    animate={{ x: "100%" }}
-                    transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
-                />
-            </motion.div>
+                    className="absolute inset-0 overflow-hidden pointer-events-none"
+                    style={{ opacity: shimmerOpacity }}
+                >
+                    <motion.div
+                        className="absolute inset-y-0 -inset-x-1 bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-20deg]"
+                        initial={{ x: "-100%" }}
+                        animate={{ x: "100%" }}
+                        transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
+                    />
+                </motion.div>
+            )}
 
             {/* Text Label */}
             <motion.div
@@ -94,9 +102,11 @@ const SlideToPay = ({
                     {text} <span className="text-white/40">|</span> <span className="text-brand-50 font-extrabold">₹{amount}</span>
                 </span>
 
-                <div className="absolute right-4 animate-pulse text-white/70">
-                    <ChevronsRight size={20} />
-                </div>
+                {!disabled && (
+                    <div className="absolute right-4 animate-pulse text-white/70">
+                        <ChevronsRight size={20} />
+                    </div>
+                )}
             </motion.div>
 
             {/* Success State Text */}
@@ -112,16 +122,18 @@ const SlideToPay = ({
 
             {/* Draggable Circle */}
             <motion.div
-                className="absolute left-1 top-1 bottom-1 w-14 h-14 bg-white rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing z-20 shadow-[0_6px_18px_rgba(15,118,110,0.35)] border border-brand-100"
-                drag={!isCompleted && !isLoading ? "x" : false}
+                className={`absolute left-1 top-1 bottom-1 w-14 h-14 bg-white rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing z-20 shadow-[0_6px_18px_rgba(15,118,110,0.35)] border border-brand-100 ${
+                    disabled ? "cursor-not-allowed opacity-80" : ""
+                }`}
+                drag={!isCompleted && !isLoading && !disabled ? "x" : false}
                 dragConstraints={{ left: 0, right: maxDrag }}
                 dragElastic={0.05}
                 dragMomentum={false}
                 onDragEnd={handleDragEnd}
                 animate={controls}
                 style={{ x }}
-                whileTap={{ scale: 0.95 }}
-                whileHover={{ scale: 1.05 }}
+                whileTap={!disabled ? { scale: 0.95 } : {}}
+                whileHover={!disabled ? { scale: 1.05 } : {}}
             >
                 {isLoading || isCompleted ? (
                     <motion.div
@@ -133,7 +145,7 @@ const SlideToPay = ({
                         style={{ rotate }}
                     >
                         <motion.div className="text-primary" style={{ opacity: arrowsOpacity }}>
-                            <ChevronRight size={28} strokeWidth={3} />
+                            <ChevronRight size={28} strokeWidth={3} className={disabled ? "text-slate-400" : ""} />
                         </motion.div>
                         <motion.div
                             className="absolute inset-0 flex items-center justify-center text-primary"

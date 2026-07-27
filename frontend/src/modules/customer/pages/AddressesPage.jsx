@@ -315,8 +315,8 @@ const AddressesPage = () => {
             toast.error('Please enter the address');
             return false;
         }
-        if (form.landmark && !/^[A-Za-z\s]+$/.test(form.landmark.trim())) {
-            toast.error('Landmark should contain only alphabets');
+        if (form.landmark && !/^[A-Za-z0-9\s,.-]+$/.test(form.landmark.trim())) {
+            toast.error('Landmark should contain only letters, numbers, spaces, commas, periods and hyphens');
             return false;
         }
         if (form.city && !/^[A-Za-z\s]+$/.test(form.city.trim())) {

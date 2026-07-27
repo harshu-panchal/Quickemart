@@ -317,9 +317,11 @@ const ProductDetailPage = () => {
                                     </div>
                                 ) : (
                                     <Button
-                                        onClick={() => {
-                                            addToCart(product);
-                                            showToast(`${product.name} added to cart`, 'success');
+                                        onClick={async () => {
+                                            const success = await addToCart(product);
+                                            if (success) {
+                                                showToast(`${product.name} added to cart`, 'success');
+                                            }
                                         }}
                                         className="h-16 w-full sm:w-64 bg-primary hover:bg-[var(--brand-400)] text-white text-lg font-black rounded-2xl shadow-xl transition-all hover:-translate-y-1"
                                     >

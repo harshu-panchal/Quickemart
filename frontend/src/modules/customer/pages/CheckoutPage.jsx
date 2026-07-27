@@ -73,6 +73,19 @@ import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
 
 const placesLibrary = ["places"];
 
+const getItemStockLimit = (item) => {
+  if (!item) return 0;
+  const variantSku = String(item.variantSku || "").trim();
+  if (variantSku) {
+    const variants = Array.isArray(item.variants) ? item.variants : [];
+    const hit = variants.find(
+      (v) => String(v?.sku || "").trim() === variantSku || String(v?.name || "").trim() === variantSku
+    );
+    return hit ? Number(hit.stock ?? 0) : 0;
+  }
+  return Number(item.stock ?? 0);
+};
+
 const CheckoutPage = () => {
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -206,6 +219,28 @@ const CheckoutPage = () => {
   const [coupons, setCoupons] = useState([]);
   const [manualCode, setManualCode] = useState("");
   const [emptyBoxData, setEmptyBoxData] = useState(null);
+
+  // Stock validation and Multi-Seller check
+  const stockViolations = useMemo(() => {
+    return cart.filter((item) => {
+      const qty = Number(item.quantity || 0);
+      const stockLimit = getItemStockLimit(item);
+      return qty > stockLimit;
+    });
+  }, [cart]);
+
+  const uniqueSellers = useMemo(() => {
+    const sellers = new Set();
+    cart.forEach((item) => {
+      const sid = item.sellerId?._id || item.sellerId;
+      if (sid) sellers.add(String(sid));
+    });
+    return Array.from(sellers);
+  }, [cart]);
+
+  const hasMultipleSellers = uniqueSellers.length > 1;
+
+  const isCheckoutBlocked = stockViolations.length > 0 || hasMultipleSellers || hasClosedStoreItems;
 
   // Dynamically load empty-box Lottie only when cart is empty
   useEffect(() => {
@@ -633,9 +668,11 @@ const CheckoutPage = () => {
     }
   };
 
-  const handleAddToCart = (product) => {
-    addToCart(product);
-    showToast(`${product.name} added to cart!`, "success");
+  const handleAddToCart = async (product) => {
+    const success = await addToCart(product);
+    if (success) {
+      showToast(`${product.name} added to cart!`, "success");
+    }
   };
 
   const getCartItem = (productId) => cart.find((item) => item.id === productId);
@@ -694,6 +731,8 @@ const CheckoutPage = () => {
       tipAmount: selectedTip,
       paymentMode: selectedPayment === "online" ? "ONLINE" : "COD",
       timeSlot: selectedTimeSlot,
+      couponCode: selectedCoupon?.code || null,
+      couponId: selectedCoupon?.couponId || selectedCoupon?._id || selectedCoupon?.id || null,
     });
 
     const fetchPreview = async () => {
@@ -721,6 +760,7 @@ const CheckoutPage = () => {
     selectedTip,
     selectedTimeSlot,
     discountAmount,
+    selectedCoupon,
     savedRecipient,
     currentAddress,
     currentLocation,
@@ -770,6 +810,8 @@ const CheckoutPage = () => {
         tipAmount: selectedTip,
         timeSlot: selectedTimeSlot,
         walletAmount: walletAmountToUse,
+        couponCode: selectedCoupon?.code || null,
+        couponId: selectedCoupon?.couponId || selectedCoupon?._id || selectedCoupon?.id || null,
         items: cart.map((item) => ({
           product: item.id || item._id,
           name: item.name,
@@ -1005,6 +1047,41 @@ const CheckoutPage = () => {
               </div>
             </div>
 
+            {/* Warning Banners */}
+            {hasMultipleSellers && (
+              <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5 flex gap-4 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-rose-100/30 rounded-full blur-2xl pointer-events-none" />
+                <div className="h-10 w-10 rounded-2xl bg-rose-100 flex items-center justify-center flex-shrink-0 text-rose-600 font-bold text-lg">
+                  ⚠️
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-[1000] text-rose-800 text-sm uppercase tracking-wider mb-1">
+                    Multi-Store Checkout Blocked
+                  </h4>
+                  <p className="text-xs text-rose-700/90 font-bold leading-relaxed">
+                    Your cart contains items from different sellers/stores. To place an order, please checkout items from only one seller at a time.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {stockViolations.length > 0 && (
+              <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5 flex gap-4 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-rose-100/30 rounded-full blur-2xl pointer-events-none" />
+                <div className="h-10 w-10 rounded-2xl bg-rose-100 flex items-center justify-center flex-shrink-0 text-rose-600 font-bold text-lg">
+                  ⚠️
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-[1000] text-rose-800 text-sm uppercase tracking-wider mb-1">
+                    Insufficient Stock Available
+                  </h4>
+                  <p className="text-xs text-rose-700/90 font-bold leading-relaxed">
+                    One or more items in your cart exceed the available seller stock. Please decrease the quantity or remove those items before you proceed.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Address Section */}
             <CheckoutAddressSection
               currentAddress={currentAddress}
@@ -1118,6 +1195,7 @@ const CheckoutPage = () => {
                 amount={finalAmountToPay}
                 onSuccess={handlePlaceOrder}
                 isLoading={isPlacingOrder || isPreviewLoading}
+                disabled={isCheckoutBlocked}
                 text={finalAmountToPay === 0 ? "Place Free Order" : "Order Now"}
               />
               <p className="text-center text-[10px] text-slate-400 font-bold mt-4 uppercase tracking-[0.1em]">
@@ -1135,6 +1213,7 @@ const CheckoutPage = () => {
             amount={finalAmountToPay}
             onSuccess={handlePlaceOrder}
             isLoading={isPlacingOrder || isPreviewLoading}
+            disabled={isCheckoutBlocked}
             text={finalAmountToPay === 0 ? "Place Free Order" : "Slide to Pay"}
           />
         </div>

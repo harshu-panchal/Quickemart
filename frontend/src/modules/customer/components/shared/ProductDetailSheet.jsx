@@ -275,12 +275,14 @@ const ProductDetailSheet = () => {
         );
     };
 
-    const handleAddToCart = () => {
-        addToCart({
+    const handleAddToCart = async () => {
+        const success = await addToCart({
             ...selectedProduct,
             variantSku: String(selectedVariant?.sku || selectedVariant?.name || "").trim(),
         });
-        showToast(`${selectedProduct.name} added to cart`, 'success');
+        if (success) {
+            showToast(`${selectedProduct.name} added to cart`, 'success');
+        }
         
         if (isWishlistPage) {
             const isWishlisted = isInWishlist(selectedProduct.id || selectedProduct._id);

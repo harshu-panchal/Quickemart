@@ -14,6 +14,19 @@ import { Clock } from "lucide-react";
 
 import { useProductDetail } from "../../context/ProductDetailContext";
 
+const getItemStockLimit = (item) => {
+  if (!item) return 0;
+  const variantSku = String(item.variantSku || "").trim();
+  if (variantSku) {
+    const variants = Array.isArray(item.variants) ? item.variants : [];
+    const hit = variants.find(
+      (v) => String(v?.sku || "").trim() === variantSku || String(v?.name || "").trim() === variantSku
+    );
+    return hit ? Number(hit.stock ?? 0) : 0;
+  }
+  return Number(item.stock ?? 0);
+};
+
 const ProductCard = React.memo(
   ({ product, badge, className, compact = false, neutralBg = false }) => {
     const { toggleWishlist: toggleWishlistGlobal, isInWishlist } =
@@ -116,7 +129,7 @@ const ProductCard = React.memo(
     );
 
     const handleAddToCart = React.useCallback(
-      (e) => {
+      async (e) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -133,13 +146,35 @@ const ProductCard = React.memo(
           return;
         }
 
+        // Multi-seller validation before animation
+        if (cart.length > 0) {
+          const cartSellerId = String(cart[0].sellerId?._id || cart[0].sellerId || "");
+          const productSellerId = String(product.sellerId?._id || product.sellerId || "");
+          if (cartSellerId && productSellerId && cartSellerId !== productSellerId) {
+            showToast("You can only add items from the same store. Please clear your cart first.", "error");
+            return;
+          }
+        }
+
+        // Stock limit validation before animation
+        const mockItem = { ...product, variantSku: variantKey };
+        const stockLimit = getItemStockLimit(mockItem);
+        const existingItemBefore = cart.find(
+          (item) => `${item.id || item._id}::${String(item.variantSku || "").trim()}` === `${product.id || product._id}::${variantKey || ""}`,
+        );
+        const previousQty = existingItemBefore ? existingItemBefore.quantity : 0;
+        if (previousQty + 1 > stockLimit) {
+          showToast(`Only ${stockLimit} items available in stock.`, "error");
+          return;
+        }
+
         if (imageRef.current) {
           animateAddToCart(
             imageRef.current.getBoundingClientRect(),
             product.image,
           );
         }
-        addToCart({
+        await addToCart({
           ...product,
           variantSku: variantKey,
           variantName: defaultVariant?.name || "",
@@ -149,7 +184,7 @@ const ProductCard = React.memo(
           toggleWishlistGlobal(product);
         }
       },
-      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name, openProduct, isWishlistPage, isWishlisted, toggleWishlistGlobal, showToast],
+      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name, openProduct, isWishlistPage, isWishlisted, toggleWishlistGlobal, showToast, cart],
     );
 
     const handleIncrement = React.useCallback(

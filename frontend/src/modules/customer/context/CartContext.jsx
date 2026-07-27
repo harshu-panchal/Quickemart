@@ -15,6 +15,19 @@ const loadGuestCart = () => {
   return parsed;
 };
 
+const getItemStockLimit = (item) => {
+  if (!item) return 0;
+  const variantSku = String(item.variantSku || "").trim();
+  if (variantSku) {
+    const variants = Array.isArray(item.variants) ? item.variants : [];
+    const hit = variants.find(
+      (v) => String(v?.sku || "").trim() === variantSku || String(v?.name || "").trim() === variantSku
+    );
+    return hit ? Number(hit.stock ?? 0) : 0;
+  }
+  return Number(item.stock ?? 0);
+};
+
 export const useCart = () => useContext(CartContext);
 
 export const CartProvider = ({ children }) => {
@@ -125,6 +138,18 @@ export const CartProvider = ({ children }) => {
   }, [cart, isAuthenticated]);
 
   const addToCart = async (product) => {
+    // 1. Multi-seller check: ensure the cart contains items only from the same seller
+    if (cart.length > 0) {
+      const cartSellerId = String(cart[0].sellerId?._id || cart[0].sellerId || "");
+      const productSellerId = String(product.sellerId?._id || product.sellerId || "");
+      if (cartSellerId && productSellerId && cartSellerId !== productSellerId) {
+        if (showToast) {
+          showToast("You can only add items from the same store. Please clear your cart first.", "error");
+        }
+        return false;
+      }
+    }
+
     const variantSku = String(product?.variantSku || product?.variantName || "").trim();
     const id = product.id || product._id;
     const key = `${id}::${variantSku || ""}`;
@@ -135,6 +160,16 @@ export const CartProvider = ({ children }) => {
       (item) => `${item.id || item._id}::${String(item.variantSku || "").trim()}` === key,
     );
     const previousQty = existingItemBefore ? existingItemBefore.quantity : 0;
+
+    // 2. Stock check: ensure we don't exceed stock limit
+    const mockItem = { ...product, variantSku };
+    const stockLimit = getItemStockLimit(mockItem);
+    if (previousQty + 1 > stockLimit) {
+      if (showToast) {
+        showToast(`Only ${stockLimit} items available in stock.`, "error");
+      }
+      return false;
+    }
 
     // Optimistic UI update for instant feedback
     setCart((prev) => {
@@ -201,8 +236,10 @@ export const CartProvider = ({ children }) => {
         if (pendingRequestsRef.current === 0) {
           await fetchCart();
         }
+        return false;
       }
     }
+    return true;
   };
 
   const removeFromCart = async (productId, variantSku = "") => {
@@ -252,6 +289,17 @@ export const CartProvider = ({ children }) => {
     if (newQty === 0) {
       removeFromCart(productId, normalizedVariantSku);
       return;
+    }
+
+    // Stock limit validation on quantity increment
+    if (delta > 0) {
+      const stockLimit = getItemStockLimit(currentItem);
+      if (newQty > stockLimit) {
+        if (showToast) {
+          showToast(`Only ${stockLimit} items available in stock.`, "error");
+        }
+        return;
+      }
     }
 
     // Optimistic update

@@ -66,7 +66,7 @@ const OrderTransactionsPage = () => {
                         <div className="divide-y divide-slate-100">
                             {orders.map((order) => {
                                 const isRefund = order.paymentStatus === 'refunded';
-                                const amount = order.totalAmount || order.payableAmount || 0;
+                                const amount = order.pricing?.total || order.totalAmount || order.payableAmount || 0;
                                 const createdAt = order.createdAt ? new Date(order.createdAt) : null;
 
                                 return (

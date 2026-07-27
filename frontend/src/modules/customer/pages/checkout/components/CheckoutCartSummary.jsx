@@ -2,6 +2,19 @@ import React from "react";
 import { Plus, Minus } from "lucide-react";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 
+const getItemStockLimit = (item) => {
+  if (!item) return 0;
+  const variantSku = String(item.variantSku || "").trim();
+  if (variantSku) {
+    const variants = Array.isArray(item.variants) ? item.variants : [];
+    const hit = variants.find(
+      (v) => String(v?.sku || "").trim() === variantSku || String(v?.name || "").trim() === variantSku
+    );
+    return hit ? Number(hit.stock ?? 0) : 0;
+  }
+  return Number(item.stock ?? 0);
+};
+
 /**
  * CheckoutCartSummary
  *
@@ -47,9 +60,16 @@ const CheckoutCartSummary = React.memo(function CheckoutCartSummary({
                 Variant: {item.variantName || item.variantSku}
               </p>
             )}
+            {item.quantity > getItemStockLimit(item) && (
+              <div className="mt-1.5 mb-1 flex">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200">
+                  ⚠️ Out of Stock (Only {getItemStockLimit(item)} available)
+                </span>
+              </div>
+            )}
             <button
               onClick={() => onMoveToWishlist(item)}
-              className="text-xs text-slate-500 underline hover:text-primary transition-colors">
+              className="text-xs text-slate-500 underline hover:text-primary transition-colors block">
               Move to wishlist
             </button>
           </div>
@@ -69,8 +89,16 @@ const CheckoutCartSummary = React.memo(function CheckoutCartSummary({
                   {item.quantity}
                 </span>
                 <button
-                  onClick={() => onUpdateQuantity(item.id || item._id, 1, item.variantSku)}
-                  className="text-white p-1 hover:bg-white/20 rounded transition-colors">
+                  onClick={() => {
+                    if (item.quantity >= getItemStockLimit(item)) return;
+                    onUpdateQuantity(item.id || item._id, 1, item.variantSku);
+                  }}
+                  disabled={item.quantity >= getItemStockLimit(item)}
+                  className={`text-white p-1 rounded transition-colors ${
+                    item.quantity >= getItemStockLimit(item)
+                      ? "opacity-30 cursor-not-allowed"
+                      : "hover:bg-white/20"
+                  }`}>
                   <Plus size={14} strokeWidth={3} />
                 </button>
               </div>

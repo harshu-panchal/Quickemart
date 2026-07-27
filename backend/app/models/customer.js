@@ -125,6 +125,12 @@ const userSchema = new mongoose.Schema(
             default: true,
         },
 
+        bio: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+
         lastLogin: Date,
     },
     {
