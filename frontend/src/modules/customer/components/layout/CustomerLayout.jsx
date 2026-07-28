@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from './Header';
 import Footer from './Footer';
 import BottomNav from './BottomNav';
@@ -12,11 +12,29 @@ import { useAuth } from '@core/context/AuthContext';
 import { onReturnPickupOtp, onReturnDropOtp } from '@core/services/orderSocket';
 import { toast } from 'sonner';
 import { ShieldCheck, Package } from 'lucide-react';
+import { useLocation as useAppLocation } from '../../context/LocationContext';
+import LocationRequiredModal from '../shared/LocationRequiredModal';
+import LocationDrawer from '../shared/LocationDrawer';
 
 const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = false, showCart: showCartProp, showBottomNav: showBottomNavProp }) => {
     const location = useLocation();
     const { isOpen: isProductDetailOpen } = useProductDetail();
     const { user, token } = useAuth();
+
+    const { currentLocation } = useAppLocation();
+    const [isManualLocationOpen, setIsManualLocationOpen] = useState(false);
+    const isLocationMissing = !currentLocation || !currentLocation.name || !currentLocation.latitude || !currentLocation.longitude;
+
+    useEffect(() => {
+        if (isLocationMissing) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isLocationMissing]);
 
     // Listen for Return OTPs (Real-time Alert for Customer)
     useEffect(() => {
@@ -80,8 +98,8 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
     const path = location.pathname.replace(/\/$/, '') || '/';
 
     const hideHeaderRoutes = ['/', '/categories', '/orders', '/transactions', '/profile', '/profile/edit', '/wishlist', '/addresses', '/wallet', '/support', '/privacy', '/about', '/terms', '/checkout', '/search', '/chat', '/notifications'];
-    const hideBottomNavRoutes = ['/checkout', '/search', '/chat'];
-    const hideCartRoutes = ['/checkout', '/search', '/chat'];
+    const hideBottomNavRoutes = ['/checkout', '/search', '/chat', '/terms', '/privacy'];
+    const hideCartRoutes = ['/checkout', '/search', '/chat', '/terms', '/privacy'];
 
     // If props are passed, use them. Otherwise, use route-based logic.
     const showHeader = showHeaderProp !== undefined ? showHeaderProp : (!hideHeaderRoutes.includes(path) && !path.startsWith('/category') && !path.startsWith('/orders'));
@@ -89,7 +107,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
     const showCart = showCartProp !== undefined ? showCartProp : (!hideCartRoutes.includes(path) && !path.startsWith('/orders'));
 
     // Condition to hide the MobileFooterMessage ("India's last minute app") on specific pages
-    const hideFooterMessageRoutes = ['/profile', '/profile/edit'];
+    const hideFooterMessageRoutes = ['/profile', '/profile/edit', '/terms', '/privacy'];
     const showFooterMessage = showBottomNav && !hideFooterMessageRoutes.includes(path) && !path.startsWith('/category');
 
     // Hide elements on mobile only when product detail is open
@@ -138,6 +156,18 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
             <div className="hidden md:block">
                 {showBottomNav && <BottomNav />}
             </div>
+
+            {/* Location Access Required Modal Overlay */}
+            <LocationRequiredModal
+                isOpen={isLocationMissing}
+                onOpenManual={() => setIsManualLocationOpen(true)}
+            />
+
+            {/* Manual Location Search Drawer */}
+            <LocationDrawer
+                isOpen={isManualLocationOpen}
+                onClose={() => setIsManualLocationOpen(false)}
+            />
         </div>
     );
 };

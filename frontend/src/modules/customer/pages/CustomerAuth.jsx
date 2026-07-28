@@ -100,6 +100,35 @@ const CustomerAuth = () => {
         return () => clearInterval(interval);
     }, [timer]);
 
+    // Restore preserved form data and view state from sessionStorage on mount
+    useEffect(() => {
+        const savedPhone = sessionStorage.getItem('auth_formData_phone');
+        const savedName = sessionStorage.getItem('auth_formData_name');
+        const savedIsLogin = sessionStorage.getItem('auth_isLogin');
+
+        if (savedPhone || savedName) {
+            setFormData((prev) => ({
+                ...prev,
+                phone: savedPhone || '',
+                name: savedName || ''
+            }));
+        }
+
+        if (savedIsLogin !== null) {
+            setIsLogin(savedIsLogin === 'true');
+        }
+    }, []);
+
+    // Save to sessionStorage when values change
+    useEffect(() => {
+        sessionStorage.setItem('auth_formData_phone', formData.phone || '');
+        sessionStorage.setItem('auth_formData_name', formData.name || '');
+    }, [formData.phone, formData.name]);
+
+    useEffect(() => {
+        sessionStorage.setItem('auth_isLogin', String(isLogin));
+    }, [isLogin]);
+
     const handleSendOtp = async (e) => {
         e?.preventDefault();
         if (formData.phone.length !== 10) {
@@ -117,7 +146,8 @@ const CustomerAuth = () => {
             setTimer(30);
             toast.success('OTP sent!');
         } catch (error) {
-            toast.error('Failed to send OTP');
+            const apiMessage = error?.response?.data?.message;
+            toast.error(apiMessage || 'Failed to send OTP. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -134,6 +164,12 @@ const CustomerAuth = () => {
             const response = await customerApi.verifyOtp({ phone: formData.phone, otp: formData.otp });
             const { token, customer } = response.data.result;
             login({ ...customer, token, role: 'customer' });
+
+            // Clear preserved form data on successful verification
+            sessionStorage.removeItem('auth_formData_phone');
+            sessionStorage.removeItem('auth_formData_name');
+            sessionStorage.removeItem('auth_isLogin');
+
             toast.success('Successfully Logged In!');
             navigate('/');
         } catch (error) {

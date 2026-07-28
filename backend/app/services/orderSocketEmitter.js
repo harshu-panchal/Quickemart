@@ -117,13 +117,12 @@ export async function emitDeliveryBroadcastForSeller(sellerId, payload) {
 
   const ids = await getDeliveryPartnerIdsWithinSellerRadius(sid);
   if (!ids.length) {
-    if (process.env.NODE_ENV !== "production" && s) {
-      s.to("delivery:online").emit("delivery:broadcast", {
-        ...payload,
-        at: new Date().toISOString(),
-        _devFallback: true,
-      });
-    }
+    // No delivery partners are within this seller's service radius.
+    // Do NOT fall back to broadcasting to all online partners —
+    // that causes cross-city/cross-state notification leaks.
+    console.warn(
+      `[emitDeliveryBroadcastForSeller] No delivery partners in radius for seller ${sid}. Order ${payload.orderId} will not be broadcast.`,
+    );
     return;
   }
 
@@ -267,9 +266,11 @@ export async function emitReturnBroadcastForCustomer(customerLocation, payload) 
 
   const ids = await getDeliveryPartnerIdsWithinCustomerRadius(customerLocation);
   if (!ids.length) {
-    if (process.env.NODE_ENV !== "production" && s) {
-      s.to("delivery:online").emit("delivery:broadcast", { ...payload, at: new Date().toISOString() });
-    }
+    // No delivery partners are near this customer for return pickup.
+    // Do not fall back to broadcasting to all online partners.
+    console.warn(
+      `[emitReturnBroadcastForCustomer] No delivery partners in radius for return pickup. Order ${payload.orderId} will not be broadcast.`,
+    );
     return;
   }
 

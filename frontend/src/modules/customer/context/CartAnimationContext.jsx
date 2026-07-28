@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from "
 import { motion, AnimatePresence } from "framer-motion";
 
 const CartAnimationContext = createContext({
-  animateAddToCart: () => {},
-  animateRemoveFromCart: () => {},
+  animateAddToCart: () => { },
+  animateRemoveFromCart: () => { },
 });
 
 export const useCartAnimation = () => useContext(CartAnimationContext);

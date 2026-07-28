@@ -522,13 +522,13 @@ const ProductDetailSheet = () => {
                                                         const hasDiscount = variantSalePrice && variantSalePrice < variantPrice;
                                                         const discountPct = hasDiscount ? Math.round(((variantPrice - variantSalePrice) / variantPrice) * 100) : 0;
                                                         
-                                                        const stockVal = Number(selectedProduct.stock || 0);
+                                                        const stockVal = Number(selectedVariant?.stock ?? selectedProduct.stock ?? 0);
                                                         const isItemOutOfStock = selectedProduct.isOutOfStock || stockVal <= 0 || Number(displayPrice || 0) <= 0;
 
                                                         return isItemOutOfStock ? (
                                                             <span className="text-xl lg:text-2xl font-extrabold text-rose-500 uppercase tracking-tight">
                                                                 Out of Stock
-                                                            </span>
+                                                                </span>
                                                         ) : (
                                                             <>
                                                                 <div className="flex items-baseline gap-2">
@@ -553,7 +553,7 @@ const ProductDetailSheet = () => {
                                                         const variantPrice = selectedVariant?.price ?? selectedProduct.price;
                                                         const variantSalePrice = selectedVariant?.salePrice ?? selectedProduct.salePrice ?? null;
                                                         const displayPrice = (variantSalePrice && variantSalePrice < variantPrice) ? variantSalePrice : variantPrice;
-                                                        const stockVal = Number(selectedProduct.stock || 0);
+                                                        const stockVal = Number(selectedVariant?.stock ?? selectedProduct.stock ?? 0);
                                                         const isItemOutOfStock = selectedProduct.isOutOfStock || stockVal <= 0 || Number(displayPrice || 0) <= 0;
 
                                                         if (isItemOutOfStock) return null;
@@ -852,7 +852,7 @@ const ProductDetailSheet = () => {
                             onWheel={handleWheel}
                         >
                             {/* Product Image Carousel */}
-                            <div className="relative w-full bg-gradient-to-b from-[#F5F7F8] to-white pt-0 pb-4 h-[52vh] min-h-[320px] max-h-[560px]">
+                            <div className="relative w-full bg-gradient-to-b from-[#F5F7F8] to-white pt-12 pb-4 h-[52vh] min-h-[320px] max-h-[560px]">
                                 <div
                                     ref={scrollRef}
                                     className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar h-full w-full"
@@ -870,7 +870,6 @@ const ProductDetailSheet = () => {
                                                 src={applyCloudinaryTransform(img, "f_auto,q_auto:best,w_1200,dpr_auto")}
                                                 alt={`${selectedProduct.name} ${i + 1}`}
                                                 className="w-full h-full object-contain mix-blend-multiply drop-shadow-xl"
-                                                style={{ objectPosition: 'center calc(50% - 40px)' }}
                                             />
                                         </div>
                                     ))}

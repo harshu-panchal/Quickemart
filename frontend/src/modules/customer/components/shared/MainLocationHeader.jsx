@@ -368,7 +368,7 @@ const MainLocationHeader = ({
                 <div className="flex items-center gap-1 opacity-80 text-[11px] font-black uppercase tracking-wider">
                   <AccessTimeIcon sx={{ fontSize: 13, color: headerFontColor }} />
                   <span style={{ color: headerFontColor }}>
-                    {currentLocation.time || "12-15 MINS"}
+                    {currentLocation?.time || "12-15 MINS"}
                   </span>
                 </div>
                 <button
@@ -380,7 +380,7 @@ const MainLocationHeader = ({
                   style={{ color: headerFontColor }}>
                   <LocationOnIcon sx={{ fontSize: 14, color: "inherit" }} />
                   <span className="max-w-[260px] lg:max-w-[360px] truncate">
-                    {isFetchingLocation ? "Detecting location..." : currentLocation.name}
+                    {isFetchingLocation ? "Detecting location..." : currentLocation?.name || "Set Location"}
                   </span>
                   <ChevronDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
                 </button>
@@ -402,7 +402,13 @@ const MainLocationHeader = ({
                   readOnly
                   className="flex-1 bg-transparent border-none outline-none pl-3 text-slate-900 font-semibold placeholder:text-slate-700 text-[14px] cursor-pointer"
                 />
-                <div className="flex items-center gap-2 border-l border-black/15 pl-3">
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/search", { state: { triggerVoice: true } });
+                  }}
+                  className="flex items-center gap-2 border-l border-black/15 pl-3 cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+                >
                   <MicIcon sx={{ color: "#1e293b", fontSize: 19 }} />
                 </div>
               </motion.div>
@@ -480,7 +486,7 @@ const MainLocationHeader = ({
                 <div className="flex flex-col justify-center leading-tight">
                   <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider" style={{ color: headerFontColor }}>
                     <AccessTimeIcon sx={{ fontSize: 12 }} />
-                    <span>{currentLocation.time || "12-15 MINS"}</span>
+                    <span>{currentLocation?.time || "12-15 MINS"}</span>
                   </div>
                   <button
                     type="button"
@@ -488,7 +494,7 @@ const MainLocationHeader = ({
                     className="flex items-center gap-1 text-[12px] font-bold max-w-[150px] truncate p-0 bg-transparent border-0"
                     style={{ color: headerFontColor }}>
                     <LocationOnIcon sx={{ fontSize: 13 }} />
-                    <span className="truncate">{currentLocation.name}</span>
+                    <span className="truncate">{currentLocation?.name || "Set Location"}</span>
                     <ChevronDownIcon sx={{ fontSize: 11, opacity: 0.7 }} />
                   </button>
                 </div>
@@ -525,7 +531,13 @@ const MainLocationHeader = ({
                   readOnly
                   className="flex-1 bg-transparent border-none outline-none pl-2 text-slate-900 font-semibold placeholder:text-slate-700 text-[14px] cursor-pointer"
                 />
-                <div className="flex items-center gap-2 border-l border-black/15 pl-2">
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/search", { state: { triggerVoice: true } });
+                  }}
+                  className="flex items-center gap-2 border-l border-black/15 pl-2 cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+                >
                   <MicIcon sx={{ color: "#1e293b", fontSize: 18 }} />
                 </div>
               </motion.div>

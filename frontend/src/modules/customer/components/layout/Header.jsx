@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, Heart, User, Menu, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWishlist } from '../../context/WishlistContext';
@@ -13,6 +13,7 @@ const Header = () => {
     const { count: wishlistCount } = useWishlist();
     const { cartCount } = useCart();
     const location = useLocation();
+    const navigate = useNavigate();
     const isCheckoutPage = location.pathname === '/checkout';
     const [isLocationOpen, setIsLocationOpen] = useState(false);
     const { currentLocation, refreshLocation } = useAppLocation();
@@ -90,10 +91,10 @@ const Header = () => {
                         <div className="flex flex-col leading-tight">
                             <span className="text-[10px] font-black text-white/80 uppercase tracking-widest flex items-center gap-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-                                {currentLocation.time}
+                                {currentLocation?.time || '12-15 MINS'}
                             </span>
                             <div className="flex items-center gap-1 font-black text-white text-base">
-                                <span className="max-w-[150px] truncate">{currentLocation.name}</span> <span className="text-[10px] opacity-70">▼</span>
+                                <span className="max-w-[150px] truncate">{currentLocation?.name || 'Set Location'}</span> <span className="text-[10px] opacity-70">▼</span>
                             </div>
                         </div>
                     </button>
@@ -126,10 +127,10 @@ const Header = () => {
                         >
                             <div className="flex flex-col items-start leading-tight group">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-[var(--primary)] transition-colors">
-                                    {currentLocation.time || '12-15 MINS'}
+                                    {currentLocation?.time || '12-15 MINS'}
                                 </span>
                                 <div className="flex items-center gap-1 font-extrabold text-slate-700 text-xs group-hover:text-[var(--primary)] transition-colors">
-                                    <span className="max-w-[140px] truncate">{currentLocation.name}</span> <MapPin size={13} className="fill-current" />
+                                    <span className="max-w-[140px] truncate">{currentLocation?.name || 'Set Location'}</span> <MapPin size={13} className="fill-current" />
                                 </div>
                             </div>
                         </button>
@@ -145,14 +146,24 @@ const Header = () => {
                     {/* Search Bar - Hidden on checkout page */}
                     {!isCheckoutPage && (
                         <div className="flex-1 flex items-center max-w-sm ml-4 md:ml-6 mr-4 md:mr-6">
-                            <div className="relative w-full flex items-center bg-slate-100/80 rounded-full border border-slate-200/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-primary/40 transition-all">
+                            <div 
+                                onClick={() => navigate("/search")}
+                                className="relative w-full flex items-center bg-slate-100/80 rounded-full border border-slate-200/60 px-3 py-1.5 focus-within:ring-2 focus-within:ring-primary/40 transition-all cursor-pointer"
+                            >
                                 <Search className="h-4 w-4 text-slate-500 shrink-0 mr-2" />
                                 <input
                                     type="search"
                                     placeholder={searchPlaceholder}
-                                    className="w-full border-none bg-transparent text-sm focus:outline-none text-slate-800 font-medium placeholder:text-slate-500"
+                                    readOnly
+                                    className="w-full border-none bg-transparent text-sm focus:outline-none text-slate-800 font-medium placeholder:text-slate-500 cursor-pointer"
                                 />
-                                <div className="pl-2 border-l border-slate-300 ml-2">
+                                <div 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate("/search", { state: { triggerVoice: true } });
+                                    }}
+                                    className="pl-2 border-l border-slate-300 ml-2 cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+                                >
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                                 </div>
                             </div>

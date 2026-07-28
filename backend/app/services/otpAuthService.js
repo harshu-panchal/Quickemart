@@ -113,26 +113,12 @@ export async function issueCustomerOtp({
   );
 
   if (flow === "login" && (!customer || !customer.isVerified)) {
-    if (useRealSMS()) {
-      otpAuditLog("customer_otp_login_generic_response", {
-        phone: maskPhone(phone),
-        ipAddress,
-        accountExists: !!customer,
-      });
-      return { sent: true, phone };
-    }
-
-    // In mock/dev mode, allow login OTP issuance so local testing works end-to-end.
-    if (!customer) {
-      customer = await Customer.create({
-        name: name || "Customer",
-        phone,
-        isVerified: false,
-      });
-      customer = await Customer.findById(customer._id).select(
-        "+otpHash +otpExpiresAt +otpFailedAttempts +otpLockedUntil +otpLastSentAt +otpSessionVersion +otp +otpExpiry",
-      );
-    }
+    // Reject login attempts for numbers that have no verified account.
+    // We intentionally return the same 404 in both real-SMS and dev/mock
+    // mode so test flows also surface the correct error message.
+    const err = new Error("No account found with this number. Please sign up first.");
+    err.statusCode = 404;
+    throw err;
   }
 
   if (!customer) {

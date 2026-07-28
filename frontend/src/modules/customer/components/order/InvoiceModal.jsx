@@ -105,45 +105,41 @@ const InvoiceModal = ({ isOpen, onClose, order }) => {
         <AnimatePresence>
             {isOpen && (
                 <>
+                    {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
-                    >
+                        className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
+                    />
+
+                    {/* Modal panel — top-anchored with space, scrollable content, sticky print bar */}
+                    <div className="fixed inset-0 z-[9999] overflow-y-auto flex justify-center px-3 pb-6 pt-16">
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            initial={{ opacity: 0, scale: 0.96, y: -16 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                            transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
+                            exit={{ opacity: 0, scale: 0.96, y: -16 }}
+                            transition={{ type: "spring", duration: 0.45, bounce: 0.25 }}
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl relative my-8"
+                            className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden self-start"
                         >
-                            {/* Modal Header Actions (Screen only) */}
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between no-print">
+                            {/* Header row: title + close */}
+                            <div className="bg-slate-50 px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0 no-print">
                                 <div>
-                                    <h2 className="text-lg font-black text-slate-800">Tax Invoice</h2>
-                                    <p className="text-xs text-slate-500 font-medium">#{order.orderId || order.id}</p>
+                                    <h2 className="text-base font-black text-slate-800">Tax Invoice</h2>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">#{order.orderId || order.id}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={handlePrint}
-                                        className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm hover:opacity-90 transition-opacity"
-                                    >
-                                        <Printer size={16} /> Download / Print Invoice
-                                    </button>
-                                    <button
-                                        onClick={onClose}
-                                        className="p-2 bg-white rounded-full hover:bg-slate-200 transition-colors shadow-sm border border-slate-100"
-                                    >
-                                        <X size={18} className="text-slate-500" />
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={onClose}
+                                    className="p-2 bg-white rounded-full hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+                                >
+                                    <X size={18} className="text-slate-500" />
+                                </button>
                             </div>
 
-                            {/* Printable Area */}
-                            <div className="p-6 md:p-8 space-y-6 text-slate-800 bg-white" id="printable-invoice">
+                            {/* Printable invoice body */}
+                            <div className="p-6 md:p-8 space-y-6 text-slate-800 bg-white overflow-y-auto" id="printable-invoice">
                                 {/* Header: App Branding + Order Meta */}
                                 <div className="flex justify-between items-start pb-4 border-b border-slate-200">
                                     <div>
@@ -274,8 +270,20 @@ const InvoiceModal = ({ isOpen, onClose, order }) => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Sticky bottom Print bar */}
+                            <div className="flex-shrink-0 bg-white border-t border-slate-100 px-5 py-4 no-print">
+                                <button
+                                    onClick={handlePrint}
+                                    className="w-full py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 text-white shadow-lg shadow-brand-200/40 hover:opacity-90 active:scale-[0.98] transition-all"
+                                    style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}
+                                >
+                                    <Printer size={18} strokeWidth={2.5} />
+                                    Print / Download Invoice
+                                </button>
+                            </div>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 </>
             )}
         </AnimatePresence>

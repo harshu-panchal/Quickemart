@@ -254,7 +254,7 @@ export const updateSellerProfile = async (req, res) => {
       console.warn("[Seller] Name cache invalidation failed:", err.message);
     });
 
-    if (isActive !== undefined || timingChanged) {
+    if (isActive !== undefined || timingChanged || radius !== undefined || (lat !== undefined && lng !== undefined)) {
       Promise.all([
         invalidate(buildKey("sellers", "nearby", "*")),
         invalidate(buildKey("catalog", "productList", "*")),

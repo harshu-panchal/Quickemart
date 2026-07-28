@@ -307,6 +307,56 @@ export async function deliveryAcceptAtomic(deliveryId, orderId, idempotencyKey) 
     }
   }
 
+  // ─── GEO-FENCE CHECK ────────────────────────────────────────────────────────
+  // Hard block: delivery partner must be within seller's serviceRadius.
+  // Admin role bypasses this check (allowed to accept from anywhere).
+  const deliveryPartnerForGeo = await Delivery.findById(deliveryOid)
+    .select("location role")
+    .lean();
+
+  if (deliveryPartnerForGeo?.role !== "admin") {
+    const orderForGeo = await Order.findOne({ orderId })
+      .populate("seller", "location serviceRadius shopName")
+      .lean();
+
+    const dCoords = deliveryPartnerForGeo?.location?.coordinates;
+    const sCoords = orderForGeo?.seller?.location?.coordinates;
+
+    const deliveryHasLocation =
+      Array.isArray(dCoords) &&
+      dCoords.length >= 2 &&
+      !(Math.abs(dCoords[1]) < 1e-5 && Math.abs(dCoords[0]) < 1e-5);
+
+    const sellerHasLocation =
+      Array.isArray(sCoords) &&
+      sCoords.length >= 2 &&
+      !(Math.abs(sCoords[1]) < 1e-5 && Math.abs(sCoords[0]) < 1e-5);
+
+    if (deliveryHasLocation && sellerHasLocation) {
+      const [dlng, dlat] = dCoords;
+      const [slng, slat] = sCoords;
+      const radiusKm = Number(orderForGeo.seller?.serviceRadius) || 5;
+      const distKm = distanceMeters(dlat, dlng, slat, slng) / 1000;
+
+      if (distKm > radiusKm) {
+        const err = new Error(
+          `You are ${distKm.toFixed(1)} km away from "${orderForGeo.seller?.shopName || "this store"}". ` +
+          `Only delivery partners within ${radiusKm} km can accept this order.`,
+        );
+        err.statusCode = 403;
+        throw err;
+      }
+    } else if (!deliveryHasLocation) {
+      // Delivery partner has no GPS — cannot accept orders
+      const err = new Error(
+        "Your location is not available. Please enable GPS and update your location before accepting orders.",
+      );
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const now = new Date();
   const updated = await Order.findOneAndUpdate(
     {

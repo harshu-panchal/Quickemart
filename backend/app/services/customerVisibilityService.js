@@ -32,7 +32,9 @@ function buildNearbySellersKey(lat, lng) {
 
 export async function getNearbySellerIdsForCustomer(lat, lng) {
   const fetchFn = async () => {
-    // 1. Fetch sellers matching location geometry within 100km
+    // Fetch only sellers that have a real GPS location configured, within 100km.
+    // Sellers with missing or [0,0] coordinates are NOT shown by default —
+    // they must have their shop location properly set by admin/seller.
     const geoSellers = await Seller.find({
       isActive: true,
       $or: [
@@ -53,40 +55,17 @@ export async function getNearbySellerIdsForCustomer(lat, lng) {
       .select("_id location serviceRadius isActive shopTiming applicationStatus")
       .lean();
 
-    // 2. Fetch sellers with default [0, 0] or missing coordinates (e.g. admin-created sellers)
-    const defaultSellers = await Seller.find({
-      isActive: true,
-      $or: [
-        { applicationStatus: "approved" },
-        { applicationStatus: { $exists: false } },
-        { applicationStatus: null },
-      ],
-      $or: [
-        { location: { $exists: false } },
-        { "location.coordinates": { $eq: [0, 0] } },
-        { "location.coordinates": { $exists: false } },
-      ],
-    })
-      .select("_id location serviceRadius isActive shopTiming applicationStatus")
-      .lean();
-
-    const sellerMap = new Map();
-    for (const s of [...geoSellers, ...defaultSellers]) {
-      sellerMap.set(String(s._id), s);
-    }
-
-    return Array.from(sellerMap.values())
+    return geoSellers
       .filter((seller) => {
         if (!isShopCurrentlyOpen(seller)) return false;
         const coords = seller?.location?.coordinates;
-        // If unconfigured/default [0, 0] or missing, seller is available by default
-        if (!Array.isArray(coords) || coords.length < 2 || (coords[0] === 0 && coords[1] === 0)) {
-          return true;
-        }
+        // Strictly require a valid, non-zero GPS location
+        if (!Array.isArray(coords) || coords.length < 2) return false;
         const [sellerLng, sellerLat] = coords;
-        if (!Number.isFinite(sellerLat) || !Number.isFinite(sellerLng)) {
-          return true;
-        }
+        // Skip sellers whose location is still at default [0, 0]
+        if (Math.abs(sellerLat) < 1e-5 && Math.abs(sellerLng) < 1e-5) return false;
+        if (!Number.isFinite(sellerLat) || !Number.isFinite(sellerLng)) return false;
+        // Fine filter: customer must be within seller's own serviceRadius
         const distanceKm = calculateDistance(lat, lng, sellerLat, sellerLng);
         return distanceKm <= (seller.serviceRadius || 5);
       })

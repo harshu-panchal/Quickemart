@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Button from "@shared/components/ui/Button";
 import {
   HiOutlineArrowLeft,
@@ -25,24 +25,54 @@ const AddProduct = () => {
   const [dbCategories, setDbCategories] = useState([]);
   const [isLoadingCats, setIsLoadingCats] = useState(true);
 
-  // Category selections
-  const [selectedHeader, setSelectedHeader] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedSubcategory, setSelectedSubcategory] = useState("");
+  const isFirstRender = useRef(true);
 
-  // Brand and product list states
-  const [brands, setBrands] = useState([]);
-  const [selectedBrand, setSelectedBrand] = useState("");
+  // Category selections (initialized from sessionStorage)
+  const [selectedHeader, setSelectedHeader] = useState(() => sessionStorage.getItem("add_prod_selectedHeader") || "");
+  const [selectedCategory, setSelectedCategory] = useState(() => sessionStorage.getItem("add_prod_selectedCategory") || "");
+  const [selectedSubcategory, setSelectedSubcategory] = useState(() => sessionStorage.getItem("add_prod_selectedSubcategory") || "");
+
+  // Brand and product list states (initialized from sessionStorage)
+  const [brands, setBrands] = useState(() => {
+    try {
+      const data = sessionStorage.getItem("add_prod_brands");
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedBrand, setSelectedBrand] = useState(() => sessionStorage.getItem("add_prod_selectedBrand") || "");
   const [isLoadingBrands, setIsLoadingBrands] = useState(false);
 
-  const [masterProducts, setMasterProducts] = useState([]);
-  const [selectedMasterProductId, setSelectedMasterProductId] = useState("");
-  const [selectedProductDetails, setSelectedProductDetails] = useState(null);
+  const [masterProducts, setMasterProducts] = useState(() => {
+    try {
+      const data = sessionStorage.getItem("add_prod_masterProducts");
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedMasterProductId, setSelectedMasterProductId] = useState(() => sessionStorage.getItem("add_prod_selectedMasterProductId") || "");
+  const [selectedProductDetails, setSelectedProductDetails] = useState(() => {
+    try {
+      const data = sessionStorage.getItem("add_prod_selectedProductDetails");
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
 
   // Listing configuration states
-  const [variants, setVariants] = useState([]);
-  const [status, setStatus] = useState("active");
+  const [variants, setVariants] = useState(() => {
+    try {
+      const data = sessionStorage.getItem("add_prod_variants");
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [status, setStatus] = useState(() => sessionStorage.getItem("add_prod_status") || "active");
 
   // Load category tree on mount
   useEffect(() => {
@@ -63,12 +93,16 @@ const AddProduct = () => {
 
   // Fetch unique brands in catalog matching categories
   useEffect(() => {
-    setSelectedBrand("");
-    setBrands([]);
-    setMasterProducts([]);
-    setSelectedMasterProductId("");
-    setSelectedProductDetails(null);
-    setVariants([]);
+    if (isFirstRender.current) {
+      // Skip resetting state on initial mount/refresh
+    } else {
+      setSelectedBrand("");
+      setBrands([]);
+      setMasterProducts([]);
+      setSelectedMasterProductId("");
+      setSelectedProductDetails(null);
+      setVariants([]);
+    }
 
     if (!selectedHeader) return;
 
@@ -94,10 +128,14 @@ const AddProduct = () => {
 
   // Fetch master products matching chosen brand and categories
   useEffect(() => {
-    setSelectedMasterProductId("");
-    setMasterProducts([]);
-    setSelectedProductDetails(null);
-    setVariants([]);
+    if (isFirstRender.current) {
+      // Skip resetting state on initial mount/refresh
+    } else {
+      setSelectedMasterProductId("");
+      setMasterProducts([]);
+      setSelectedProductDetails(null);
+      setVariants([]);
+    }
 
     if (!selectedBrand) return;
 
@@ -121,6 +159,61 @@ const AddProduct = () => {
     };
     fetchProducts();
   }, [selectedBrand, selectedHeader, selectedCategory, selectedSubcategory]);
+
+  // Flip the first render flag and add save to storage effects
+  useEffect(() => {
+    isFirstRender.current = false;
+  }, []);
+
+  // Save to sessionStorage when values change
+  useEffect(() => {
+    if (selectedHeader) sessionStorage.setItem("add_prod_selectedHeader", selectedHeader);
+    else sessionStorage.removeItem("add_prod_selectedHeader");
+  }, [selectedHeader]);
+
+  useEffect(() => {
+    if (selectedCategory) sessionStorage.setItem("add_prod_selectedCategory", selectedCategory);
+    else sessionStorage.removeItem("add_prod_selectedCategory");
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    if (selectedSubcategory) sessionStorage.setItem("add_prod_selectedSubcategory", selectedSubcategory);
+    else sessionStorage.removeItem("add_prod_selectedSubcategory");
+  }, [selectedSubcategory]);
+
+  useEffect(() => {
+    if (selectedBrand) sessionStorage.setItem("add_prod_selectedBrand", selectedBrand);
+    else sessionStorage.removeItem("add_prod_selectedBrand");
+  }, [selectedBrand]);
+
+  useEffect(() => {
+    if (selectedMasterProductId) sessionStorage.setItem("add_prod_selectedMasterProductId", selectedMasterProductId);
+    else sessionStorage.removeItem("add_prod_selectedMasterProductId");
+  }, [selectedMasterProductId]);
+
+  useEffect(() => {
+    if (selectedProductDetails) sessionStorage.setItem("add_prod_selectedProductDetails", JSON.stringify(selectedProductDetails));
+    else sessionStorage.removeItem("add_prod_selectedProductDetails");
+  }, [selectedProductDetails]);
+
+  useEffect(() => {
+    if (variants && variants.length > 0) sessionStorage.setItem("add_prod_variants", JSON.stringify(variants));
+    else sessionStorage.removeItem("add_prod_variants");
+  }, [variants]);
+
+  useEffect(() => {
+    sessionStorage.setItem("add_prod_status", status);
+  }, [status]);
+
+  useEffect(() => {
+    if (brands && brands.length > 0) sessionStorage.setItem("add_prod_brands", JSON.stringify(brands));
+    else sessionStorage.removeItem("add_prod_brands");
+  }, [brands]);
+
+  useEffect(() => {
+    if (masterProducts && masterProducts.length > 0) sessionStorage.setItem("add_prod_masterProducts", JSON.stringify(masterProducts));
+    else sessionStorage.removeItem("add_prod_masterProducts");
+  }, [masterProducts]);
 
   // Auto-load and pre-populate category tree, brand, and product details when navigated with ?masterProductId=
   useEffect(() => {
@@ -260,6 +353,19 @@ const AddProduct = () => {
 
       const response = await sellerApi.createListing(listingPayload);
       const approvalStatus = response?.data?.result?.approvalStatus;
+
+      // Clear preserved form data on successful save
+      sessionStorage.removeItem("add_prod_selectedHeader");
+      sessionStorage.removeItem("add_prod_selectedCategory");
+      sessionStorage.removeItem("add_prod_selectedSubcategory");
+      sessionStorage.removeItem("add_prod_selectedBrand");
+      sessionStorage.removeItem("add_prod_selectedMasterProductId");
+      sessionStorage.removeItem("add_prod_selectedProductDetails");
+      sessionStorage.removeItem("add_prod_variants");
+      sessionStorage.removeItem("add_prod_status");
+      sessionStorage.removeItem("add_prod_brands");
+      sessionStorage.removeItem("add_prod_masterProducts");
+
       if (approvalStatus === "pending") {
         toast.success("Product submitted for approval");
       } else {
@@ -271,6 +377,20 @@ const AddProduct = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCancel = () => {
+    sessionStorage.removeItem("add_prod_selectedHeader");
+    sessionStorage.removeItem("add_prod_selectedCategory");
+    sessionStorage.removeItem("add_prod_selectedSubcategory");
+    sessionStorage.removeItem("add_prod_selectedBrand");
+    sessionStorage.removeItem("add_prod_selectedMasterProductId");
+    sessionStorage.removeItem("add_prod_selectedProductDetails");
+    sessionStorage.removeItem("add_prod_variants");
+    sessionStorage.removeItem("add_prod_status");
+    sessionStorage.removeItem("add_prod_brands");
+    sessionStorage.removeItem("add_prod_masterProducts");
+    navigate(-1);
   };
 
   const selectedHeaderData = dbCategories.find((h) => (h._id || h.id) === selectedHeader);
@@ -285,13 +405,13 @@ const AddProduct = () => {
         <Button
           variant="ghost"
           className="pl-0 hover:bg-transparent hover:text-emerald-600 text-slate-600 font-bold transition-all"
-          onClick={() => navigate(-1)}
+          onClick={handleCancel}
         >
           <HiOutlineArrowLeft className="mr-2 h-4 w-4" />
           Back to Catalog
         </Button>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <Button variant="outline" className="w-full sm:w-auto rounded-xl text-xs font-bold" onClick={() => navigate(-1)}>
+          <Button variant="outline" className="w-full sm:w-auto rounded-xl text-xs font-bold" onClick={handleCancel}>
             Cancel
           </Button>
           <Button

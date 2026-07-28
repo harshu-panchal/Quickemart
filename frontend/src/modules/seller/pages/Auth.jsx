@@ -1168,24 +1168,26 @@ const Auth = () => {
                     <button
                       type="button"
                       onClick={() => setSignupStep((prev) => Math.max(1, prev - 1))}
-                      className="w-1/3 bg-slate-100 text-slate-600 rounded-lg py-4 text-sm font-black tracking-[2px] transition-all hover:bg-slate-200">
-                      BACK
+                      className="w-1/3 bg-slate-100 text-slate-600 rounded-2xl h-12 flex items-center justify-center text-[13px] font-bold transition-all hover:bg-slate-200 cursor-pointer">
+                      Back
                     </button>
                   )}
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className={`${!isLogin && signupStep > 1 ? "w-2/3" : "w-full"} bg-slate-900 text-white rounded-lg py-4 text-sm font-black tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group`}>
-                    {isLoading
-                      ? "WORKING..."
-                      : isLogin
-                        ? "ENTER DASHBOARD"
-                        : signupStep < 3
-                          ? "NEXT STEP"
-                          : "SUBMIT APPLICATION"}
+                    className={`${!isLogin && signupStep > 1 ? "w-2/3" : "w-full"} bg-slate-900 text-white rounded-2xl h-12 flex items-center justify-center gap-2 text-[13px] font-bold shadow-[0_10px_20px_rgba(15,23,42,0.15)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 group cursor-pointer`}>
+                    <span className="whitespace-nowrap">
+                      {isLoading
+                        ? "Working..."
+                        : isLogin
+                          ? "Enter Dashboard"
+                          : signupStep < 3
+                            ? "Next Step"
+                            : "Submit Application"}
+                    </span>
                     <ArrowRight
-                      className="group-hover:translate-x-2 transition-transform"
-                      size={20}
+                      className="group-hover:translate-x-1.5 transition-transform flex-shrink-0"
+                      size={16}
                     />
                   </button>
                 </div>

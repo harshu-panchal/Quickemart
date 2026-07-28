@@ -204,9 +204,9 @@ const LocationDrawer = ({ isOpen, onClose }) => {
           {
             name: result.formatted_address || prediction.description,
             time: "12-15 mins",
-            city: city || currentLocation.city,
-            state: state || currentLocation.state,
-            pincode: pincode || currentLocation.pincode,
+            city: city || currentLocation?.city,
+            state: state || currentLocation?.state,
+            pincode: pincode || currentLocation?.pincode,
             latitude: geometry.lat(),
             longitude: geometry.lng(),
           },
@@ -222,9 +222,9 @@ const LocationDrawer = ({ isOpen, onClose }) => {
       });
     },
     [
-      currentLocation.city,
-      currentLocation.pincode,
-      currentLocation.state,
+      currentLocation?.city,
+      currentLocation?.pincode,
+      currentLocation?.state,
       getComponent,
       onClose,
       resetAutocompleteSession,
@@ -462,7 +462,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
                       : "Use current location"}
                   </h3>
                   <p className="text-[12px] text-slate-400 font-medium truncate opacity-60">
-                    ({currentLocation.name})
+                    ({currentLocation?.name || "No location set"})
                   </p>
                 </div>
                 <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
@@ -519,7 +519,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
                             <h3 className="font-bold text-[#1A1A1A] text-lg">
                               {addr.label}
                             </h3>
-                            {(addr.address === currentLocation.name ||
+                            {(addr.address === currentLocation?.name ||
                               addr.isCurrent) && (
                               <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-tight border border-teal-100">
                                 You are here
@@ -536,7 +536,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
                       </div>
 
                       {/* Selection Glow */}
-                      {(addr.address === currentLocation.name ||
+                      {(addr.address === currentLocation?.name ||
                         addr.isCurrent) && (
                         <div className="absolute top-0 right-0 h-1 w-24 bg-gradient-to-l from-primary to-transparent opacity-50" />
                       )}

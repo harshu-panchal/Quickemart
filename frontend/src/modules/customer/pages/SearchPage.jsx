@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { Search, Mic, ArrowLeft, X, TrendingUp, ChevronRight, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,8 +27,10 @@ const SearchPage = () => {
     const [allProducts, setAllProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isListening, setIsListening] = useState(false);
+    const [voiceTranscript, setVoiceTranscript] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
     const [noServiceData, setNoServiceData] = useState(null);
+    const recognitionRef = useRef(null);
 
     // Manage Recent Searches with LocalStorage
     const [pastSearches, setPastSearches] = useState(() => {
@@ -52,7 +54,25 @@ const SearchPage = () => {
         return () => clearTimeout(timer);
     }, [query]);
 
-    // Voice Search Logic (Enhanced)
+    // Cleanup recognition on unmount
+    useEffect(() => {
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.abort();
+            }
+        };
+    }, []);
+
+    // Check if voice trigger is requested on navigation
+    useEffect(() => {
+        if (location.state?.triggerVoice) {
+            // Replace location state so a refresh doesn't trigger it again
+            navigate(location.pathname, { replace: true, state: {} });
+            handleVoiceSearch();
+        }
+    }, [location.state]);
+
+    // Voice Search Logic (Enhanced with Circular UI)
     const handleVoiceSearch = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -61,16 +81,20 @@ const SearchPage = () => {
         }
 
         const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
         recognition.lang = 'en-IN'; 
         recognition.continuous = false;
         recognition.interimResults = true;
 
         recognition.onstart = () => {
             setIsListening(true);
+            setVoiceTranscript('');
             setQuery(''); // Clear previous search if starting fresh
         };
         
-        recognition.onend = () => setIsListening(false);
+        recognition.onend = () => {
+            setIsListening(false);
+        };
         
         recognition.onresult = (event) => {
             let transcript = '';
@@ -79,10 +103,12 @@ const SearchPage = () => {
             }
 
             if (transcript) {
+                setVoiceTranscript(transcript);
                 setQuery(transcript);
                 // Save to history only if it's the final result
                 if (event.results[event.results.length - 1].isFinal) {
                     saveSearch(transcript);
+                    setIsListening(false);
                 }
             }
         };
@@ -103,6 +129,14 @@ const SearchPage = () => {
             console.error('Recognition start error:', e);
             setIsListening(false);
         }
+    };
+
+    const handleCancelVoiceSearch = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.abort();
+        }
+        setIsListening(false);
+        setVoiceTranscript('');
     };
 
     // Fetch products
@@ -362,6 +396,106 @@ const SearchPage = () => {
                     </>
                 )}
             </div>
+
+            {/* Voice Search Circular Overlay Screen */}
+            <AnimatePresence>
+                {isListening && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/85 backdrop-blur-lg text-white p-6 font-outfit"
+                    >
+                        {/* Title */}
+                        <motion.h2 
+                            initial={{ y: -20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.1 }}
+                            className="text-xl md:text-2xl font-black tracking-tight mb-2 text-center"
+                        >
+                            Listening for search term...
+                        </motion.h2>
+                        
+                        <p className="text-white/60 text-sm font-semibold mb-12 text-center">
+                            Try saying "chocolate", "fresh milk"
+                        </p>
+
+                        {/* Circular Waves and Pulse Circle */}
+                        <div className="relative flex items-center justify-center w-64 h-64 mb-8">
+                            {/* Wave Ripple 1 */}
+                            <motion.div
+                                animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
+                                transition={{ repeat: Infinity, duration: 2.5, ease: "easeOut" }}
+                                className="absolute w-36 h-36 bg-[var(--primary)]/30 rounded-full"
+                            />
+                            
+                            {/* Wave Ripple 2 */}
+                            <motion.div
+                                animate={{ scale: [1, 1.4], opacity: [0.8, 0] }}
+                                transition={{ repeat: Infinity, duration: 2.5, delay: 0.8, ease: "easeOut" }}
+                                className="absolute w-36 h-36 bg-[var(--primary)]/20 rounded-full"
+                            />
+
+                            {/* Wave Ripple 3 */}
+                            <motion.div
+                                animate={{ scale: [1, 1.15], opacity: [0.9, 0.4] }}
+                                transition={{ repeat: Infinity, duration: 1.5, repeatType: "reverse", ease: "easeInOut" }}
+                                className="absolute w-36 h-36 bg-[var(--primary)]/10 rounded-full"
+                            />
+
+                            {/* Center Inner Circle */}
+                            <motion.div
+                                initial={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: "spring", damping: 15 }}
+                                className="w-28 h-28 rounded-full bg-gradient-to-br from-primary to-[var(--brand-600)] flex items-center justify-center border-4 border-white/20 shadow-2xl relative z-10"
+                            >
+                                <Mic size={40} className="text-white" />
+                            </motion.div>
+                        </div>
+
+                        {/* Live Transcript Display Box */}
+                        <div className="h-20 flex items-center justify-center px-4 max-w-md w-full">
+                            <AnimatePresence mode="wait">
+                                {voiceTranscript ? (
+                                    <motion.div
+                                        key="transcript"
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl text-center shadow-lg backdrop-blur-sm"
+                                    >
+                                        <p className="text-lg md:text-xl font-extrabold text-white tracking-wide leading-tight">
+                                            "{voiceTranscript}"
+                                        </p>
+                                    </motion.div>
+                                ) : (
+                                    <motion.p
+                                        key="idle"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 0.5 }}
+                                        className="text-white text-base font-semibold tracking-wide animate-pulse"
+                                    >
+                                        Go ahead, speak...
+                                    </motion.p>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Cancel Button */}
+                        <motion.button
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            onClick={handleCancelVoiceSearch}
+                            className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-full transition-all text-sm font-bold tracking-wider uppercase active:scale-95 cursor-pointer mt-8"
+                        >
+                            <X size={16} strokeWidth={2.5} />
+                            <span>Cancel</span>
+                        </motion.button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

@@ -360,10 +360,11 @@ const ProductCard = React.memo(
           {(() => {
             const priceVal = Number(defaultVariant?.displayPrice || product.price || 0);
             const stockVal = Number(product.stock || 0);
-            const totalVariantStock = Array.isArray(product?.variants) && product.variants.length > 0
-              ? product.variants.reduce((acc, v) => acc + Number(v.stock || 0), 0)
-              : stockVal;
-            const effectiveStock = Math.max(stockVal, totalVariantStock);
+            const variantSku = String(defaultVariant?.key || "").trim();
+            const matchingVariant = variantSku && Array.isArray(product?.variants)
+              ? product.variants.find(v => String(v.sku || "").trim() === variantSku || String(v.name || "").trim() === variantSku)
+              : null;
+            const effectiveStock = matchingVariant ? Number(matchingVariant.stock ?? 0) : stockVal;
             const isItemOutOfStock = product.isOutOfStock || effectiveStock <= 0 || priceVal <= 0;
 
             return (

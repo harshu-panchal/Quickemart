@@ -196,31 +196,49 @@ function parseAvailableOrdersLimit(requestedLimit) {
 }
 
 async function resolveNearbySellerIds(deliveryPartner, userId) {
+  const coords = deliveryPartner?.location?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) {
+    return { sellerIds: [], usedFallback: false };
+  }
+
+  const [dlng, dlat] = coords;
+  // Skip if delivery partner's location is default [0, 0]
+  if (Math.abs(dlat) < 1e-5 && Math.abs(dlng) < 1e-5) {
+    return { sellerIds: [], usedFallback: false };
+  }
+
+  // Coarse geo query: find all sellers within 100km of delivery partner
   const nearbySellers = await Seller.find({
+    isActive: true,
     location: {
       $near: {
         $geometry: deliveryPartner.location,
-        $maxDistance: 5000,
+        $maxDistance: 100000, // 100km coarse fetch
       },
     },
-  }).select("_id");
+  }).select("_id location serviceRadius");
 
-  let sellerIds = nearbySellers.map((seller) => seller._id);
-  let usedFallback = false;
+  // Fine filter: delivery partner must be within EACH seller's own serviceRadius
+  const matchingSellers = nearbySellers.filter((seller) => {
+    const sCoords = seller?.location?.coordinates;
+    if (!Array.isArray(sCoords) || sCoords.length < 2) return false;
+    const [slng, slat] = sCoords;
+    if (Math.abs(slat) < 1e-5 && Math.abs(slng) < 1e-5) return false;
+    const distKm = distanceMeters(dlat, dlng, slat, slng) / 1000;
+    return distKm <= (Number(seller.serviceRadius) || 5);
+  });
 
-  if (sellerIds.length === 0 && process.env.NODE_ENV !== "production") {
-    const allSellers = await Seller.find({}).select("_id");
-    sellerIds = allSellers.map((seller) => seller._id);
-    usedFallback = true;
-    console.log(
-      `DEV LOG - Radius search found 0 sellers. Bypassing radius check for Delivery Partner: ${userId}`,
+  const sellerIds = matchingSellers.map((s) => s._id);
+
+  // No dev fallback — if delivery partner is not near any seller,
+  // they simply get no orders. This prevents cross-city/cross-state leaks.
+  if (sellerIds.length === 0) {
+    console.info(
+      `[resolveNearbySellerIds] Delivery partner ${userId} is not within any seller's service radius. No orders shown.`,
     );
   }
 
-  return {
-    sellerIds,
-    usedFallback,
-  };
+  return { sellerIds, usedFallback: false };
 }
 
 function filterV2OrdersByRadius(v2Orders, deliveryCoords) {
