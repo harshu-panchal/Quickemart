@@ -29,6 +29,7 @@ const PendingDeliveryBoys = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewingRider, setViewingRider] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [previewDoc, setPreviewDoc] = useState(null);
 
     // Fetch Pending Riders
     const fetchPendingRiders = async () => {
@@ -50,7 +51,7 @@ const PendingDeliveryBoys = () => {
                 appliedDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                 location: r.currentArea || 'Unknown',
                 vehicle: r.vehicleType,
-                documents: Object.keys(r.documents || {}).filter(key => r.documents[key]),
+                documents: r.documents || {},
                 status: r.isVerified ? 'approved' : 'pending_review',
                 experience: 'Not Specified', // Mock for now
                 preferredArea: r.currentArea || 'Not Specified'
@@ -73,6 +74,17 @@ React.useEffect(() => {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [searchTerm, filterStatus]);
+
+React.useEffect(() => {
+    if (viewingRider || previewDoc) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+    }
+    return () => {
+        document.body.style.overflow = '';
+    };
+}, [viewingRider, previewDoc]);
 
 const filteredRiders = useMemo(() => {
     return pendingRiders.filter(r => {
@@ -246,14 +258,17 @@ return (
                                                 {rider.status.replace('_', ' ')}
                                             </Badge>
                                             <div className="flex gap-1">
-                                                {rider.documents.slice(0, 2).map((doc, i) => (
-                                                    <div key={i} className="h-5 px-2 bg-slate-100 rounded-md text-[8px] font-bold text-slate-500 flex items-center">
-                                                        {doc}
-                                                    </div>
-                                                ))}
-                                                {rider.documents.length > 2 && (
+                                                {Object.keys(rider.documents || {})
+                                                    .filter(key => rider.documents[key])
+                                                    .slice(0, 2)
+                                                    .map((doc, i) => (
+                                                        <div key={i} className="h-5 px-2 bg-slate-100 rounded-md text-[8px] font-bold text-slate-500 flex items-center">
+                                                            {doc === 'drivingLicense' ? 'DL' : doc.toUpperCase()}
+                                                        </div>
+                                                    ))}
+                                                {Object.keys(rider.documents || {}).filter(key => rider.documents[key]).length > 2 && (
                                                     <div className="h-5 px-2 bg-slate-100 rounded-md text-[8px] font-bold text-slate-400 flex items-center">
-                                                        +{rider.documents.length - 2} More
+                                                        +{Object.keys(rider.documents || {}).filter(key => rider.documents[key]).length - 2} More
                                                     </div>
                                                 )}
                                             </div>
@@ -392,20 +407,29 @@ return (
                                 </div>
                             </div>
 
-                            <div className="space-y-4 mb-14">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Submitted Documents ({viewingRider.documents.length})</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {viewingRider.documents.map((doc, idx) => (
-                                        <div key={idx} className="group relative aspect-[4/3] bg-slate-100 rounded-[24px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all">
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                                                <FileSearch className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors" />
-                                                <p className="text-[9px] font-black text-slate-500 uppercase mt-2 text-center">{doc}</p>
-                                            </div>
-                                            <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/5 transition-colors" />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                             <div className="space-y-4 mb-14">
+                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                                     Submitted Documents ({Object.keys(viewingRider.documents || {}).filter(key => viewingRider.documents[key]).length})
+                                 </h4>
+                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                     {Object.entries(viewingRider.documents || {})
+                                         .filter(([_, val]) => val)
+                                         .map(([key, val], idx) => {
+                                             const docLabel = key === 'aadhar' ? 'Aadhar Card' : key === 'pan' ? 'PAN Card' : key === 'drivingLicense' ? 'Driving License' : key;
+                                             return (
+                                                 <div 
+                                                     key={idx} 
+                                                     onClick={() => setPreviewDoc({ name: docLabel, url: val })}
+                                                     className="group relative aspect-[4/3] bg-slate-50 border border-slate-100 rounded-[24px] overflow-hidden cursor-pointer hover:border-primary hover:shadow-md transition-all flex flex-col items-center justify-center p-4"
+                                                 >
+                                                     <FileSearch className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors animate-pulse" />
+                                                     <p className="text-[9px] font-black text-slate-700 uppercase mt-2 text-center">{docLabel}</p>
+                                                 </div>
+                                             );
+                                         })
+                                     }
+                                 </div>
+                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-4">
                                 <button
@@ -432,6 +456,67 @@ return (
                                     REJECT APPLICATION
                                 </button>
                             </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* Document Preview Lightbox Modal */}
+        <AnimatePresence>
+            {previewDoc && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+                        onClick={() => setPreviewDoc(null)}
+                    />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        className="w-full max-w-4xl max-h-[85vh] relative z-10 bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in duration-300"
+                    >
+                        {/* Lightbox Header */}
+                        <div className="flex justify-between items-center p-6 border-b border-slate-100">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900">{previewDoc.name}</h3>
+                                <p className="text-[10px] text-slate-500 font-medium">Verification Preview</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <a 
+                                    href={previewDoc.url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                                >
+                                    Open in New Tab
+                                </a>
+                                <button 
+                                    onClick={() => setPreviewDoc(null)} 
+                                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
+                        {/* Lightbox Body */}
+                        <div className="flex-1 overflow-auto bg-slate-950 p-6 flex items-center justify-center min-h-[350px]">
+                            {previewDoc.url.toLowerCase().endsWith('.pdf') ? (
+                                <iframe 
+                                    src={previewDoc.url} 
+                                    title={previewDoc.name} 
+                                    className="w-full h-[60vh] rounded-xl border-none"
+                                />
+                            ) : (
+                                <img 
+                                    src={previewDoc.url} 
+                                    alt={previewDoc.name} 
+                                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-lg"
+                                />
+                            )}
                         </div>
                     </motion.div>
                 </div>

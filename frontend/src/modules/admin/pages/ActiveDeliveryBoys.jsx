@@ -21,6 +21,7 @@ import {
     Pencil,
     Trash2,
     Eye,
+    FileSearch,
     X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ const ActiveDeliveryBoys = () => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
     const [viewingRider, setViewingRider] = useState(null);
+    const [previewDoc, setPreviewDoc] = useState(null);
 
     // Form states
     const [formState, setFormState] = useState({
@@ -72,7 +74,8 @@ const ActiveDeliveryBoys = () => {
                 todayEarnings: 0, // Mock earnings
                 location: r.currentArea || 'Unknown',
                 lastSync: 'Now',
-                joinDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                joinDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                documents: r.documents || {}
             }));
 
             setRiders(mappedRiders);
@@ -93,6 +96,17 @@ React.useEffect(() => {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [pageSize, searchTerm, statusFilter]);
+
+React.useEffect(() => {
+    if (viewingRider || previewDoc || isEditModalOpen || isOnboardModalOpen) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+    }
+    return () => {
+        document.body.style.overflow = '';
+    };
+}, [viewingRider, previewDoc, isEditModalOpen, isOnboardModalOpen]);
 
 // Filtering logic
 const filteredRiders = useMemo(() => {
@@ -476,6 +490,31 @@ return (
                                 </div>
                             </div>
 
+                            {/* Submitted Documents section */}
+                            {viewingRider.documents && Object.keys(viewingRider.documents).some(key => viewingRider.documents[key]) && (
+                                <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom duration-300">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Submitted Documents</h4>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        {Object.entries(viewingRider.documents)
+                                            .filter(([_, val]) => val)
+                                            .map(([key, val]) => {
+                                                const docLabel = key === 'aadhar' ? 'Aadhar Card' : key === 'pan' ? 'PAN Card' : key === 'drivingLicense' ? 'Driving License' : key;
+                                                return (
+                                                    <div 
+                                                        key={key} 
+                                                        onClick={() => setPreviewDoc({ name: docLabel, url: val })}
+                                                        className="group relative bg-slate-50 border border-slate-100 rounded-xl p-4 cursor-pointer hover:border-primary hover:bg-slate-100/50 transition-all flex flex-col items-center justify-center text-center gap-2 aspect-[4/3]"
+                                                    >
+                                                        <FileSearch className="h-6 w-6 text-slate-400 group-hover:text-primary transition-colors animate-pulse" />
+                                                        <span className="text-[9px] font-black text-slate-700 uppercase">{docLabel}</span>
+                                                    </div>
+                                                );
+                                            })
+                                        }
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="mt-8 flex gap-4">
                                 <button className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
                                     Send Message
@@ -588,6 +627,67 @@ return (
                                 {isEditModalOpen ? 'SAVE CHANGES' : 'ADD RIDER'}
                             </button>
                         </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* Document Preview Lightbox Modal */}
+        <AnimatePresence>
+            {previewDoc && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+                        onClick={() => setPreviewDoc(null)}
+                    />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        className="w-full max-w-4xl max-h-[85vh] relative z-10 bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in duration-300"
+                    >
+                        {/* Lightbox Header */}
+                        <div className="flex justify-between items-center p-6 border-b border-slate-100">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900">{previewDoc.name}</h3>
+                                <p className="text-[10px] text-slate-500 font-medium">Verification Preview</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <a 
+                                    href={previewDoc.url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                                >
+                                    Open in New Tab
+                                </a>
+                                <button 
+                                    onClick={() => setPreviewDoc(null)} 
+                                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-all"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
+                        {/* Lightbox Body */}
+                        <div className="flex-1 overflow-auto bg-slate-950 p-6 flex items-center justify-center min-h-[350px]">
+                            {previewDoc.url.toLowerCase().endsWith('.pdf') ? (
+                                <iframe 
+                                    src={previewDoc.url} 
+                                    title={previewDoc.name} 
+                                    className="w-full h-[60vh] rounded-xl border-none"
+                                />
+                            ) : (
+                                <img 
+                                    src={previewDoc.url} 
+                                    alt={previewDoc.name} 
+                                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-lg"
+                                />
+                            )}
+                        </div>
                     </motion.div>
                 </div>
             )}
