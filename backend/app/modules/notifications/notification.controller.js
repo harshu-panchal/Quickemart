@@ -56,13 +56,16 @@ function queryFromFilter(filter = {}, options = {}) {
 
 function normalizeNotification(doc = {}) {
   const role = doc.role || roleFromRecipientModel(doc.recipientModel) || "customer";
+  const bodyText = doc.body || doc.message || "";
   return {
     id: doc._id,
+    _id: doc._id,
     userId: doc.userId || doc.recipient,
     role,
     type: doc.type,
     title: doc.title,
-    body: doc.body || doc.message || "",
+    body: bodyText,
+    message: bodyText,
     data: doc.data || {},
     status: doc.status || "sent",
     isRead: Boolean(doc.isRead),

@@ -1,23 +1,46 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Landmark, CreditCard, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Landmark, CreditCard, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import Button from "@/shared/components/ui/Button";
-import Card from "@/shared/components/ui/Card";
 import Input from "@/shared/components/ui/Input";
+import { toast } from "sonner";
+import { deliveryApi } from "../../services/deliveryApi";
 
 const BankAccount = () => {
   const navigate = useNavigate();
 
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+
   const [newAccount, setNewAccount] = useState("");
   const [confirmAccount, setConfirmAccount] = useState("");
   const [ifscCode, setIfscCode] = useState("");
+  const [bankName, setBankName] = useState("");
   
   const [accountError, setAccountError] = useState("");
   const [confirmError, setConfirmError] = useState("");
   const [ifscError, setIfscError] = useState("");
 
+  const loadProfile = async () => {
+    try {
+      const res = await deliveryApi.getProfile();
+      if (res.data?.success) {
+        setProfile(res.data.result || res.data.data);
+      }
+    } catch (error) {
+      console.error("Failed to load delivery profile:", error);
+      toast.error("Failed to load bank details.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
   const handleNewAccountChange = (e) => {
-    // Only allow numbers
     const value = e.target.value.replace(/\D/g, "");
     setNewAccount(value);
     
@@ -35,7 +58,6 @@ const BankAccount = () => {
   };
 
   const handleConfirmAccountChange = (e) => {
-    // Only allow numbers
     const value = e.target.value.replace(/\D/g, "");
     setConfirmAccount(value);
     
@@ -47,11 +69,9 @@ const BankAccount = () => {
   };
 
   const handleIfscChange = (e) => {
-    // Only allow alphanumeric, auto-capitalize
     const value = e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
     setIfscCode(value);
     
-    // IFSC Regex: 4 letters, 1 zero, 6 alphanumeric
     const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
     if (value.length > 0 && !ifscRegex.test(value)) {
       setIfscError("Invalid IFSC format (e.g. HDFC0001234)");
@@ -60,14 +80,79 @@ const BankAccount = () => {
     }
   };
 
-  const bankDetails = {
-    accountHolder: "RAHUL KUMAR",
-    accountNumber: "XXXXXXXX8921",
-    ifsc: "HDFC0001234",
-    bankName: "HDFC Bank",
-    branch: "MG Road, Bangalore",
-    status: "Verified",
+  const maskAccountNumber = (accNum) => {
+    if (!accNum) return "XXXXXXXXXXXX";
+    const str = String(accNum);
+    if (str.length <= 4) return str;
+    return "X".repeat(str.length - 4) + str.slice(-4);
   };
+
+  const getBankNameFromIfsc = (ifsc) => {
+    if (!ifsc) return "Bank Name";
+    const prefix = String(ifsc).substring(0, 4).toUpperCase();
+    const banks = {
+      "HDFC": "HDFC Bank",
+      "SBIN": "State Bank of India",
+      "ICIC": "ICICI Bank",
+      "BARB": "Bank of Baroda",
+      "PUNB": "Punjab National Bank",
+      "CNRB": "Canara Bank",
+      "UTIB": "Axis Bank",
+      "KKBK": "Kotak Mahindra Bank",
+      "YESB": "Yes Bank",
+      "IBKL": "IDBI Bank",
+      "MAHB": "Bank of Maharashtra",
+      "UCOB": "UCO Bank",
+      "IOBA": "Indian Overseas Bank",
+      "UBIN": "Union Bank of India",
+      "ANDB": "Andhra Bank",
+      "ALLA": "Allahabad Bank",
+      "SYNB": "Syndicate Bank",
+      "ORBC": "Oriental Bank of Commerce",
+      "VIJB": "Vijaya Bank",
+      "CORP": "Corporation Bank",
+    };
+    return banks[prefix] || `${prefix} Bank`;
+  };
+
+  const handleUpdate = async () => {
+    if (!!accountError || !!confirmError || !!ifscError || !newAccount || !confirmAccount || !ifscCode) return;
+    try {
+      setUpdating(true);
+      const res = await deliveryApi.updateProfile({
+        accountNumber: newAccount,
+        accountHolder: profile?.accountHolder || profile?.name || "Delivery Partner",
+        ifsc: ifscCode,
+        bankName: bankName.trim() || undefined
+      });
+      if (res.data?.success) {
+        toast.success("Bank account updated successfully!");
+        setProfile(res.data.result || res.data.data);
+        setNewAccount("");
+        setConfirmAccount("");
+        setIfscCode("");
+        setBankName("");
+      }
+    } catch (error) {
+      console.error("Failed to update bank account:", error);
+      toast.error(error.response?.data?.message || "Failed to update bank details");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  const accountHolderVal = profile?.accountHolder || profile?.name || "Not Configured";
+  const accountNumberVal = profile?.accountNumber ? maskAccountNumber(profile.accountNumber) : "XXXXXXXXXXXX";
+  const ifscVal = profile?.ifsc || "Not Configured";
+  const bankNameVal = profile?.bankName || (profile?.ifsc ? getBankNameFromIfsc(profile.ifsc) : "No Bank Assigned");
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -98,17 +183,17 @@ const BankAccount = () => {
 
           <div className="space-y-1 relative z-10">
             <p className="text-gray-400 text-xs uppercase tracking-wider">Account Number</p>
-            <p className="font-mono text-2xl tracking-widest">{bankDetails.accountNumber}</p>
+            <p className="font-mono text-2xl tracking-widest">{accountNumberVal}</p>
           </div>
 
           <div className="flex justify-between items-end mt-8 relative z-10">
             <div>
               <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Account Holder</p>
-              <p className="font-bold text-lg">{bankDetails.accountHolder}</p>
+              <p className="font-bold text-lg">{accountHolderVal}</p>
             </div>
-            <div className="text-right">
-              <p className="text-white font-bold">{bankDetails.bankName}</p>
-              <p className="text-gray-400 text-xs">{bankDetails.ifsc}</p>
+            <div className="text-right text-sm">
+              <p className="text-white font-bold">{bankNameVal}</p>
+              <p className="text-gray-400 text-xs">{ifscVal}</p>
             </div>
           </div>
         </div>
@@ -157,12 +242,20 @@ const BankAccount = () => {
               error={!!ifscError}
               maxLength={11}
             />
+            <Input 
+              label="Bank Name (Optional)" 
+              placeholder="Enter bank name" 
+              icon={Landmark}
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+            />
             <Button 
               className="w-full mt-2" 
               variant="outline"
-              disabled={!!accountError || !!confirmError || !!ifscError || !newAccount || !confirmAccount || !ifscCode}
+              disabled={updating || !!accountError || !!confirmError || !!ifscError || !newAccount || !confirmAccount || !ifscCode}
+              onClick={handleUpdate}
             >
-              Verify & Update
+              {updating ? "Updating..." : "Verify & Update"}
             </Button>
           </div>
         </div>

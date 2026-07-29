@@ -5,23 +5,48 @@ import Button from "@/shared/components/ui/Button";
 import Input from "@/shared/components/ui/Input";
 import { toast } from "sonner";
 import { useAuth } from "@core/context/AuthContext";
+import { deliveryApi } from "../../services/deliveryApi";
 
 const PersonalDetails = () => {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [formData, setFormData] = useState({
     fullName: user?.name || "",
     phone: user?.phone || "",
+    alternativePhone: user?.alternativePhone || "",
     email: user?.email || "",
     address: user?.address || "",
     dob: user?.dob || "",
     bloodGroup: user?.bloodGroup || "",
   });
 
-  const handleSave = () => {
-    setIsEditing(false);
-    toast.success("Personal details updated successfully!");
+  const handleSave = async () => {
+    try {
+      if (formData.alternativePhone) {
+        if (formData.alternativePhone.length !== 10) {
+          toast.error("Alternative phone number must be exactly 10 digits");
+          return;
+        }
+        if (formData.alternativePhone === formData.phone) {
+          toast.error("Alternative phone number cannot be the same as primary phone number");
+          return;
+        }
+      }
+      await deliveryApi.updateProfile({
+        name: formData.fullName,
+        email: formData.email,
+        address: formData.address,
+        dob: formData.dob,
+        bloodGroup: formData.bloodGroup,
+        alternativePhone: formData.alternativePhone || "",
+      });
+      await refreshUser();
+      setIsEditing(false);
+      toast.success("Personal details updated successfully!");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update profile");
+    }
   };
 
   return (
@@ -92,6 +117,16 @@ const PersonalDetails = () => {
             icon={Phone}
             className="bg-gray-50 border-transparent text-gray-500"
             helperText="Contact support to change phone number"
+          />
+
+          <Input
+            label="Alternative Phone (Optional)"
+            value={formData.alternativePhone}
+            readOnly={!isEditing}
+            onChange={(e) => setFormData({...formData, alternativePhone: e.target.value.replace(/\D/g, "").slice(0, 10)})}
+            icon={Phone}
+            maxLength={10}
+            className={!isEditing ? "bg-gray-50 border-transparent text-gray-600" : ""}
           />
 
           <Input

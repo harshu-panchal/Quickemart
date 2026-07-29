@@ -130,10 +130,19 @@ const Notifications = () => {
             <AnimatePresence mode="popLayout">
               {notifications.map((notification) => (
                 <motion.div
-                  key={notification._id}
+                  key={notification._id || notification.id}
                   variants={itemVariants}
                   layout
-                  onClick={() => !notification.isRead && handleMarkAsRead(notification._id)}>
+                  onClick={() => {
+                    const targetId = notification._id || notification.id;
+                    if (!notification.isRead && targetId) {
+                      handleMarkAsRead(targetId);
+                    }
+                    const orderId = notification.data?.orderId;
+                    if (orderId) {
+                      navigate(`/delivery/order-details/${orderId}`);
+                    }
+                  }}>
                   <Card
                     className={`p-4 border-none shadow-sm relative overflow-hidden transition-all duration-300 cursor-pointer ${!notification.isRead
                       ? "bg-brand-50/50 border-l-4 border-l-brand-500 shadow-brand-500/5 scale-[1.02]"

@@ -64,8 +64,13 @@ export async function sendFCM(tokens = [], payload = {}) {
   }
 
   const messaging = getMessagingClient();
-  const data = toStringMap(payload.data || {});
-  const link = data.link || payload?.data?.link || "";
+  const link = payload?.data?.link || "";
+  const data = toStringMap({
+    ...(payload.data || {}),
+    link,
+    click_action: link,
+    clickAction: link,
+  });
   const resolvedLink = isWebLink(link) ? link : "";
   const title = payload.title || "";
   const body = payload.body || payload.message || "";
@@ -90,8 +95,19 @@ export async function sendFCM(tokens = [], payload = {}) {
       data,
       android: {
         notification: {
-          sound: (data.eventType === "NEW_ORDER" || data.eventType === "order") ? "order_alert" : "default",
-          channelId: (data.eventType === "NEW_ORDER" || data.eventType === "order") ? "order_alert" : "default",
+          sound: ["NEW_ORDER", "NEW_DELIVERY_BROADCAST", "DELIVERY_ASSIGNED", "order"].includes(data.eventType) ? "order_alert" : "default",
+          channelId: ["NEW_ORDER", "NEW_DELIVERY_BROADCAST", "DELIVERY_ASSIGNED", "order"].includes(data.eventType) ? "order_alert" : "default",
+          clickAction: link,
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: ["NEW_ORDER", "NEW_DELIVERY_BROADCAST", "DELIVERY_ASSIGNED", "order"].includes(data.eventType) ? "order_alert.caf" : "default",
+          },
+          link,
+          click_action: link,
+          clickAction: link,
         }
       },
       webpush: {

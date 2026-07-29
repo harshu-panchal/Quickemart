@@ -2,7 +2,7 @@ import { isSupported, getMessaging, getToken, onMessage } from "firebase/messagi
 import { getFirebaseApp } from "./client";
 import axiosInstance from "@core/api/axios";
 import AppZetoBridge from "../../lib/appZetoBridge";
-import { rawGet, rawSet, rawRemove, KEY_PREFIXES } from "@core/utils/storage";
+import { rawGet, rawSet, rawRemove, KEY_PREFIXES, STORAGE_KEYS } from "@core/utils/storage";
 
 let foregroundListenerStarted = false;
 let foregroundUnsubscribe = null;
@@ -96,7 +96,7 @@ async function ensureServiceWorkerRegistration() {
   return registration;
 }
 
-async function showSystemNotification({ title, body, data } = {}) {
+export async function showSystemNotification({ title, body, data } = {}) {
   const safeTitle = String(title || "Notification");
   const safeBody = String(body || "");
   const link = data?.link || "/";
@@ -127,7 +127,7 @@ async function showSystemNotification({ title, body, data } = {}) {
   }
 
   if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-    new Notification(safeTitle, {
+    const n = new Notification(safeTitle, {
       body: safeBody,
       tag,
       requireInteraction: true,
@@ -140,6 +140,16 @@ async function showSystemNotification({ title, body, data } = {}) {
         image,
       },
     });
+    n.onclick = (e) => {
+      e.preventDefault();
+      try {
+        window.focus();
+      } catch (err) {
+        // ignore focus error
+      }
+      window.location.href = link;
+      n.close();
+    };
   }
 }
 
@@ -194,10 +204,26 @@ export async function ensureFcmTokenRegistered({
     }
   }
 
+  const ROLE_TO_STORAGE_KEY = {
+    seller: STORAGE_KEYS.AUTH_SELLER,
+    admin: STORAGE_KEYS.AUTH_ADMIN,
+    delivery: STORAGE_KEYS.AUTH_DELIVERY,
+    customer: STORAGE_KEYS.AUTH_CUSTOMER,
+  };
+  const { getStoredAuthToken } = await import("@core/utils/authStorage");
+  const storageKey = ROLE_TO_STORAGE_KEY[role];
+  const roleToken = storageKey ? getStoredAuthToken(storageKey) : null;
+  const headers = {};
+  if (roleToken) {
+    headers.Authorization = `Bearer ${roleToken}`;
+  }
+
   await axiosInstance.post("/push/register", {
     token,
     platform,
     device: device || navigator.userAgent,
+  }, {
+    headers,
   });
 
   persistStoredFcmToken(role, token);
@@ -258,10 +284,25 @@ export async function removeStoredFcmToken({
     return false;
   }
 
+  const ROLE_TO_STORAGE_KEY = {
+    seller: STORAGE_KEYS.AUTH_SELLER,
+    admin: STORAGE_KEYS.AUTH_ADMIN,
+    delivery: STORAGE_KEYS.AUTH_DELIVERY,
+    customer: STORAGE_KEYS.AUTH_CUSTOMER,
+  };
+  const { getStoredAuthToken } = await import("@core/utils/authStorage");
+  const storageKey = ROLE_TO_STORAGE_KEY[role];
+  const roleToken = storageKey ? getStoredAuthToken(storageKey) : null;
+  const headers = {};
+  if (roleToken) {
+    headers.Authorization = `Bearer ${roleToken}`;
+  }
+
   await axiosInstance.delete("/push/remove", {
     data: {
       token: candidateToken,
     },
+    headers,
   });
 
   clearStoredFcmToken(role);
@@ -351,4 +392,5 @@ export default {
   removeStoredFcmToken,
   scheduleFcmRegistrationOnUserGesture,
   startForegroundPushListener,
+  showSystemNotification,
 };

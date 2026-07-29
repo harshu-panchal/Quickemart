@@ -60,6 +60,13 @@ const orderSchema = new mongoose.Schema(
         lng: Number,
       },
     },
+    lastArrivingNotificationSentAt: {
+      type: Date,
+    },
+    arrivingNotificationCount: {
+      type: Number,
+      default: 0,
+    },
     /**
      * @deprecated Phase 4 (P4-7). Use the canonical `paymentMode` +
      * `paymentStatus` top-level fields and the `paymentBreakdown` nested

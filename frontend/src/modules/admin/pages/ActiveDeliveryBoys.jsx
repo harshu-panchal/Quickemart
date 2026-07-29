@@ -72,7 +72,7 @@ const ActiveDeliveryBoys = () => {
                 rating: 4.5, // Mock rating for now
                 totalOrders: 0, // Mock total orders
                 todayEarnings: 0, // Mock earnings
-                location: r.currentArea || 'Unknown',
+                location: r.currentArea || r.address || 'Unknown',
                 lastSync: 'Now',
                 joinDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                 documents: r.documents || {}

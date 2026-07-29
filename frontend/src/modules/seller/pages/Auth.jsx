@@ -91,6 +91,7 @@ const Auth = () => {
     name: "",
     shopName: "",
     phone: "",
+    alternativePhone: "",
     locality: "",
     pincode: "",
     city: "",
@@ -163,11 +164,13 @@ const Auth = () => {
         resetVerificationState("email");
       }
       setFormData({ ...formData, [name]: cleaned });
-    } else if (name === "phone") {
+    } else if (name === "phone" || name === "alternativePhone") {
       // Contact number: only digits, max 10 characters
       const digitsOnly = value.replace(/[^0-9]/g, "").slice(0, 10);
-      if (digitsOnly !== formData.phone) {
-        resetVerificationState("phone");
+      if (name === "phone") {
+        if (digitsOnly !== formData.phone) {
+          resetVerificationState("phone");
+        }
       }
       setFormData({ ...formData, [name]: digitsOnly });
     } else if (name === "city" || name === "state") {
@@ -403,6 +406,16 @@ const Auth = () => {
         if (!/^[0-9]{10}$/.test(phone)) {
           toast.error("Please enter a valid 10-digit contact number.");
           return;
+        }
+        if (formData.alternativePhone) {
+          if (!/^[0-9]{10}$/.test(formData.alternativePhone)) {
+            toast.error("Please enter a valid 10-digit alternative contact number.");
+            return;
+          }
+          if (formData.alternativePhone === phone) {
+            toast.error("Alternative contact number cannot be the same as primary contact number.");
+            return;
+          }
         }
         if (verifications.email.status !== "verified" || !verifications.email.token) {
           toast.error("Please verify your business email before continuing.");
@@ -947,6 +960,23 @@ const Auth = () => {
                           <div className="flex items-center gap-2 text-[11px] font-bold text-brand-600">
                             <CheckCircle className="h-4 w-4" />
                             <span>Phone number verified successfully.</span>
+                          </div>
+                        )}
+                        {verifications.phone.status === "verified" && (
+                          <div className="relative group animate-in fade-in slide-in-from-bottom duration-300">
+                            <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                              <Phone size={18} />
+                            </div>
+                            <input
+                              type="tel"
+                              name="alternativePhone"
+                              placeholder="Alternative Contact Number (Optional)"
+                              className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                              value={formData.alternativePhone}
+                              onChange={handleChange}
+                              onBlur={handleBlur}
+                              maxLength={10}
+                            />
                           </div>
                         )}
                       </>

@@ -147,6 +147,99 @@ export const AuthProvider = ({ children }) => {
         fetchProfile();
     }, [token, currentRole]);
 
+    // Listen to real-time socket events for system notification fallback
+    useEffect(() => {
+        if (!token) return;
+
+        // Auto-request HTML5 desktop notification permissions on the first user interaction
+        const handleGesture = () => {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                Notification.requestPermission().catch(() => {});
+            }
+            // Remove listeners
+            const gestureEvents = ["pointerdown", "touchstart", "click", "keydown"];
+            gestureEvents.forEach(event => {
+                document.removeEventListener(event, handleGesture);
+            });
+        };
+
+        if (typeof Notification !== 'undefined') {
+            if (Notification.permission === 'default') {
+                const gestureEvents = ["pointerdown", "touchstart", "click", "keydown"];
+                gestureEvents.forEach(event => {
+                    document.addEventListener(event, handleGesture, { once: true });
+                });
+            }
+        }
+
+        const handleNewNotification = async (payload) => {
+            const title = payload?.title || "New Notification";
+            const body = payload?.message || payload?.body || "";
+            
+            // Play a standard Mixkit notification chime sound
+            try {
+                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                audio.play().catch(() => {});
+            } catch (e) {
+                // Ignore audio playback failure
+            }
+
+            // Surface native lock-screen / system notification banner via Service Worker
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                try {
+                    const { showSystemNotification } = await import('@core/firebase/pushClient');
+                    await showSystemNotification({
+                        title,
+                        body,
+                        data: payload?.data || payload,
+                    });
+                } catch (err) {
+                    console.warn('[push] SW local notification failed:', err);
+                }
+            }
+
+            // Surface in-app toast notification using Sonner
+            try {
+                const { toast } = await import('sonner');
+                const imageUrl = payload?.data?.imageUrl || payload?.data?.image || payload?.imageUrl || payload?.image || "";
+                toast.success(title, {
+                    description: body,
+                    duration: 8000,
+                    position: 'top-center',
+                    icon: imageUrl ? (
+                        <img 
+                            src={imageUrl} 
+                            alt="Notification Icon" 
+                            style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} 
+                        />
+                    ) : undefined
+                });
+            } catch (e) {
+                console.warn('[push] In-app toast failed:', e);
+            }
+        };
+
+        let offNotification = null;
+        import('@core/services/orderSocket')
+            .then(({ onNotificationNew }) => {
+                const getToken = () => token;
+                offNotification = onNotificationNew(getToken, handleNewNotification);
+            })
+            .catch((err) => {
+                console.warn('[push] Failed to register socket notification listener:', err);
+            });
+
+        return () => {
+            if (offNotification) {
+                offNotification();
+            }
+            const gestureEvents = ["pointerdown", "touchstart", "click", "keydown"];
+            gestureEvents.forEach(event => {
+                document.removeEventListener(event, handleGesture);
+            });
+        };
+    }, [token]);
+
     const login = (userData) => {
         const role = userData.role?.toLowerCase() || 'customer';
         const storageKey = ROLE_STORAGE_KEYS[role];

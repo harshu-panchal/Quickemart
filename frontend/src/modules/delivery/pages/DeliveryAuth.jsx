@@ -58,6 +58,7 @@ const DeliveryAuth = () => {
   const [signupStep, setSignupStep] = useState(1);
   const [signupName, setSignupName] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
+  const [signupAltPhone, setSignupAltPhone] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupAddress, setSignupAddress] = useState("");
   const [signupVehicle, setSignupVehicle] = useState("bike");
@@ -67,6 +68,7 @@ const DeliveryAuth = () => {
   const [signupAadharNumber, setSignupAadharNumber] = useState("");
   const [signupAccountNumber, setSignupAccountNumber] = useState("");
   const [signupIfsc, setSignupIfsc] = useState("");
+  const [signupBankName, setSignupBankName] = useState("");
   const [signupAccountHolder, setSignupAccountHolder] = useState("");
   const [signupPreferredArea, setSignupPreferredArea] = useState("");
   const [signupDob, setSignupDob] = useState("");
@@ -249,6 +251,17 @@ const DeliveryAuth = () => {
         const formData = new FormData();
         formData.append("name", signupName.trim());
         formData.append("phone", signupPhone);
+        if (signupAltPhone) {
+          if (signupAltPhone.length !== 10) {
+            toast.error("Please enter a valid 10-digit alternative phone number");
+            return;
+          }
+          if (signupAltPhone === signupPhone) {
+            toast.error("Alternative phone number cannot be the same as primary phone number");
+            return;
+          }
+          formData.append("alternativePhone", signupAltPhone);
+        }
         formData.append("vehicleType", signupVehicle);
         formData.append("email", signupEmail);
         formData.append("address", signupAddress);
@@ -257,6 +270,7 @@ const DeliveryAuth = () => {
         formData.append("accountHolder", signupAccountHolder);
         formData.append("accountNumber", signupAccountNumber);
         formData.append("ifsc", signupIfsc);
+        formData.append("bankName", signupBankName);
         formData.append("dob", signupDob);
         formData.append("bloodGroup", signupBloodGroup);
         formData.append("currentArea", signupPreferredArea);
@@ -516,6 +530,22 @@ const DeliveryAuth = () => {
                           </div>
 
                           <div className="space-y-1.5">
+                            <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Alternative Phone (Optional)</label>
+                            <div className="relative">
+                              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 w-4 h-4" />
+                              <span className="absolute left-10 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-sm border-r border-gray-200 pr-2.5">+91</span>
+                              <input
+                                type="tel"
+                                value={signupAltPhone}
+                                onChange={(e) => setSignupAltPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                maxLength={10}
+                                className="w-full pl-24 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
+                                placeholder="00000 00000"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
                             <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
                             <div className="relative">
                               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 w-4 h-4" />
@@ -605,6 +635,16 @@ const DeliveryAuth = () => {
                               if (signupPhone.length !== 10) {
                                 toast.error("Please enter a valid 10-digit phone number");
                                 return;
+                              }
+                              if (signupAltPhone) {
+                                if (signupAltPhone.length !== 10) {
+                                  toast.error("Alternative phone number must be exactly 10 digits");
+                                  return;
+                                }
+                                if (signupAltPhone === signupPhone) {
+                                  toast.error("Alternative phone number cannot be the same as primary phone number");
+                                  return;
+                                }
                               }
                               if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupEmail.trim())) {
                                 toast.error("Please enter a valid email address");
@@ -807,6 +847,16 @@ const DeliveryAuth = () => {
                               placeholder="HDFC0001234"
                             />
                           </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Bank Name</label>
+                            <input
+                              type="text"
+                              value={signupBankName}
+                              onChange={(e) => setSignupBankName(e.target.value)}
+                              className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
+                              placeholder="e.g. HDFC Bank"
+                            />
+                          </div>
 
                           <div className="flex gap-4 pt-2">
                             <button
@@ -817,7 +867,7 @@ const DeliveryAuth = () => {
                             </button>
                             <button
                               onClick={() => {
-                                if (!signupAadharNumber || !signupPanNumber || !signupAccountHolder.trim() || !signupAccountNumber || !signupIfsc) {
+                                if (!signupAadharNumber || !signupPanNumber || !signupAccountHolder.trim() || !signupAccountNumber || !signupIfsc || !signupBankName.trim()) {
                                   toast.error("Please fill all bank and identification fields");
                                   return;
                                 }

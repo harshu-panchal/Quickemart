@@ -1,5 +1,6 @@
-﻿import Order from "../models/order.js";
+import Order from "../models/order.js";
 import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
+import { getIO } from "../socket/socketManager.js";
 import Transaction from "../models/transaction.js";
 import Delivery from "../models/delivery.js";
 import DeliveryAssignment from "../models/deliveryAssignment.js";
@@ -439,6 +440,12 @@ export const updateDeliveryLocation = async (req, res) => {
         writeDeliveryLocation(deliveryId, activeOrderId, snapshot).catch(() => {});
         if (activeOrderId) {
             appendTrailPoint(activeOrderId, { lat, lng, t: Date.now() }).catch(() => {});
+            try {
+                const io = getIO();
+                io.to(`order:${activeOrderId}`).emit("delivery:location:update", snapshot);
+            } catch (err) {
+                logger.warn("[Socket] Failed to emit location update", { error: err.message });
+            }
         }
 
         return handleResponse(res, 200, "Location updated", {

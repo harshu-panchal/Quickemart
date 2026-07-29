@@ -30,6 +30,11 @@ const sellerSchema = new mongoose.Schema(
       unique: true,
     },
 
+    alternativePhone: {
+      type: String,
+      trim: true,
+    },
+
     password: {
       type: String,
       required: true,

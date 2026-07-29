@@ -128,7 +128,7 @@ const DeliveryLayout = () => {
   /** While working an active order, do not stack the global incoming-offer modal (fixes refresh on order details). */
   const suppressIncomingModal = useMemo(
     () =>
-      /\/delivery\/(confirm-delivery|navigation)/.test(location.pathname),
+      /\/delivery\/(confirm-delivery|navigation|order-details)/.test(location.pathname),
     [location.pathname],
   );
 

@@ -46,6 +46,7 @@ import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.const
 import {
   emitDeliveryBroadcastForSeller,
   retractDeliveryBroadcastForOrder,
+  retractAllBroadcastsForRider,
   emitToSeller,
   emitToDelivery,
 } from "../services/orderSocketEmitter.js";
@@ -834,6 +835,27 @@ export const acceptReturnPickup = async (req, res) => {
       return handleResponse(res, 403, "Access denied.");
     }
 
+    const activeOrder = await Order.findOne({
+      $or: [
+        {
+          deliveryBoy: userId,
+          status: { $nin: ["delivered", "cancelled"] }
+        },
+        {
+          returnDeliveryBoy: userId,
+          returnStatus: { $exists: true, $ne: "returned" }
+        }
+      ]
+    }).select("_id").lean();
+
+    if (activeOrder) {
+      return handleResponse(
+        res,
+        403,
+        "You already have an active delivery or return task in progress.",
+      );
+    }
+
     const orderKey = orderMatchQueryFromRouteParam(orderId);
     const order = await Order.findOne(orderKey);
 
@@ -856,6 +878,7 @@ export const acceptReturnPickup = async (req, res) => {
       // hiding this pickup from the rider's own task list.
       order.returnSearchExpiresAt = undefined;
       await order.save();
+      await retractAllBroadcastsForRider(userId);
 
       // Cancel the pending timeout for whichever attempt the rider grabbed.
       try {

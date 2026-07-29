@@ -14,6 +14,11 @@ const deliverySchema = new mongoose.Schema(
             unique: true,
         },
 
+        alternativePhone: {
+            type: String,
+            trim: true,
+        },
+
         vehicleType: {
             type: String,
             enum: ["bike", "cycle", "scooter"],
@@ -51,6 +56,11 @@ const deliverySchema = new mongoose.Schema(
         },
 
         ifsc: {
+            type: String,
+            trim: true,
+        },
+
+        bankName: {
             type: String,
             trim: true,
         },

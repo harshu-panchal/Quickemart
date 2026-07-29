@@ -209,6 +209,8 @@ const Home = () => {
   const [pendingReturn, setPendingReturn] = useState(null);
   const [offerSections, setOfferSections] = useState(() => cachedHomePageData?.offerSections || []);
   const [noServiceData, setNoServiceData] = useState(null);
+  const [lowestPriceProducts, setLowestPriceProducts] = useState(() => cachedHomePageData?.products || []);
+  const [lowestPriceLoading, setLowestPriceLoading] = useState(false);
 
   useEffect(() => {
     productsRef.current = products || [];
@@ -361,6 +363,68 @@ const Home = () => {
   }, [activeCategory, currentLocation?.latitude, currentLocation?.longitude]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const fetchCategoryProducts = async () => {
+      const hasValidLocation = Number.isFinite(currentLocation?.latitude) && Number.isFinite(currentLocation?.longitude);
+      if (!activeCategory || activeCategory._id === "all") {
+        setLowestPriceProducts(products);
+        setLowestPriceLoading(false);
+        return;
+      }
+
+      setLowestPriceLoading(true);
+      try {
+        const productParams = {
+          limit: 20,
+          headerId: activeCategory._id,
+        };
+        if (hasValidLocation) {
+          productParams.lat = currentLocation.latitude;
+          productParams.lng = currentLocation.longitude;
+        }
+        const res = await customerApi.getProducts(productParams, { signal: controller.signal });
+        if (res.data.success) {
+          const rawResult = res.data.result;
+          const dbProds = Array.isArray(res.data.results)
+            ? res.data.results
+            : Array.isArray(rawResult?.items)
+              ? rawResult.items
+              : Array.isArray(rawResult)
+                ? rawResult
+                : [];
+          const mapped = dbProds.map((p) => ({
+            ...p,
+            id: p._id,
+            image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+            price: p.salePrice || p.price,
+            originalPrice: p.price,
+            weight: p.weight || "1 unit",
+            deliveryTime: "8-15 mins"
+          }));
+          setLowestPriceProducts(mapped);
+        } else {
+          setLowestPriceProducts([]);
+        }
+      } catch (error) {
+        if (error.name !== "AbortError" && error.code !== "ERR_CANCELED") {
+          console.error("Error fetching category products:", error);
+          setLowestPriceProducts([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLowestPriceLoading(false);
+        }
+      }
+    };
+
+    fetchCategoryProducts();
+
+    return () => {
+      controller.abort();
+    };
+  }, [activeCategory, products, currentLocation?.latitude, currentLocation?.longitude]);
+
+  useEffect(() => {
     const firstUrl = heroConfig?.banners?.items?.[0]?.imageUrl;
     if (!firstUrl) return;
     const link = document.createElement("link");
@@ -437,7 +501,7 @@ const Home = () => {
 
           <PromoMarquee />
           <QuickCategorySlider categories={effectiveQuickCategories} onCategoryClick={(id) => navigate(`/category/${id}`)} />
-          <LowestPriceSection products={products} onSeeAll={() => navigate("/category/all")} />
+          <LowestPriceSection products={lowestPriceProducts} isLoading={lowestPriceLoading} onSeeAll={() => navigate("/category/all")} />
           <OfferSections sections={offerSections} noServiceData={noServiceData} />
 
           {sectionsForRenderer.length > 0 && (
