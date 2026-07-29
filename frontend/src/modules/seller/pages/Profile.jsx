@@ -31,6 +31,7 @@ const SellerProfile = () => {
     name: "",
     shopName: "",
     phone: "",
+    alternativePhone: "",
     email: "",
     lat: null,
     lng: null,
@@ -55,6 +56,7 @@ const SellerProfile = () => {
         name: data.name || "",
         shopName: data.shopName || "",
         phone: data.phone || "",
+        alternativePhone: data.alternativePhone || "",
         email: data.email || "",
         lat: data.location?.coordinates[1] || null,
         lng: data.location?.coordinates[0] || null,
@@ -90,7 +92,7 @@ const SellerProfile = () => {
       // Disallow numbers in seller name
       const cleaned = value.replace(/[0-9]/g, "");
       setFormData({ ...formData, [name]: cleaned });
-    } else if (name === "phone") {
+    } else if (name === "phone" || name === "alternativePhone") {
       // Allow only digits, max 10 characters
       const digitsOnly = value.replace(/[^0-9]/g, "").slice(0, 10);
       setFormData({ ...formData, [name]: digitsOnly });
@@ -109,6 +111,16 @@ const SellerProfile = () => {
       toast.error("Please enter a valid 10-digit phone number.");
       return;
     }
+    if (formData.alternativePhone) {
+      if (!/^[0-9]{10}$/.test(formData.alternativePhone)) {
+        toast.error("Please enter a valid 10-digit alternative phone number.");
+        return;
+      }
+      if (formData.alternativePhone === formData.phone) {
+        toast.error("Alternative phone number cannot be the same as primary phone number.");
+        return;
+      }
+    }
     // Basic email validation
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       toast.error("Please enter a valid email address.");
@@ -120,6 +132,7 @@ const SellerProfile = () => {
         name: formData.name,
         shopName: formData.shopName,
         phone: formData.phone,
+        alternativePhone: formData.alternativePhone || "",
         email: formData.email,
         lat: formData.lat,
         lng: formData.lng,
@@ -350,6 +363,26 @@ const SellerProfile = () => {
                       value={formData.phone}
                       onChange={handleChange}
                       disabled={!isEditing}
+                      className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-100 transition-all disabled:opacity-70"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3 animate-in fade-in slide-in-from-bottom duration-300">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1">
+                    Alternative Phone (Optional)
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-900 transition-colors">
+                      <Phone size={18} />
+                    </div>
+                    <input
+                      type="tel"
+                      name="alternativePhone"
+                      value={formData.alternativePhone}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      placeholder="e.g. 9876543210"
                       className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-100 transition-all disabled:opacity-70"
                     />
                   </div>

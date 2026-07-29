@@ -37,6 +37,7 @@ import {
   emitToCustomer,
   emitToOrder,
   retractDeliveryBroadcastForOrder,
+  retractAllBroadcastsForRider,
 } from "./orderSocketEmitter.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 import { applyDeliveredSettlement } from "./orderSettlement.js";
@@ -291,6 +292,26 @@ export async function deliveryAcceptAtomic(deliveryId, orderId, idempotencyKey) 
     throw err;
   }
 
+  // Verify rider is not already busy with another active delivery or return task
+  const activeOrder = await Order.findOne({
+    $or: [
+      {
+        deliveryBoy: deliveryOid,
+        status: { $nin: ["delivered", "cancelled"] }
+      },
+      {
+        returnDeliveryBoy: deliveryOid,
+        returnStatus: { $exists: true, $ne: "returned" }
+      }
+    ]
+  }).select("_id").lean();
+
+  if (activeOrder) {
+    const err = new Error("You already have an active delivery or return task in progress.");
+    err.statusCode = 403;
+    throw err;
+  }
+
   if (idempotencyKey) {
     try {
       const redis = getRedisClient();
@@ -442,6 +463,7 @@ export async function deliveryAcceptAtomic(deliveryId, orderId, idempotencyKey) 
   });
 
   await retractDeliveryBroadcastForOrder(updated.orderId, deliveryOid);
+  await retractAllBroadcastsForRider(deliveryOid);
 
   emitOrderStatusUpdate(
     updated.orderId,

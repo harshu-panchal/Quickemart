@@ -29,6 +29,7 @@ import {
 } from "./app/core/shutdown.js";
 import { registerScheduledJob, startScheduledJobs } from "./app/services/distributedScheduler.js";
 import { getOrderAutoCancelJobHandler, getOrderAutoCancelJobInterval } from "./app/jobs/orderAutoCancelJob.js";
+import { getOrderArrivalUpdatesJobHandler, getOrderArrivalUpdatesJobInterval } from "./app/jobs/orderArrivalUpdatesJob.js";
 import { getReturnWindowReleaseJobHandler, getReturnWindowReleaseJobInterval } from "./app/jobs/returnWindowReleaseJob.js";
 import {
   getPayoutBatchJobHandler,
@@ -350,11 +351,18 @@ async function startScheduler() {
     );
   }
 
+  // Register order arrival updates job
+  registerScheduledJob(
+    'orderArrivalUpdatesJob',
+    getOrderArrivalUpdatesJobInterval(),
+    getOrderArrivalUpdatesJobHandler()
+  );
+
   // Start all registered jobs
   await startScheduledJobs();
   registerSchedulerStopper(stopScheduledJobs);
 
-  const scheduledJobs = ['orderAutoCancelJob', 'returnWindowReleaseJob'];
+  const scheduledJobs = ['orderAutoCancelJob', 'returnWindowReleaseJob', 'orderArrivalUpdatesJob'];
   if (isPayoutBatchJobEnabled()) scheduledJobs.push('payoutBatchJob');
   if (isWalletLedgerVerifierEnabled()) scheduledJobs.push('walletLedgerVerifierJob');
   if (isFirebaseTrackingCleanupJobEnabled()) scheduledJobs.push('firebaseTrackingCleanupJob');

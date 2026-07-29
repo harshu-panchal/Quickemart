@@ -13,6 +13,34 @@ const generateToken = (delivery) =>
         { expiresIn: "7d" }
     );
 
+const getBankNameFromIfsc = (ifsc) => {
+    if (!ifsc) return "";
+    const prefix = String(ifsc).substring(0, 4).toUpperCase();
+    const banks = {
+      "HDFC": "HDFC Bank",
+      "SBIN": "State Bank of India",
+      "ICIC": "ICICI Bank",
+      "BARB": "Bank of Baroda",
+      "PUNB": "Punjab National Bank",
+      "CNRB": "Canara Bank",
+      "UTIB": "Axis Bank",
+      "KKBK": "Kotak Mahindra Bank",
+      "YESB": "Yes Bank",
+      "IBKL": "IDBI Bank",
+      "MAHB": "Bank of Maharashtra",
+      "UCOB": "UCO Bank",
+      "IOBA": "Indian Overseas Bank",
+      "UBIN": "Union Bank of India",
+      "ANDB": "Andhra Bank",
+      "ALLA": "Allahabad Bank",
+      "SYNB": "Syndicate Bank",
+      "ORBC": "Oriental Bank of Commerce",
+      "VIJB": "Vijaya Bank",
+      "CORP": "Corporation Bank",
+    };
+    return banks[prefix] || `${prefix} Bank`;
+};
+
 /* ===============================
    SIGNUP – Send OTP
 ================================ */
@@ -22,8 +50,8 @@ export const signupDelivery = async (req, res) => {
             name, phone, vehicleType,
             email, address, vehicleNumber,
             drivingLicenseNumber,
-            accountHolder, accountNumber, ifsc,
-            dob, bloodGroup
+            accountHolder, accountNumber, ifsc, bankName,
+            dob, bloodGroup, alternativePhone
         } = req.body;
 
         if (!name || !phone) {
@@ -50,13 +78,13 @@ export const signupDelivery = async (req, res) => {
         if (req.files && Array.isArray(req.files)) {
             for (const file of req.files) {
                 if (file.fieldname === "profileImage") {
-                    profileImageUrl = await uploadToCloudinary(file.buffer, "delivery/profiles");
+                     profileImageUrl = await uploadToCloudinary(file.buffer, "delivery/profiles");
                 } else if (file.fieldname === "aadhar") {
-                    aadharUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
+                     aadharUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
                 } else if (file.fieldname === "pan") {
-                    panUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
+                     panUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
                 } else if (file.fieldname === "dl") {
-                    dlUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
+                     dlUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
                 }
             }
         }
@@ -73,6 +101,8 @@ export const signupDelivery = async (req, res) => {
         if (/^https?:\/\//i.test(normalizedDl)) dlUrl = normalizedDl;
         if (/^https?:\/\//i.test(normalizedProfileImage)) profileImageUrl = normalizedProfileImage;
 
+        const derivedBankName = bankName || getBankNameFromIfsc(ifsc);
+
         const deliveryData = {
             name,
             phone,
@@ -84,8 +114,10 @@ export const signupDelivery = async (req, res) => {
             accountHolder,
             accountNumber,
             ifsc,
+            bankName: derivedBankName,
             dob,
             bloodGroup,
+            alternativePhone,
             profileImage: profileImageUrl,
             documents: {
                 aadhar: aadharUrl,
@@ -222,7 +254,7 @@ export const getDeliveryProfile = async (req, res) => {
 ================================ */
 export const updateDeliveryProfile = async (req, res) => {
     try {
-        const { name, vehicleType, vehicleNumber, drivingLicenseNumber, currentArea, isOnline } = req.body;
+        const { name, vehicleType, vehicleNumber, drivingLicenseNumber, currentArea, isOnline, alternativePhone, accountHolder, accountNumber, ifsc, bankName } = req.body;
 
         const delivery = await Delivery.findById(req.user.id);
         if (!delivery) {
@@ -234,6 +266,11 @@ export const updateDeliveryProfile = async (req, res) => {
         if (vehicleNumber) delivery.vehicleNumber = vehicleNumber;
         if (drivingLicenseNumber) delivery.drivingLicenseNumber = drivingLicenseNumber;
         if (currentArea) delivery.currentArea = currentArea;
+        if (typeof alternativePhone !== 'undefined') delivery.alternativePhone = alternativePhone;
+        if (accountHolder) delivery.accountHolder = accountHolder;
+        if (accountNumber) delivery.accountNumber = accountNumber;
+        if (ifsc) delivery.ifsc = ifsc;
+        if (bankName) delivery.bankName = bankName;
 
         // Capture going-offline transition before the save so we know whether
         // to drop the rider's realtime presence nodes after the write.

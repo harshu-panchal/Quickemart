@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Order from "../models/order.js";
 import OrderOtp from "../models/orderOtp.js";
 import Delivery from "../models/delivery.js";
@@ -278,6 +279,53 @@ export async function fetchAvailableOrdersForDelivery({
   const limit = parseAvailableOrdersLimit(requestedLimit);
   const showDeliveries = type === "delivery" || type === "all";
   const showReturns = type === "return" || type === "all";
+
+  // Check if rider is busy with another active delivery or return task
+  const userOid = mongoose.Types.ObjectId.isValid(userId)
+    ? new mongoose.Types.ObjectId(userId)
+    : null;
+
+  const activeOrder = userOid
+    ? await Order.findOne({
+        $or: [
+          {
+            deliveryBoy: userOid,
+            status: { $nin: ["delivered", "cancelled"] }
+          },
+          {
+            returnDeliveryBoy: userOid,
+            returnStatus: { $in: ["return_pickup_assigned", "return_in_transit", "return_drop_pending"] }
+          }
+        ]
+      }).select("_id").lean()
+    : null;
+
+  if (activeOrder) {
+    let assignedReturns = [];
+    if (showReturns) {
+      const assignedReturnPickupsRaw = await Order.find({
+        returnStatus: "return_pickup_assigned",
+        returnDeliveryBoy: userId,
+        skippedBy: { $nin: [userId] },
+      })
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(limit)
+        .populate("customer", "name phone")
+        .populate("seller", "shopName address name location")
+        .lean();
+
+      assignedReturns = assignedReturnPickupsRaw.map((rp) => ({
+        ...rp,
+        isReturnPickup: true,
+      }));
+    }
+
+    return {
+      requiresLocation: false,
+      orders: assignedReturns,
+      limit,
+    };
+  }
 
   let assignedReturnPickups = [];
   if (showReturns) {

@@ -35,9 +35,16 @@ function getFrontendBaseUrl() {
   return String(explicit).trim().replace(/\/+$/, "");
 }
 
-function buildOrderLink(orderId) {
+function buildOrderLink(orderId, role) {
   const id = String(orderId || "").trim();
   const baseUrl = getFrontendBaseUrl();
+  if (role === NOTIFICATION_ROLES.SELLER) {
+    return `${baseUrl}/seller/orders`;
+  }
+  if (role === NOTIFICATION_ROLES.DELIVERY) {
+    if (!id) return `${baseUrl}/delivery`;
+    return `${baseUrl}/delivery/order-details/${encodeURIComponent(id)}`;
+  }
   if (!id) return `${baseUrl}/orders`;
   return `${baseUrl}/orders/${encodeURIComponent(id)}`;
 }
@@ -100,6 +107,13 @@ function eventDefinition(eventType) {
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Out For Delivery",
         body: () => "Your order is on the way.",
+      };
+    case NOTIFICATION_EVENTS.ORDER_ARRIVING:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "QuickeMart Order Alert 🛵",
+        body: (payload) => `Your order is on the way! Expected to arrive in ${payload.etaText || "a few minutes"}.`,
       };
     case NOTIFICATION_EVENTS.ORDER_DELIVERED:
       return {
@@ -172,10 +186,10 @@ function eventDefinition(eventType) {
         role: NOTIFICATION_ROLES.SELLER,
         recipientIds: (payload) =>
           normalizeIdList(payload.sellerId || payload.sellerIds),
-        title: () => "New Order",
+        title: () => "New Order Received 🛍️",
         body: (payload) =>
           payload.orderId
-            ? `New order #${payload.orderId} received.`
+            ? `Order #${payload.orderId} has been placed. Tap to view and start processing.`
             : "You have received a new order.",
       };
     case NOTIFICATION_EVENTS.DELIVERY_ASSIGNED:
@@ -192,10 +206,10 @@ function eventDefinition(eventType) {
       return {
         role: NOTIFICATION_ROLES.DELIVERY,
         recipientIds: (payload) => normalizeIdList(payload.deliveryIds),
-        title: () => "New Delivery Request 🛍️",
+        title: () => "New Delivery Request 🛵",
         body: (payload) =>
           payload.orderId
-            ? `New order #${payload.orderId} is available nearby.`
+            ? `Order #${payload.orderId} is available nearby for pickup.`
             : "A new delivery request is available nearby.",
       };
     case NOTIFICATION_EVENTS.ORDER_READY:
@@ -404,11 +418,26 @@ function eventData(eventType, payload = {}, role) {
 
   const orderId = String(payload.orderId || "").trim() || undefined;
   const checkoutGroupId = String(payload.checkoutGroupId || "").trim() || undefined;
+
+  let imageUrl;
+  if (eventType === NOTIFICATION_EVENTS.NEW_ORDER) {
+    imageUrl = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?q=80&w=400&auto=format&fit=crop";
+  } else if ([NOTIFICATION_EVENTS.NEW_DELIVERY_BROADCAST, NOTIFICATION_EVENTS.DELIVERY_ASSIGNED].includes(eventType)) {
+    imageUrl = "https://images.unsplash.com/photo-1581579438747-1dc8d1e0ca96?q=80&w=400&auto=format&fit=crop";
+  } else if ([NOTIFICATION_EVENTS.ORDER_CONFIRMED, NOTIFICATION_EVENTS.ORDER_PACKED, NOTIFICATION_EVENTS.OUT_FOR_DELIVERY, NOTIFICATION_EVENTS.ORDER_DELIVERED].includes(eventType)) {
+    imageUrl = "https://images.unsplash.com/photo-1534452208749-04cb5213b052?q=80&w=400&auto=format&fit=crop";
+  }
+
   return {
     eventType,
     orderId,
     checkoutGroupId,
-    link: buildOrderLink(orderId),
+    role,
+    targetRole: role,
+    userRole: role,
+    link: buildOrderLink(orderId, role),
+    imageUrl,
+    image: imageUrl,
     ...(payload.data || {}),
   };
 }

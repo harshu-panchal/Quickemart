@@ -30,7 +30,8 @@ export const getWithDedupe = async (url, params = {}, options = {}) => {
         return inFlight;
     }
 
-    const request = axiosInstance.get(url, { params })
+    const { ttl: _ttl, forceRefresh: _fr, ...restOptions } = options;
+    const request = axiosInstance.get(url, { params, ...restOptions })
         .then((response) => {
             if (ttl > 0) {
                 apiCache.set(key, { ts: Date.now(), response });

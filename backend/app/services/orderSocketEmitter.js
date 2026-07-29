@@ -309,3 +309,41 @@ export async function emitReturnBroadcastForCustomer(customerLocation, payload) 
     console.warn("[emitReturnBroadcastForCustomer] DB error", err.message);
   }
 }
+
+export async function retractAllBroadcastsForRider(deliveryId) {
+  const s = getIo();
+  const riderId = normalizeDeliveryId(deliveryId);
+  if (!riderId) return;
+
+  try {
+    const riderOid = new mongoose.Types.ObjectId(riderId);
+
+    // Find all active order notifications for this rider
+    const notifications = await Notification.find({
+      recipient: riderOid,
+      recipientModel: "Delivery",
+      type: "order",
+    }).select("_id data.orderId").lean();
+
+    if (notifications.length) {
+      const orderIds = notifications.map(n => n.data?.orderId).filter(Boolean);
+
+      // Delete these notifications so they disappear from their history/list
+      await Notification.deleteMany({
+        _id: { $in: notifications.map(n => n._id) },
+      });
+
+      // Emit withdrawn event for each of these orders to this specific rider
+      if (s) {
+        for (const orderId of orderIds) {
+          s.to(`delivery:${riderId}`).emit("delivery:broadcast:withdrawn", {
+            orderId,
+            at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[orderSocketEmitter] retractAllBroadcastsForRider failed:", err.message);
+  }
+}

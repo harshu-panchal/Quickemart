@@ -2,9 +2,7 @@ import React from "react";
 import { ChevronRight } from "lucide-react";
 import ProductCard from "../shared/ProductCard";
 
-const LowestPriceSection = ({ products, onSeeAll }) => {
-  if (!products || products.length === 0) return null;
-
+const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
   return (
     <div className="-mt-[40px] mb-4 md:-mt-[40px] md:mb-8">
       <div className="relative overflow-hidden bg-linear-to-br from-primary/10 via-primary/5 to-transparent pt-7 pb-2 md:pt-16 md:pb-4 border-y border-primary/10 shadow-sm md:shadow-[inset_0_-10px_40px_rgba(0,0,0,0.02)]">
@@ -25,24 +23,38 @@ const LowestPriceSection = ({ products, onSeeAll }) => {
                 </span>
               </div>
             </div>
-            <button
-              onClick={onSeeAll}
-              className="flex items-center gap-1 bg-white px-2.5 py-1 md:px-4 md:py-2 rounded-full text-primary font-bold text-[11px] md:text-sm cursor-pointer shadow-[0_4px_12px_rgba(0,0,0,0.05)] md:shadow-md border border-primary/10 transition-all whitespace-nowrap active:scale-95">
-              See all
-              <ChevronRight size={12} className="ml-0.5" strokeWidth={3} />
-            </button>
+            {((products && products.length > 0) || isLoading) && (
+              <button
+                onClick={onSeeAll}
+                className="flex items-center gap-1 bg-white px-2.5 py-1 md:px-4 md:py-2 rounded-full text-primary font-bold text-[11px] md:text-sm cursor-pointer shadow-[0_4px_12px_rgba(0,0,0,0.05)] md:shadow-md border border-primary/10 transition-all whitespace-nowrap active:scale-95">
+                See all
+                <ChevronRight size={12} className="ml-0.5" strokeWidth={3} />
+              </button>
+            )}
           </div>
 
           <div className="relative z-10 flex overflow-x-auto gap-3 md:gap-6 pb-4 md:pb-6 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scroll-smooth scroll-pl-4 md:scroll-pl-0 after:content-[''] after:w-1 after:shrink-0">
-            {products.slice(0, 12).map((product) => (
-              <div key={product.id} className="w-[126px] sm:w-[136px] md:w-[148px] shrink-0 snap-start smooth-transform">
-                <ProductCard
-                  product={product}
-                  className="bg-white shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] md:shadow-[0_15px_30px_rgba(0,0,0,0.05)] border-brand-50/50 md:border-slate-100 transition-all"
-                  compact={true}
-                />
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="w-[126px] sm:w-[136px] md:w-[148px] shrink-0 snap-start animate-pulse">
+                  <div className="bg-slate-200/80 rounded-2xl h-44 w-full border border-slate-100" />
+                </div>
+              ))
+            ) : products && products.length > 0 ? (
+              products.slice(0, 12).map((product) => (
+                <div key={product.id} className="w-[126px] sm:w-[136px] md:w-[148px] shrink-0 snap-start smooth-transform">
+                  <ProductCard
+                    product={product}
+                    className="bg-white shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] md:shadow-[0_15px_30px_rgba(0,0,0,0.05)] border-brand-50/50 md:border-slate-100 transition-all"
+                    compact={true}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="w-full py-8 text-center text-slate-400 font-bold text-xs md:text-sm tracking-wide">
+                No products found in this category at the moment. Check back soon!
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

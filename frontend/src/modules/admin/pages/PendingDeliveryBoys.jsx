@@ -49,12 +49,13 @@ const PendingDeliveryBoys = () => {
                 phone: r.phone,
                 email: r.email,
                 appliedDate: new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                location: r.currentArea || 'Unknown',
+                location: r.currentArea || r.address || 'Unknown',
                 vehicle: r.vehicleType,
+                vehicleNum: r.vehicleNumber || 'N/A',
                 documents: r.documents || {},
                 status: r.isVerified ? 'approved' : 'pending_review',
                 experience: 'Not Specified', // Mock for now
-                preferredArea: r.currentArea || 'Not Specified'
+                preferredArea: r.currentArea || r.address || 'Not Specified'
             }));
 
             setPendingRiders(mappedRiders);
@@ -244,7 +245,7 @@ return (
                                         <div className="space-y-1.5">
                                             <div className="flex items-center gap-2 text-slate-600">
                                                 <Truck className="h-3.5 w-3.5" />
-                                                <span className="text-[10px] font-bold">{rider.vehicle}</span>
+                                                <span className="text-[10px] font-bold">{rider.vehicle} • <span className="text-slate-900 font-black">{rider.vehicleNum}</span></span>
                                             </div>
                                             <div className="flex items-center gap-2 text-slate-400">
                                                 <MapPin className="h-3.5 w-3.5" />
@@ -400,7 +401,8 @@ return (
                                             </div>
                                             <div>
                                                 <p className="text-sm font-black text-slate-900">{viewingRider.vehicle}</p>
-                                                <p className="text-[9px] font-bold text-brand-600 uppercase tracking-widest mt-0.5">Eco-Friendly Ready</p>
+                                                <p className="text-[10px] font-bold text-slate-500 mt-0.5">No: <span className="text-slate-800 font-black">{viewingRider.vehicleNum}</span></p>
+                                                <p className="text-[9px] font-bold text-brand-600 uppercase tracking-widest mt-1">Eco-Friendly Ready</p>
                                             </div>
                                         </div>
                                     </div>

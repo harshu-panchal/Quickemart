@@ -81,7 +81,7 @@ const LiveTrackingMap = memo(({
 
   const focusOnRider500m = useCallback((map, rider) => {
     if (!map || !window.google || !hasValidLatLng(rider)) return;
-    const center = new window.google.maps.LatLng(rider.lat, rider.lng);
+    const center = { lat: Number(rider.lat), lng: Number(rider.lng) };
     const bounds = new window.google.maps.LatLngBounds();
     const offsets = [0, 90, 180, 270];
     offsets.forEach((heading) => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@core/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import InvoiceModal from "../components/order/InvoiceModal";
 import HelpModal from "../components/order/HelpModal";
@@ -43,6 +44,7 @@ import {
   onCustomerOtp,
   onReturnPickupOtp,
   onReturnDropOtp,
+  onDeliveryLocationUpdate,
 } from "@/core/services/orderSocket";
 import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 import { createSocketTokenReader } from "@core/utils/authStorage";
@@ -137,6 +139,15 @@ const matchesOrderIdentifier = (payloadOrderId, identifiers = []) => {
 
 const OrderDetailPage = () => {
   const { orderId } = useParams();
+  const { role } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (role === "delivery" && orderId) {
+      navigate(`/delivery/order-details/${orderId}`, { replace: true });
+    }
+  }, [role, orderId, navigate]);
+
   const [showInvoice, setShowInvoice] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [order, setOrder] = useState(null);
@@ -186,7 +197,6 @@ const OrderDetailPage = () => {
     extraRoomId,
   } = useOrderIdentifiers(orderId, order);
 
-  const navigate = useNavigate();
   // Pure helper for resolving the lookup id from a freshly-fetched order
   // before React state has settled (e.g. inside the initial fetch effect).
   const resolveOrderLookupId = (ord) =>
@@ -377,6 +387,19 @@ const OrderDetailPage = () => {
     };
   }, [order?.orderId, orderId]);
 
+  // Subscribe to real-time location updates via Socket.io
+  useEffect(() => {
+    if (!orderId) return undefined;
+    const getToken = createSocketTokenReader(STORAGE_KEYS.AUTH_CUSTOMER);
+    const offSocketLocation = onDeliveryLocationUpdate(getToken, (loc) => {
+      console.log(`[OrderDetailPage] Location update via socket:`, loc);
+      setLiveLocation(loc);
+    });
+    return () => {
+      offSocketLocation && offSocketLocation();
+    };
+  }, [orderId]);
+
   // Subscribe to live tracking from Firebase (if available).
   //
   // Realtime DB writes from the rider/server are keyed on the canonical
@@ -537,7 +560,14 @@ const OrderDetailPage = () => {
     let minutes = null;
     const routeDurationSeconds = Number(activeRoutePolyline?.duration);
     if (Number.isFinite(routeDurationSeconds) && routeDurationSeconds > 0) {
-      minutes = routeDurationSeconds / 60;
+      const directDist = distanceMeters(liveLocation, targetLocation);
+      const routeDistanceMeters = Number(activeRoutePolyline?.distanceMeters || activeRoutePolyline?.distance);
+      if (Number.isFinite(directDist) && Number.isFinite(routeDistanceMeters) && routeDistanceMeters > 0) {
+        const ratio = Math.min(1.0, directDist / routeDistanceMeters);
+        minutes = (routeDurationSeconds * ratio) / 60;
+      } else {
+        minutes = routeDurationSeconds / 60;
+      }
     } else {
       const routeDistanceMeters = Number(activeRoutePolyline?.distanceMeters);
       minutes =

@@ -163,6 +163,7 @@ export const updateSellerProfile = async (req, res) => {
       name,
       shopName,
       phone,
+      alternativePhone,
       address,
       locality,
       pincode,
@@ -185,6 +186,7 @@ export const updateSellerProfile = async (req, res) => {
     if (name) seller.name = name;
     if (shopName) seller.shopName = shopName;
     if (phone) seller.phone = phone;
+    if (alternativePhone !== undefined) seller.alternativePhone = alternativePhone;
     if (address !== undefined) seller.address = address;
     if (locality !== undefined) seller.locality = locality;
     if (pincode !== undefined) seller.pincode = pincode;

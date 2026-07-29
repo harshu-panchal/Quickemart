@@ -1,5 +1,7 @@
+import mongoose from "mongoose";
 import Delivery from "../models/delivery.js";
 import Seller from "../models/seller.js";
+import Order from "../models/order.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 
 /** When true, only verified riders receive broadcasts (stricter). Default: do not require. */
@@ -28,6 +30,43 @@ function filterByHaversine(candidates, lat, lng, maxDistanceM) {
       return distanceMeters(dlat, dlng, lat, lng) <= maxDistanceM;
     })
     .map((d) => d._id.toString());
+}
+
+async function excludeBusyRiders(ids) {
+  if (!ids || !ids.length) return [];
+  try {
+    const objectIds = ids.map(id => {
+      try {
+        return new mongoose.Types.ObjectId(id);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    const busyOrders = await Order.find({
+      $or: [
+        {
+          deliveryBoy: { $in: objectIds },
+          status: { $nin: ["delivered", "cancelled"] }
+        },
+        {
+          returnDeliveryBoy: { $in: objectIds },
+          returnStatus: { $in: ["return_pickup_assigned", "return_in_transit", "return_drop_pending"] }
+        }
+      ]
+    }).select("deliveryBoy returnDeliveryBoy").lean();
+
+    const busyRiderIds = new Set();
+    for (const o of busyOrders) {
+      if (o.deliveryBoy) busyRiderIds.add(String(o.deliveryBoy));
+      if (o.returnDeliveryBoy) busyRiderIds.add(String(o.returnDeliveryBoy));
+    }
+
+    return ids.filter(id => !busyRiderIds.has(String(id)));
+  } catch (error) {
+    console.error("[deliveryNearbyService] Error excluding busy riders:", error.message);
+    return ids;
+  }
 }
 
 /**
@@ -79,7 +118,7 @@ export async function getDeliveryPartnerIdsWithinSellerRadius(sellerId) {
     );
   }
 
-  if (ids.length) return ids;
+  if (ids.length) return excludeBusyRiders(ids);
 
   try {
     const rough = await Delivery.find({
@@ -90,7 +129,8 @@ export async function getDeliveryPartnerIdsWithinSellerRadius(sellerId) {
       .limit(HAVERSINE_FALLBACK_LIMIT())
       .lean();
 
-    return filterByHaversine(rough, lat, lng, maxDistanceM);
+    const fallbackIds = filterByHaversine(rough, lat, lng, maxDistanceM);
+    return excludeBusyRiders(fallbackIds);
   } catch (e) {
     console.warn("[deliveryNearby] Haversine fallback failed:", e.message);
     return [];
@@ -125,7 +165,7 @@ export async function getDeliveryPartnerIdsWithinRadius(lat, lng, radiusKm = 5) 
     console.warn("[deliveryNearby] $near fallback search failed:", e.message);
   }
 
-  if (ids.length) return ids;
+  if (ids.length) return excludeBusyRiders(ids);
 
   try {
     const rough = await Delivery.find({
@@ -136,7 +176,8 @@ export async function getDeliveryPartnerIdsWithinRadius(lat, lng, radiusKm = 5) 
       .limit(HAVERSINE_FALLBACK_LIMIT())
       .lean();
 
-    return filterByHaversine(rough, lat, lng, maxDistanceM);
+    const fallbackIds = filterByHaversine(rough, lat, lng, maxDistanceM);
+    return excludeBusyRiders(fallbackIds);
   } catch (e) {
     return [];
   }
