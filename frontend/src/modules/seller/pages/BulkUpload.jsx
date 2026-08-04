@@ -24,6 +24,8 @@ const BulkUpload = () => {
   const [file, setFile] = useState(null);
   const [adminBrands, setAdminBrands] = useState([]);
   const [adminVariants, setAdminVariants] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [firstProductTitle, setFirstProductTitle] = useState('Sample Product');
   
   // Validation state
   const [parsedData, setParsedData] = useState([]);
@@ -43,10 +45,6 @@ const BulkUpload = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchCatalogData();
-  }, []);
-
   const fetchCatalogData = async () => {
     try {
       const [catRes, brandRes, productRes] = await Promise.all([
@@ -62,6 +60,9 @@ const BulkUpload = () => {
       setAdminBrands(brands.filter(Boolean));
 
       const masterProducts = productRes.data?.results || [];
+      if (masterProducts.length > 0 && masterProducts[0]?.name) {
+        setFirstProductTitle(masterProducts[0].name);
+      }
       const variantSet = new Set(['Default']);
       masterProducts.forEach(mp => {
         if (Array.isArray(mp.variants)) {
@@ -75,6 +76,10 @@ const BulkUpload = () => {
       console.error('Failed to fetch catalog data', err);
     }
   };
+
+  useEffect(() => {
+    fetchCatalogData();
+  }, []);
 
   const findMainCategoryObj = (mainCatName) => {
     if (!mainCatName) return null;
@@ -121,8 +126,22 @@ const BulkUpload = () => {
         const rawData = XLSX.utils.sheet_to_json(wb.Sheets[wsname], { range: 1 });
         
         // Filter out sample reference row if present
-        const data = rawData.filter(row => {
+        const data = rawData.filter((row, index) => {
           const title = row['Product Title *'] || row['Product Title'] || row['Product Name'];
+          const headerCat = row['Header Category *'] || row['Header Category'] || row['Main Group *'] || row['Main Group'];
+          
+          if (index === 0 && title && headerCat) {
+            const titleLower = String(title).trim().toLowerCase();
+            const sampleLower = String(firstProductTitle).trim().toLowerCase();
+            const defaultSampleLower = 'sample product';
+            const firstCatName = categories[0]?.name || 'Electronics';
+            
+            if ((titleLower === sampleLower || titleLower === defaultSampleLower) &&
+                String(headerCat).trim().toLowerCase() === String(firstCatName).trim().toLowerCase()) {
+              return false; // Skip template's reference sample row
+            }
+          }
+          
           return title && String(title).trim().toLowerCase() !== 'sample product';
         });
 
