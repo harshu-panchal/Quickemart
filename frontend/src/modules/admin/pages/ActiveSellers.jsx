@@ -36,6 +36,7 @@ import { adminApi } from "../services/adminApi";
 const INITIAL_FORM = {
   name: "",
   email: "",
+  phone: "",
   shopName: "",
   password: "",
   category: "",
@@ -140,8 +141,12 @@ const AddSellerModal = ({ onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.shopName.trim() || !form.password || !form.category) {
-      toast.error("Name, email, shop name, password and product type are required");
+    if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.shopName.trim() || !form.password || !form.category) {
+      toast.error("Name, email, phone number, shop name, password and product type are required");
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(form.phone)) {
+      toast.error("Please enter a valid 10-digit phone number");
       return;
     }
     if (form.password.length < 6) {
@@ -241,6 +246,21 @@ const AddSellerModal = ({ onClose, onSuccess }) => {
                       onChange={handleChange}
                       placeholder="Email Address *"
                       required
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="relative">
+                    <HiOutlinePhone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      name="phone"
+                      value={form.phone}
+                      onChange={(e) => {
+                        const digitsOnly = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
+                        setForm((prev) => ({ ...prev, phone: digitsOnly }));
+                      }}
+                      placeholder="Phone Number *"
+                      required
+                      type="tel"
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-2xl text-sm font-semibold text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-slate-400 transition-all placeholder:text-slate-400"
                     />
                   </div>

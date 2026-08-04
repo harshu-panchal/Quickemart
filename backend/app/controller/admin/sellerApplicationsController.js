@@ -87,6 +87,7 @@ export const adminCreateSeller = async (req, res) => {
     const {
       name,
       email,
+      phone,
       shopName,
       password,
       address,
@@ -101,8 +102,8 @@ export const adminCreateSeller = async (req, res) => {
     } = req.body || {};
 
     // --- Validation ---
-    if (!name || !email || !shopName || !password) {
-      return handleResponse(res, 400, "Name, email, shop name and password are required");
+    if (!name || !email || !phone || !shopName || !password) {
+      return handleResponse(res, 400, "Name, email, phone number, shop name and password are required");
     }
 
     if (password.length < 6) {
@@ -113,6 +114,16 @@ export const adminCreateSeller = async (req, res) => {
     const existing = await Seller.findOne({ email: normalizedEmail });
     if (existing) {
       return handleResponse(res, 409, "A seller with this email already exists");
+    }
+
+    const normalizedPhone = String(phone).trim();
+    if (!/^[0-9]{10}$/.test(normalizedPhone)) {
+      return handleResponse(res, 400, "A valid 10-digit phone number is required");
+    }
+
+    const existingPhone = await Seller.findOne({ phone: normalizedPhone });
+    if (existingPhone) {
+      return handleResponse(res, 409, "A seller with this phone number already exists");
     }
 
     // --- Generate unique sellerId ---
@@ -154,8 +165,7 @@ export const adminCreateSeller = async (req, res) => {
       sellerId,
       name: name.trim(),
       email: normalizedEmail,
-      // phone is required in schema but admin flow may not need it — use a placeholder
-      phone: `admin-${sellerId}`,
+      phone: normalizedPhone,
       password,
       shopName: shopName.trim(),
       category: category?.trim() || "General",
