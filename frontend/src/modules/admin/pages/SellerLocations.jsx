@@ -246,6 +246,7 @@ const SellerLocations = () => {
   const [sort, setSort] = useState("orders_desc");
   const [mapView, setMapView] = useState("coverage");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [mapUnlocked, setMapUnlocked] = useState(false);
@@ -286,7 +287,7 @@ const SellerLocations = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [lifecycle, category, city, sort]);
+  }, [lifecycle, category, city, sort, pageSize]);
 
   useEffect(() => {
     const currentSeq = ++requestSeq.current;
@@ -301,7 +302,7 @@ const SellerLocations = () => {
           city: city !== "all" ? city : undefined,
           sort,
           page,
-          limit: PAGE_SIZE,
+          limit: pageSize,
           mapLimit: mapUnlocked ? 300 : 0,
         });
 
@@ -371,6 +372,7 @@ const SellerLocations = () => {
     page,
     refreshTick,
     mapUnlocked,
+    pageSize,
   ]);
 
   const selectedSeller = useMemo(
@@ -695,9 +697,9 @@ const SellerLocations = () => {
               page={page}
               totalPages={totalPages}
               total={total}
-              pageSize={PAGE_SIZE}
+              pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={() => {}}
+              onPageSizeChange={setPageSize}
               loading={loading}
             />
           </div>

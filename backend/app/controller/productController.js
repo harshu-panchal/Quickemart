@@ -398,9 +398,9 @@ export const getProducts = async (req, res) => {
         );
         const existingSlugs = new Set(rawProducts.map(p => p.slug));
         const existingNames = new Set(rawProducts.map(p => String(p.name || '').toLowerCase()));
-        
+
         const allMaster = await MasterProduct.find(masterQuery).lean();
-        
+
         masterProducts = allMaster
           .filter(
             (mp) =>
@@ -677,56 +677,8 @@ export const getSellerProducts = async (req, res) => {
       isLegacyProduct: !p.masterProductId, // true = old seller-created, false = catalog-linked
     }));
 
-    // Fetch all master catalog products and append ones the seller hasn't listed yet
-    const listedMasterIds = new Set(
-      products
-        .map((p) => (p.masterProductId ? String(p.masterProductId) : null))
-        .filter(Boolean)
-    );
-
-    let unlistedCatalogItems = [];
-    try {
-      const allMasterProducts = await MasterProduct.find({ status: "active" })
-        .populate("headerId categoryId subcategoryId", "name")
-        .lean();
-
-      unlistedCatalogItems = allMasterProducts
-        .filter((mp) => !listedMasterIds.has(String(mp._id)))
-        .map((mp) => ({
-          _id: mp._id,
-          masterProductId: mp._id,
-          name: mp.name,
-          brand: mp.brand || "",
-          mainImage: mp.mainImage || "",
-          galleryImages: mp.galleryImages || [],
-          headerId: mp.headerId,
-          categoryId: mp.categoryId,
-          subcategoryId: mp.subcategoryId,
-          variants: (mp.variants || []).map((v) => ({
-            name: v.name,
-            price: 0,
-            salePrice: 0,
-            stock: 0,
-            sku: v.sku || "",
-          })),
-          price: 0,
-          salePrice: 0,
-          stock: 0,
-          status: "active",
-          approvalStatus: "approved",
-          isListedBySeller: false,
-          isLegacyProduct: false,
-          isMasterCatalogItem: true,
-          createdAt: mp.createdAt,
-        }));
-    } catch (err) {
-      logger.error("Failed to fetch unlisted catalog items for seller", { error: err });
-    }
-
-    const mergedItems = [...listedProducts, ...unlistedCatalogItems];
-
     return handleResponse(res, 200, "Seller products fetched", {
-      items: mergedItems,
+      items: listedProducts,
       page,
       limit,
       total,
@@ -968,8 +920,8 @@ export const createProduct = async (req, res) => {
     }
 
     // Auto-generate & ensure unique slug
-    let rawSlug = productData.slug && productData.slug.trim() !== "" 
-      ? slugify(productData.slug) 
+    let rawSlug = productData.slug && productData.slug.trim() !== ""
+      ? slugify(productData.slug)
       : slugify(productData.name);
     let finalSlug = rawSlug;
     let slugExists = await Product.exists({ slug: finalSlug });
@@ -1917,9 +1869,9 @@ export const bulkImportProducts = async (req, res) => {
             (c) =>
               c.type === "category" &&
               (c.name.toLowerCase() === String(pData.specificCategory).trim().toLowerCase() ||
-               c.slug === newCatSlug)
+                c.slug === newCatSlug)
           );
-          
+
           if (existingCategoryElsewhere) {
             category = existingCategoryElsewhere;
             // Align header to the actual parent header of the existing category
@@ -1938,7 +1890,7 @@ export const bulkImportProducts = async (req, res) => {
               parentId: header._id,
               status: "active"
             });
-            
+
             category = newCategory.toObject ? newCategory.toObject() : newCategory;
             activeCategories.push(category);
           }
@@ -1969,9 +1921,9 @@ export const bulkImportProducts = async (req, res) => {
               (c) =>
                 c.type === "subcategory" &&
                 (c.name.toLowerCase() === String(pData.subCategory).trim().toLowerCase() ||
-                 c.slug === newSubSlug)
+                  c.slug === newSubSlug)
             );
-            
+
             if (existingSubElsewhere) {
               subcategory = existingSubElsewhere;
               // Align category and header to the actual hierarchy of the existing subcategory
@@ -1996,7 +1948,7 @@ export const bulkImportProducts = async (req, res) => {
                 parentId: category._id,
                 status: "active"
               });
-              
+
               subcategory = newSubcategory.toObject ? newSubcategory.toObject() : newSubcategory;
               activeCategories.push(subcategory);
             }
@@ -2206,7 +2158,7 @@ export const generateBulkTemplate = async (req, res) => {
       const rangeName = getExcelName(parentName, indexCounter);
       listSheet.getColumn(listColIndex).values = [parentName, ...items.map(i => i.name)];
       const colLetter = listSheet.getColumn(listColIndex).letter;
-      
+
       workbook.definedNames.add(`Lists!$${colLetter}$2:$${colLetter}$${items.length + 1}`, rangeName);
 
       listSheet.getCell(`A${mappingRowIndex}`).value = parentName;

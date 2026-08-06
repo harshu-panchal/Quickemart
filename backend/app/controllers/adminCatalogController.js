@@ -249,20 +249,33 @@ export const getMasterProducts = async (req, res) => {
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
-        const products = await MasterProduct.find(query)
-            .populate('headerId categoryId subcategoryId', 'name')
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit));
+        // Base query for counts (ignores status filter, but includes search and category)
+        const baseStatsQuery = { ...query };
+        delete baseStatsQuery.status;
 
-        const total = await MasterProduct.countDocuments(query);
+        const [products, total, allCount, activeCount, inactiveCount] = await Promise.all([
+            MasterProduct.find(query)
+                .populate('headerId categoryId subcategoryId', 'name')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(parseInt(limit)),
+            MasterProduct.countDocuments(query),
+            MasterProduct.countDocuments(baseStatsQuery),
+            MasterProduct.countDocuments({ ...baseStatsQuery, status: 'active' }),
+            MasterProduct.countDocuments({ ...baseStatsQuery, status: 'inactive' })
+        ]);
 
         res.status(200).json({
             success: true,
             results: products,
             total,
             page: parseInt(page),
-            pages: Math.ceil(total / limit)
+            pages: Math.ceil(total / limit),
+            counts: {
+                all: allCount,
+                active: activeCount,
+                inactive: inactiveCount
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

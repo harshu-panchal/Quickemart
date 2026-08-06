@@ -56,6 +56,11 @@ const ProductManagement = () => {
         lowStock: 0,
         outOfStock: 0
     });
+    const [catalogCounts, setCatalogCounts] = useState({
+        all: 0,
+        active: 0,
+        inactive: 0
+    });
     const [moderatingActionId, setModeratingActionId] = useState('');
 
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -134,11 +139,16 @@ const ProductManagement = () => {
                     setProducts(response.data.results || response.data.result || []);
                     setTotal(response.data.total || 0);
                     setPage(response.data.page || requestedPage);
+                    setCatalogCounts({
+                        all: Number(response.data.counts?.all || response.data.total || 0),
+                        active: Number(response.data.counts?.active || 0),
+                        inactive: Number(response.data.counts?.inactive || 0)
+                    });
                 }
             } else {
                 if (filterApprovalStatus !== 'all') params.approvalStatus = filterApprovalStatus;
                 if (filterStockStatus !== 'all') params.stockStatus = filterStockStatus;
-                
+
                 const response = await adminApi.getProductModerationList(params);
                 if (response.data.success) {
                     const payload = response.data.result || {};
@@ -571,13 +581,22 @@ const ProductManagement = () => {
     };
 
     const stats = useMemo(() => {
+        if (viewMode === 'catalog') {
+            return {
+                total: catalogCounts.all,
+                active: catalogCounts.active,
+                draft: catalogCounts.inactive,
+                lowStock: 0,
+                outOfStock: 0
+            };
+        }
         return {
             total: moderationCounts.all || total,
             lowStock: moderationCounts.lowStock || 0,
             outOfStock: moderationCounts.outOfStock || 0,
             active: moderationCounts.active || 0
         };
-    }, [moderationCounts, total]);
+    }, [viewMode, catalogCounts, moderationCounts, total]);
 
     const StatusBadge = ({ status, stock }) => {
         if (stock === 0) return <Badge variant="error" className="text-[10px] px-1.5 py-0">Out of Stock</Badge>;
@@ -615,6 +634,8 @@ const ProductManagement = () => {
                             onClick={() => {
                                 setViewMode('moderation');
                                 setFilterApprovalStatus('all');
+                                setFilterStatus('all');
+                                setFilterStockStatus('all');
                             }}
                             className={cn(
                                 "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
@@ -627,6 +648,8 @@ const ProductManagement = () => {
                             onClick={() => {
                                 setViewMode('catalog');
                                 setFilterApprovalStatus('all');
+                                setFilterStatus('all');
+                                setFilterStockStatus('all');
                             }}
                             className={cn(
                                 "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
@@ -637,14 +660,14 @@ const ProductManagement = () => {
                         </button>
                     </div>
 
-                    <button 
+                    <button
                         onClick={() => setIsBulkImportModalOpen(true)}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors shadow-sm"
                     >
                         <HiOutlineSquaresPlus className="h-4 w-4" />
                         BULK LISTING
                     </button>
-                    <button 
+                    <button
                         onClick={() => openModal()}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-brand-200"
                     >
@@ -655,22 +678,48 @@ const ProductManagement = () => {
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
+            <div className={cn("grid gap-4", viewMode === 'catalog' ? "grid-cols-1 md:grid-cols-3" : "grid-cols-2 lg:grid-cols-4")}>
+                {(viewMode === 'catalog' ? [
+                    { id: 'all', label: 'All Items', val: stats.total, icon: HiOutlineCube, color: 'text-brand-600', bg: 'bg-brand-50' },
+                    { id: 'active', label: 'Active Items', val: stats.active, icon: HiOutlineCheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                    { id: 'draft', label: 'Draft Items', val: stats.draft, icon: HiOutlineExclamationCircle, color: 'text-amber-600', bg: 'bg-amber-50' }
+                ] : [
                     { id: 'all', label: 'All Items', val: stats.total, icon: HiOutlineCube, color: 'text-brand-600', bg: 'bg-brand-50' },
                     { id: 'active', label: 'Active Items', val: stats.active, icon: HiOutlineCheckCircle, color: 'text-brand-600', bg: 'bg-brand-50' },
                     { id: 'low', label: 'Low Stock', val: stats.lowStock, icon: HiOutlineExclamationCircle, color: 'text-amber-600', bg: 'bg-amber-50' },
                     { id: 'out', label: 'Out of Stock', val: stats.outOfStock, icon: HiOutlineArchiveBox, color: 'text-rose-600', bg: 'bg-rose-50' }
-                ].map((stat, i) => (
-                    <Card 
-                        key={i} 
+                ]).map((stat, i) => (
+                    <Card
+                        key={i}
                         className={cn(
                             "border-none shadow-sm ring-1 p-4 relative overflow-hidden group cursor-pointer transition-all",
-                            (stat.id === 'low' || stat.id === 'out') && filterStockStatus === stat.id ? "ring-2 ring-primary/50 shadow-md bg-slate-50" : "ring-slate-100"
+                            viewMode === 'catalog'
+                                ? (
+                                    (stat.id === 'active' && filterStatus === 'active') ||
+                                        (stat.id === 'draft' && filterStatus === 'inactive') ||
+                                        (stat.id === 'all' && filterStatus === 'all')
+                                        ? "ring-2 ring-primary/50 shadow-md bg-slate-50"
+                                        : "ring-slate-100 hover:bg-slate-50/30"
+                                )
+                                : (
+                                    (stat.id === 'low' || stat.id === 'out') && filterStockStatus === stat.id
+                                        ? "ring-2 ring-primary/50 shadow-md bg-slate-50"
+                                        : "ring-slate-100"
+                                )
                         )}
                         onClick={() => {
-                            if (stat.id === 'low' || stat.id === 'out') {
-                                setFilterStockStatus(prev => prev === stat.id ? 'all' : stat.id);
+                            if (viewMode === 'catalog') {
+                                if (stat.id === 'all') {
+                                    setFilterStatus('all');
+                                } else if (stat.id === 'active') {
+                                    setFilterStatus(prev => prev === 'active' ? 'all' : 'active');
+                                } else if (stat.id === 'draft') {
+                                    setFilterStatus(prev => prev === 'inactive' ? 'all' : 'inactive');
+                                }
+                            } else {
+                                if (stat.id === 'low' || stat.id === 'out') {
+                                    setFilterStockStatus(prev => prev === stat.id ? 'all' : stat.id);
+                                }
                             }
                         }}
                     >
@@ -754,7 +803,7 @@ const ProductManagement = () => {
                                     filterStatus === 'inactive' ? "bg-amber-500 text-white shadow-md shadow-amber-100" :
                                         "bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
                             )}
-                            >
+                        >
                             <HiOutlineFunnel className="h-4 w-4" />
                             <span>
                                 {filterStatus === 'active' ? 'ONLY LIVE' :
@@ -1306,133 +1355,133 @@ const ProductManagement = () => {
                                     )}
 
                                     {modalTab === 'media' && (
-                                         <div className="ds-section-spacing animate-in fade-in slide-in-from-right-2 duration-300 space-y-6">
-                                             {/* Main Cover Photo Section */}
-                                             <div className="space-y-3 pb-4 border-b border-slate-100">
-                                                 <div className="flex flex-col">
-                                                     <label className="text-xs font-bold text-slate-900">Main Cover Photo</label>
-                                                     <span className="text-[10px] text-slate-400 font-medium">Primary cover image displayed on product cards and search</span>
-                                                 </div>
-                                                 <div className="w-44 aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center group hover:border-primary hover:bg-primary/5 transition-all cursor-pointer overflow-hidden relative shadow-xs">
-                                                     <input
-                                                         type="file"
-                                                         accept="image/*"
-                                                         className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                                         onChange={handleMainImageUpload}
-                                                     />
-                                                     {formData.mainImage ? (
-                                                         <div className="w-full h-full relative group">
-                                                             <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
-                                                             <button
-                                                                 type="button"
-                                                                 onClick={handleRemoveMainImage}
-                                                                 className="absolute top-2 right-2 p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-rose-600 transition-colors z-20 shadow-md"
-                                                                 title="Remove cover photo"
-                                                             >
-                                                                 <HiOutlineTrash className="h-4 w-4" />
-                                                             </button>
-                                                         </div>
-                                                     ) : (
-                                                         <div className="flex flex-col items-center p-3 text-center">
-                                                             <HiOutlinePhoto className="h-9 w-9 text-slate-300 group-hover:text-primary transition-colors mb-1" />
-                                                             <p className="text-[10px] text-slate-400 font-bold group-hover:text-primary">UPLOAD COVER</p>
-                                                             <span className="text-[8px] text-slate-300 mt-0.5">PNG, JPG up to 5MB</span>
-                                                         </div>
-                                                     )}
-                                                 </div>
-                                             </div>
+                                        <div className="ds-section-spacing animate-in fade-in slide-in-from-right-2 duration-300 space-y-6">
+                                            {/* Main Cover Photo Section */}
+                                            <div className="space-y-3 pb-4 border-b border-slate-100">
+                                                <div className="flex flex-col">
+                                                    <label className="text-xs font-bold text-slate-900">Main Cover Photo</label>
+                                                    <span className="text-[10px] text-slate-400 font-medium">Primary cover image displayed on product cards and search</span>
+                                                </div>
+                                                <div className="w-44 aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center group hover:border-primary hover:bg-primary/5 transition-all cursor-pointer overflow-hidden relative shadow-xs">
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                                        onChange={handleMainImageUpload}
+                                                    />
+                                                    {formData.mainImage ? (
+                                                        <div className="w-full h-full relative group">
+                                                            <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleRemoveMainImage}
+                                                                className="absolute top-2 right-2 p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-rose-600 transition-colors z-20 shadow-md"
+                                                                title="Remove cover photo"
+                                                            >
+                                                                <HiOutlineTrash className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center p-3 text-center">
+                                                            <HiOutlinePhoto className="h-9 w-9 text-slate-300 group-hover:text-primary transition-colors mb-1" />
+                                                            <p className="text-[10px] text-slate-400 font-bold group-hover:text-primary">UPLOAD COVER</p>
+                                                            <span className="text-[8px] text-slate-300 mt-0.5">PNG, JPG up to 5MB</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
 
-                                             {/* 5-Slot Photo Manager */}
-                                             <div className="space-y-3">
-                                                 <div className="space-y-1">
-                                                     <h4 className="text-sm font-bold text-slate-900">Additional Product Photos (5 Slots)</h4>
-                                                     <p className="text-xs text-slate-500 font-medium">
-                                                         Select the image type first (e.g. Front, Back) to unlock the upload box for that slot. Selected image types cannot be chosen again.
-                                                     </p>
-                                                 </div>
+                                            {/* 5-Slot Photo Manager */}
+                                            <div className="space-y-3">
+                                                <div className="space-y-1">
+                                                    <h4 className="text-sm font-bold text-slate-900">Additional Product Photos (5 Slots)</h4>
+                                                    <p className="text-xs text-slate-500 font-medium">
+                                                        Select the image type first (e.g. Front, Back) to unlock the upload box for that slot. Selected image types cannot be chosen again.
+                                                    </p>
+                                                </div>
 
-                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                                                     {[0, 1, 2, 3, 4].map((slotIdx) => {
-                                                         const currentImg = formData.galleryImages?.[slotIdx] || "";
-                                                         const currentLabel = formData.galleryLabels?.[slotIdx] || "";
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                                                    {[0, 1, 2, 3, 4].map((slotIdx) => {
+                                                        const currentImg = formData.galleryImages?.[slotIdx] || "";
+                                                        const currentLabel = formData.galleryLabels?.[slotIdx] || "";
 
-                                                         return (
-                                                             <div key={slotIdx} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3 shadow-sm flex flex-col justify-between">
-                                                                 <div className="flex items-center justify-between">
-                                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                                                         Slot {slotIdx + 1}
-                                                                     </span>
-                                                                     {currentImg ? (
-                                                                         <button
-                                                                             type="button"
-                                                                             onClick={() => handleSlotRemoveImage(slotIdx)}
-                                                                             className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
-                                                                             title="Remove image"
-                                                                         >
-                                                                             <HiOutlineTrash className="h-4 w-4" />
-                                                                         </button>
-                                                                     ) : null}
-                                                                 </div>
+                                                        return (
+                                                            <div key={slotIdx} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3 shadow-sm flex flex-col justify-between">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                                                        Slot {slotIdx + 1}
+                                                                    </span>
+                                                                    {currentImg ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleSlotRemoveImage(slotIdx)}
+                                                                            className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
+                                                                            title="Remove image"
+                                                                        >
+                                                                            <HiOutlineTrash className="h-4 w-4" />
+                                                                        </button>
+                                                                    ) : null}
+                                                                </div>
 
-                                                                 {/* Image Type Selection Dropdown */}
-                                                                 <div className="space-y-1">
-                                                                     <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Image Type</label>
-                                                                     <select
-                                                                         value={currentLabel}
-                                                                         onChange={(e) => handleSlotLabelChange(slotIdx, e.target.value)}
-                                                                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 text-slate-700"
-                                                                     >
-                                                                         <option value="">Select Type</option>
-                                                                         {IMAGE_LABEL_OPTIONS.map((opt) => {
-                                                                             const isSelectedElsewhere = formData.galleryLabels?.some(
-                                                                                 (lbl, idx) => idx !== slotIdx && lbl === opt
-                                                                             );
-                                                                             return (
-                                                                                 <option key={opt} value={opt} disabled={isSelectedElsewhere}>
-                                                                                     {opt}{isSelectedElsewhere ? " (Selected elsewhere)" : ""}
-                                                                                 </option>
-                                                                             );
-                                                                         })}
-                                                                     </select>
-                                                                 </div>
+                                                                {/* Image Type Selection Dropdown */}
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Image Type</label>
+                                                                    <select
+                                                                        value={currentLabel}
+                                                                        onChange={(e) => handleSlotLabelChange(slotIdx, e.target.value)}
+                                                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 text-slate-700"
+                                                                    >
+                                                                        <option value="">Select Type</option>
+                                                                        {IMAGE_LABEL_OPTIONS.map((opt) => {
+                                                                            const isSelectedElsewhere = formData.galleryLabels?.some(
+                                                                                (lbl, idx) => idx !== slotIdx && lbl === opt
+                                                                            );
+                                                                            return (
+                                                                                <option key={opt} value={opt} disabled={isSelectedElsewhere}>
+                                                                                    {opt}{isSelectedElsewhere ? " (Selected elsewhere)" : ""}
+                                                                                </option>
+                                                                            );
+                                                                        })}
+                                                                    </select>
+                                                                </div>
 
-                                                                 {/* Conditional Upload Box - Visible ONLY when Image Type is selected */}
-                                                                 {currentLabel ? (
-                                                                     <div className="relative aspect-square w-full rounded-xl border-2 border-dashed border-slate-200 bg-white overflow-hidden flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer">
-                                                                         <input
-                                                                             type="file"
-                                                                             accept="image/*"
-                                                                             className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                                                             onChange={(e) => handleSlotImageUpload(slotIdx, e)}
-                                                                         />
-                                                                         {currentImg ? (
-                                                                             <div className="w-full h-full relative">
-                                                                                 <img src={currentImg} alt={`Slot ${slotIdx + 1}`} className="w-full h-full object-cover" />
-                                                                                 <span className="absolute bottom-2 left-2 right-2 text-center text-[9px] font-bold bg-slate-900/80 text-white px-2 py-1 rounded-lg backdrop-blur-xs">
-                                                                                     {currentLabel}
-                                                                                 </span>
-                                                                             </div>
-                                                                         ) : (
-                                                                             <div className="flex flex-col items-center p-4 text-center">
-                                                                                 <HiOutlinePhoto className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors mb-1" />
-                                                                                 <span className="text-[10px] font-bold text-slate-400 group-hover:text-primary">Upload {currentLabel}</span>
-                                                                                 <span className="text-[8px] text-slate-300 mt-0.5">PNG, JPG up to 5MB</span>
-                                                                             </div>
-                                                                         )}
-                                                                     </div>
-                                                                 ) : (
-                                                                     <div className="aspect-square w-full rounded-xl border border-dashed border-slate-200 bg-slate-100/60 flex flex-col items-center justify-center p-4 text-center">
-                                                                         <HiOutlineLockClosed className="h-6 w-6 text-slate-300 mb-1" />
-                                                                         <span className="text-[10px] font-bold text-slate-400">Select Image Type First</span>
-                                                                         <span className="text-[8px] text-slate-400/80 mt-0.5">Upload unlocks after selecting type</span>
-                                                                     </div>
-                                                                 )}
-                                                             </div>
-                                                         );
-                                                     })}
-                                                 </div>
-                                             </div>
-                                         </div>
+                                                                {/* Conditional Upload Box - Visible ONLY when Image Type is selected */}
+                                                                {currentLabel ? (
+                                                                    <div className="relative aspect-square w-full rounded-xl border-2 border-dashed border-slate-200 bg-white overflow-hidden flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer">
+                                                                        <input
+                                                                            type="file"
+                                                                            accept="image/*"
+                                                                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                                                            onChange={(e) => handleSlotImageUpload(slotIdx, e)}
+                                                                        />
+                                                                        {currentImg ? (
+                                                                            <div className="w-full h-full relative">
+                                                                                <img src={currentImg} alt={`Slot ${slotIdx + 1}`} className="w-full h-full object-cover" />
+                                                                                <span className="absolute bottom-2 left-2 right-2 text-center text-[9px] font-bold bg-slate-900/80 text-white px-2 py-1 rounded-lg backdrop-blur-xs">
+                                                                                    {currentLabel}
+                                                                                </span>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="flex flex-col items-center p-4 text-center">
+                                                                                <HiOutlinePhoto className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors mb-1" />
+                                                                                <span className="text-[10px] font-bold text-slate-400 group-hover:text-primary">Upload {currentLabel}</span>
+                                                                                <span className="text-[8px] text-slate-300 mt-0.5">PNG, JPG up to 5MB</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="aspect-square w-full rounded-xl border border-dashed border-slate-200 bg-slate-100/60 flex flex-col items-center justify-center p-4 text-center">
+                                                                        <HiOutlineLockClosed className="h-6 w-6 text-slate-300 mb-1" />
+                                                                        <span className="text-[10px] font-bold text-slate-400">Select Image Type First</span>
+                                                                        <span className="text-[8px] text-slate-400/80 mt-0.5">Upload unlocks after selecting type</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -1630,10 +1679,10 @@ const ProductManagement = () => {
                 </div>
             </Modal>
 
-            <BulkImportModal 
-                isOpen={isBulkImportModalOpen} 
-                onClose={() => setIsBulkImportModalOpen(false)} 
-                onSuccess={() => fetchProducts(1)} 
+            <BulkImportModal
+                isOpen={isBulkImportModalOpen}
+                onClose={() => setIsBulkImportModalOpen(false)}
+                onSuccess={() => fetchProducts(1)}
             />
 
         </div>
