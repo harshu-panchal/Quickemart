@@ -215,3 +215,45 @@ export async function downloadExternalImage(url, folderName) {
 
     return saveFileBufferToDisk(buffer, folderName, contentType);
 }
+
+/**
+ * Safely deletes a locally uploaded file from disk given its URL or relative path.
+ * Ignores Cloudinary or external URLs.
+ */
+export async function deleteUploadedFile(fileUrl) {
+    if (!fileUrl || typeof fileUrl !== "string") return;
+
+    // Ignore Cloudinary or external URLs unless they contain /uploads/
+    if (/res\.cloudinary\.com/i.test(fileUrl)) {
+        return;
+    }
+    if (/^https?:\/\//i.test(fileUrl) && !fileUrl.includes("/uploads/")) {
+        return;
+    }
+
+    try {
+        let uploadsIndex = fileUrl.indexOf("/uploads/");
+        if (uploadsIndex === -1) {
+            uploadsIndex = fileUrl.indexOf("/api/uploads/");
+        }
+
+        if (uploadsIndex === -1) {
+            return; // Not a local upload URL
+        }
+
+        const marker = fileUrl.includes("/api/uploads/") ? "/api/uploads/" : "/uploads/";
+        const relativePath = fileUrl.substring(fileUrl.indexOf(marker) + marker.length);
+        
+        // Resolve absolute target path on disk
+        const targetPath = path.join(UPLOADS_ROOT, ...relativePath.split("/"));
+
+        // Delete file
+        await fs.unlink(targetPath);
+    } catch (err) {
+        // Ignore file not found (ENOENT) errors
+        if (err.code !== "ENOENT") {
+            // Log other errors if any
+            console.error("Failed to delete local upload file:", fileUrl, err.message);
+        }
+    }
+}

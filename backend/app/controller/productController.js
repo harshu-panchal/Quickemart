@@ -29,6 +29,7 @@ import {
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
 import logger from "../services/logger.js";
+import { deleteUploadedFile } from "../utils/localStorage.js";
 import { resolveCategoryName, resolveSellerName } from "../services/entityNameCache.js";
 import {
   PRODUCT_APPROVAL_STATUS,
@@ -1288,6 +1289,36 @@ export const updateProduct = async (req, res) => {
       { new: true, runValidators: true },
     );
 
+    if (updatedProduct) {
+      // Clean up old main image if it was replaced with a new one
+      if (productData.mainImage && productData.mainImage !== product.mainImage) {
+        try {
+          await deleteUploadedFile(product.mainImage);
+        } catch (cleanupErr) {
+          logger.error("Failed to delete replaced main image", {
+            scope: "updateProduct",
+            error: cleanupErr,
+          });
+        }
+      }
+
+      // Clean up old gallery images that were removed in this update
+      if (productData.galleryImages && Array.isArray(product.galleryImages)) {
+        try {
+          for (const oldUrl of product.galleryImages) {
+            if (oldUrl && !productData.galleryImages.includes(oldUrl)) {
+              await deleteUploadedFile(oldUrl);
+            }
+          }
+        } catch (cleanupErr) {
+          logger.error("Failed to delete removed gallery images", {
+            scope: "updateProduct",
+            error: cleanupErr,
+          });
+        }
+      }
+    }
+
     if (isPendingApproval && updatedProduct) {
       try {
         const adminIds = await getAdminIds();
@@ -1362,6 +1393,26 @@ export const deleteProduct = async (req, res) => {
 
     if (!product) {
       return handleResponse(res, 404, "Product not found or unauthorized");
+    }
+
+    // Safely delete uploaded images from the server disk
+    try {
+      if (product.mainImage) {
+        await deleteUploadedFile(product.mainImage);
+      }
+      if (Array.isArray(product.galleryImages)) {
+        for (const imageUrl of product.galleryImages) {
+          if (imageUrl) {
+            await deleteUploadedFile(imageUrl);
+          }
+        }
+      }
+    } catch (cleanupErr) {
+      logger.error("Failed to clean up deleted product images", {
+        scope: "deleteProduct",
+        productId: id,
+        error: cleanupErr,
+      });
     }
 
     // Enqueue search index removal asynchronously
