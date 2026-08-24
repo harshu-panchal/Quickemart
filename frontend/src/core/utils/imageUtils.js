@@ -16,11 +16,10 @@ export function resolveImageUrl(url) {
   if (!apiBase) return url;
 
   // If the URL contains /uploads/, extract the relative path starting from /uploads/
-  // and prepend the active backend base URL. This fixes any incorrect hostnames
-  // (like localhost:7000 or api.quickemartcom.com) and relative paths.
+  // and prepend the active backend base URL with the /api prefix.
   const idx = url.indexOf("/uploads/");
   if (idx !== -1) {
-    return `${apiBase}${url.substring(idx)}`;
+    return `${apiBase}/api${url.substring(idx)}`;
   }
 
   return url;

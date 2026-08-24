@@ -194,6 +194,15 @@ function createApp() {
     express.static(path.join(__dirname, "public", "uploads")),
   );
 
+  app.use(
+    "/api/uploads",
+    (req, res, next) => {
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      next();
+    },
+    express.static(path.join(__dirname, "public", "uploads")),
+  );
+
   // Root endpoint
   app.get("/", (req, res) => {
     res.status(200).json({

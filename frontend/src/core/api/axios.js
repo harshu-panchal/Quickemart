@@ -111,7 +111,7 @@ function fixLocalUploadUrls(data) {
         if (typeof val === 'string') {
             const idx = val.indexOf('/uploads/');
             if (idx !== -1) {
-                return `${apiBase}${val.substring(idx)}`;
+                return `${apiBase}/api${val.substring(idx)}`;
             }
             return val;
         }
