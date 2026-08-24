@@ -1,24 +1,53 @@
+import { resolveApiBaseUrl } from '../api/resolveApiBaseUrl';
+
 const CLOUDINARY_REGEX = /res\.cloudinary\.com/i;
 const CLOUDINARY_UPLOAD_SEGMENT_REGEX = /\/upload\/([^/]+)\//i;
+
+export function resolveImageUrl(url) {
+  if (!url || typeof url !== "string") return url;
+  if (CLOUDINARY_REGEX.test(url)) return url;
+
+  let apiBase;
+  try {
+    apiBase = resolveApiBaseUrl().replace(/\/api$/, "");
+  } catch {
+    return url;
+  }
+  if (!apiBase) return url;
+
+  // If the URL contains /uploads/, extract the relative path starting from /uploads/
+  // and prepend the active backend base URL. This fixes any incorrect hostnames
+  // (like localhost:7000 or api.quickemartcom.com) and relative paths.
+  const idx = url.indexOf("/uploads/");
+  if (idx !== -1) {
+    return `${apiBase}${url.substring(idx)}`;
+  }
+
+  return url;
+}
 
 /**
  * Appends Cloudinary optimisation transforms to a URL.
  * Safe to call on any URL — non-Cloudinary URLs are returned unchanged.
  */
 export function applyCloudinaryTransform(url, params = "f_auto,q_auto,w_400,dpr_auto") {
-  if (!url || !CLOUDINARY_REGEX.test(url)) return url;
-  const match = url.match(CLOUDINARY_UPLOAD_SEGMENT_REGEX);
-  if (!match) return url;
+  if (!url) return url;
+  
+  const resolved = resolveImageUrl(url);
+  if (!CLOUDINARY_REGEX.test(resolved)) return resolved;
+  
+  const match = resolved.match(CLOUDINARY_UPLOAD_SEGMENT_REGEX);
+  if (!match) return resolved;
 
   const segmentAfterUpload = match[1] || "";
   const alreadyHasTransforms =
     segmentAfterUpload.includes(",") ||
     /^[a-z]{1,4}_[^/]+$/i.test(segmentAfterUpload);
 
-  if (alreadyHasTransforms) return url;
+  if (alreadyHasTransforms) return resolved;
 
   // Insert transform before the segment after `/upload/` (often `v123...`).
-  return url.replace(CLOUDINARY_UPLOAD_SEGMENT_REGEX, `/upload/${params}/$1/`);
+  return resolved.replace(CLOUDINARY_UPLOAD_SEGMENT_REGEX, `/upload/${params}/$1/`);
 }
 
 export function isCloudinaryUrl(url) {

@@ -93,9 +93,63 @@ axiosInstance.interceptors.request.use(
     }
 );
 
+// Recursively traverses response data and rewrites local/relative upload URLs
+// to use the active backend base URL.
+function fixLocalUploadUrls(data) {
+    if (!data) return data;
+
+    let apiBase;
+    try {
+        apiBase = resolveApiBaseUrl().replace(/\/api$/, "");
+    } catch {
+        return data;
+    }
+
+    if (!apiBase) return data;
+
+    function walk(val) {
+        if (typeof val === 'string') {
+            const idx = val.indexOf('/uploads/');
+            if (idx !== -1) {
+                return `${apiBase}${val.substring(idx)}`;
+            }
+            return val;
+        }
+
+        if (Array.isArray(val)) {
+            for (let i = 0; i < val.length; i++) {
+                val[i] = walk(val[i]);
+            }
+            return val;
+        }
+
+        if (val !== null && typeof val === 'object') {
+            // Only traverse plain objects
+            const proto = Object.getPrototypeOf(val);
+            if (proto === null || proto === Object.prototype) {
+                const keys = Object.keys(val);
+                for (let i = 0; i < keys.length; i++) {
+                    const k = keys[i];
+                    val[k] = walk(val[k]);
+                }
+            }
+            return val;
+        }
+
+        return val;
+    }
+
+    return walk(data);
+}
+
 // Response interceptor for API calls
 axiosInstance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        if (response && response.data) {
+            response.data = fixLocalUploadUrls(response.data);
+        }
+        return response;
+    },
     async (error) => {
         const originalRequest = error.config;
         if (error.response?.status === 401 && !originalRequest._retry) {
