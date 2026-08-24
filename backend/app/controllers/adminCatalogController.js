@@ -6,21 +6,16 @@ import xlsx from "xlsx";
 import ExcelJS from "exceljs";
 import axios from "axios";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
+import { downloadExternalImage } from "../utils/localStorage.js";
 import { slugify } from "../utils/slugify.js"; // assumes standard slugify exists
 import { invalidate, buildKey } from "../services/cacheService.js";
 
-// Helper to fetch image from URL and upload to cloudinary
+// Downloads an image from an external URL (Excel row) and persists it to
+// local storage. Throws with a descriptive message on failure so callers
+// can attach a row-specific error instead of silently swallowing it.
 const uploadImageFromUrl = async (imageUrl) => {
-    try {
-        if (!imageUrl) return null;
-        const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-        const buffer = Buffer.from(response.data, 'binary');
-        const cloudinaryUrl = await uploadToCloudinary(buffer, 'master-catalog');
-        return cloudinaryUrl;
-    } catch (error) {
-        console.error("Failed to upload image from URL:", imageUrl, error);
-        return null;
-    }
+    if (!imageUrl) return null;
+    return downloadExternalImage(imageUrl, 'master-catalog');
 };
 
 const generateUniqueCategorySlug = async (baseName) => {
@@ -852,10 +847,10 @@ export const bulkImportMasterProducts = async (req, res) => {
                                 try {
                                     mainImage = await uploadImageFromUrl(row['Primary Image URL']);
                                     if (!mainImage) {
-                                        throw new Error('Image upload to Cloudinary failed');
+                                        throw new Error('Unable to download image from provided URL');
                                     }
                                 } catch (imgErr) {
-                                    throw { col: 'Primary Image URL', message: `Failed to download or upload image: ${imgErr.message}` };
+                                    throw { col: 'Primary Image URL', message: imgErr.message || 'Unable to download image from provided URL' };
                                 }
 
                                 let galleryImages = [];

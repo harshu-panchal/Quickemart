@@ -179,6 +179,21 @@ function createApp() {
   app.use(express.json({ limit: process.env.API_JSON_LIMIT || "1mb" }));
   app.use(express.urlencoded({ limit: process.env.API_URLENCODED_LIMIT || "1mb", extended: true }));
 
+  // Locally-stored uploads (products/categories/banners/delivery/docs/etc.),
+  // served as static files. Existing Cloudinary-hosted URLs on older records
+  // are unaffected — they're absolute res.cloudinary.com URLs.
+  // helmet()'s default Cross-Origin-Resource-Policy: same-origin blocks the
+  // frontend (a different origin/port) from loading these images, so relax
+  // it only for this route rather than weakening helmet's defaults globally.
+  app.use(
+    "/uploads",
+    (req, res, next) => {
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      next();
+    },
+    express.static(path.join(__dirname, "public", "uploads")),
+  );
+
   // Root endpoint
   app.get("/", (req, res) => {
     res.status(200).json({

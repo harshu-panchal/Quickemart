@@ -1,56 +1,16 @@
-import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
+import { saveFileBufferToDisk } from './localStorage.js';
 
 dotenv.config();
 
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-const getOptimizedImageFormat = () =>
-    String(process.env.CLOUDINARY_IMAGE_UPLOAD_FORMAT || '').trim().toLowerCase();
-
-const getOptimizedImageQuality = () =>
-    String(process.env.CLOUDINARY_IMAGE_UPLOAD_QUALITY || '').trim();
-
-const isImageMimeType = (mimeType = '') =>
-    String(mimeType || '').trim().toLowerCase().startsWith('image/');
-
-const getImageUploadOptions = () => {
-    const format = getOptimizedImageFormat();
-    const quality = getOptimizedImageQuality();
-    return {
-        ...(format ? { format } : {}),
-        ...(quality ? { transformation: `q_${quality}` } : {}),
-    };
-};
-
+// Kept as a global interceptor: every existing caller imports
+// `uploadToCloudinary` from this file, so routing it to local disk here
+// migrates the whole app off Cloudinary without touching call sites.
+// Cloudinary-hosted URLs already stored on existing records keep working
+// unchanged (they're rendered as absolute URLs, same as local ones now are).
 export const uploadToCloudinary = async (fileBuffer, folder = 'categories', options = {}) => {
     const mimeType = String(options.mimeType || '').trim().toLowerCase();
-    const resourceType = String(options.resourceType || '').trim().toLowerCase();
-    const shouldOptimizeImage =
-        options.optimize !== false &&
-        (resourceType === 'image' || isImageMimeType(mimeType));
-
-    return new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-            {
-                folder,
-                resource_type: shouldOptimizeImage ? 'image' : 'auto',
-                ...(shouldOptimizeImage ? getImageUploadOptions() : {}),
-            },
-            (error, result) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve(result.secure_url);
-                }
-            }
-        );
-        uploadStream.end(fileBuffer);
-    });
+    return saveFileBufferToDisk(fileBuffer, folder, { mimeType });
 };
 
-export default cloudinary;
+export default uploadToCloudinary;

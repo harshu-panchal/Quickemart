@@ -1,6 +1,10 @@
 node_modules/
 .env
 
+# Locally-stored uploads (products/categories/etc.) — persisted on the
+# server outside the deploy directory, not part of the repo.
+backend/public/uploads/
+
 logs/
 *.log
 

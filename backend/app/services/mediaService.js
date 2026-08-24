@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { v2 as cloudinary } from "cloudinary";
 import MediaMetadata from "../models/mediaMetadata.js";
 import logger from "./logger.js";
+import { saveFileBufferToDisk } from "../utils/localStorage.js";
 
 function getMaxUploadBytes() {
   const raw = parseInt(process.env.MEDIA_MAX_FILE_SIZE || "10485760", 10);
@@ -489,34 +490,12 @@ async function deleteMedia(publicId, userId, userModel) {
   await media.softDelete();
 }
 
+// Routes to local disk storage. `createUploadIntent`/`confirmUpload` below
+// still talk to Cloudinary directly (signed direct-to-Cloudinary browser
+// uploads) — left untouched since no frontend code currently calls them.
 async function uploadToCloudinary(fileBuffer, folder = "categories", options = {}) {
-  validateStorageConfig();
-  configureCloudinary();
   const mimeType = String(options.mimeType || "").trim().toLowerCase();
-  const resourceType = String(options.resourceType || "").trim().toLowerCase();
-  const shouldOptimizeImage =
-    options.optimize !== false &&
-    (resourceType === "image" || isImageMimeType(mimeType));
-
-  const uploadOptions = {
-    folder,
-    resource_type: shouldOptimizeImage ? "image" : "auto",
-    ...(shouldOptimizeImage ? getImageUploadOptions() : {}),
-  };
-
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      uploadOptions,
-      (error, result) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result.secure_url);
-        }
-      },
-    );
-    uploadStream.end(fileBuffer);
-  });
+  return saveFileBufferToDisk(fileBuffer, folder, { mimeType });
 }
 
 async function generateSignedUploadURL(options) {
