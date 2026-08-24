@@ -5,7 +5,8 @@ import {
     updateMasterProduct,
     deleteMasterProduct,
     bulkImportMasterProducts,
-    getImportTemplate
+    getImportTemplate,
+    getCatalogImportStatus
 } from "../controllers/adminCatalogController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 import multer from "multer";
@@ -27,5 +28,7 @@ router.delete("/:id", deleteMasterProduct);
 // Bulk Import Excel
 router.get("/template", getImportTemplate);
 router.post("/import", upload.single("excelFile"), bulkImportMasterProducts);
+router.get("/import/status/:taskId", getCatalogImportStatus);
 
 export default router;
+

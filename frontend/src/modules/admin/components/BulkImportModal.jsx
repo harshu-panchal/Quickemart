@@ -9,11 +9,13 @@ const BulkImportModal = ({ isOpen, onClose, onSuccess }) => {
     const [isUploading, setIsUploading] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [report, setReport] = useState(null);
+    const [progress, setProgress] = useState(null);
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
             setFile(e.target.files[0]);
             setReport(null);
+            setProgress(null);
         }
     };
 
@@ -40,20 +42,47 @@ const BulkImportModal = ({ isOpen, onClose, onSuccess }) => {
         if (!file) return toast.error('Please select an Excel file');
 
         setIsUploading(true);
+        setProgress({ processed: 0, total: 0, status: 'PENDING', success: 0, skipped: 0, failed: 0 });
         const formData = new FormData();
         formData.append('excelFile', file);
 
         try {
             const response = await adminApi.bulkImportCatalog(formData);
             if (response.data.success) {
-                toast.success('Bulk import completed!');
-                setReport(response.data.report);
-                if (onSuccess) onSuccess();
+                const taskId = response.data.taskId;
+                
+                const interval = setInterval(async () => {
+                    try {
+                        const statusRes = await adminApi.getImportStatus(taskId);
+                        if (statusRes.data.success) {
+                            const task = statusRes.data.task;
+                            setProgress(task);
+                            
+                            if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+                                clearInterval(interval);
+                                setIsUploading(false);
+                                setReport({
+                                    total: task.total,
+                                    success: task.success,
+                                    skipped: task.skipped,
+                                    failed: task.failed,
+                                    errors: task.errors
+                                });
+                                setProgress(null);
+                                setFile(null);
+                                toast.success(task.status === 'COMPLETED' ? 'Bulk import completed!' : 'Bulk import failed');
+                                if (onSuccess) onSuccess();
+                            }
+                        }
+                    } catch (pollErr) {
+                        console.error('Polling error:', pollErr);
+                    }
+                }, 2000);
             }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Failed to import products');
-        } finally {
             setIsUploading(false);
+            setProgress(null);
         }
     };
 
@@ -69,7 +98,7 @@ const BulkImportModal = ({ isOpen, onClose, onSuccess }) => {
                             </div>
                             <button 
                                 onClick={handleDownloadTemplate}
-                                disabled={isDownloading}
+                                disabled={isDownloading || isUploading}
                                 className="px-3 py-1.5 shrink-0 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1 transition-all"
                             >
                                 {isDownloading && <HiOutlineArrowPath className="animate-spin h-3 w-3" />}
@@ -77,32 +106,61 @@ const BulkImportModal = ({ isOpen, onClose, onSuccess }) => {
                             </button>
                         </div>
 
-                        <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 transition-colors relative">
-                            <input 
-                                type="file" 
-                                accept=".xlsx, .xls" 
-                                onChange={handleFileChange} 
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            />
-                            <HiOutlineDocumentArrowUp className="h-12 w-12 text-slate-300 mb-3" />
-                            <h3 className="text-sm font-bold text-slate-700">
-                                {file ? file.name : 'Upload Excel File'}
-                            </h3>
-                            <p className="text-xs text-slate-400 mt-1">
-                                {file ? 'Ready to upload' : 'Drag and drop or click to browse'}
-                            </p>
-                        </div>
-                        <div className="flex justify-end gap-3 mt-4">
-                            <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700">CANCEL</button>
-                            <button 
-                                onClick={handleUpload} 
-                                disabled={isUploading || !file}
-                                className="px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-md hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-50 flex items-center gap-2 transition-all"
-                            >
-                                {isUploading && <HiOutlineArrowPath className="animate-spin h-4 w-4" />}
-                                {isUploading ? 'IMPORTING...' : 'START IMPORT'}
-                            </button>
-                        </div>
+                        {progress ? (
+                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center space-y-4">
+                                <HiOutlineArrowPath className="animate-spin h-10 w-10 text-slate-600 mx-auto" />
+                                <div>
+                                    <h4 className="text-sm font-bold text-slate-800">Processing Catalog Import</h4>
+                                    <p className="text-xs text-slate-500 mt-1">Please wait while products are being imported dynamically.</p>
+                                </div>
+                                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                    <div 
+                                        className="bg-slate-900 h-2.5 rounded-full transition-all duration-500" 
+                                        style={{ width: `${progress.total > 0 ? (progress.processed / progress.total) * 100 : 0}%` }}
+                                    />
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                    <span>Processed: {progress.processed} / {progress.total}</span>
+                                    <span className="text-slate-900">
+                                        {progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0}%
+                                    </span>
+                                </div>
+                                <div className="flex justify-center gap-4 text-xs font-bold pt-2">
+                                    <span className="text-emerald-600">Success: {progress.success}</span>
+                                    <span className="text-amber-600">Skipped: {progress.skipped}</span>
+                                    <span className="text-rose-600">Failed: {progress.failed}</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 transition-colors relative">
+                                    <input 
+                                        type="file" 
+                                        accept=".xlsx, .xls" 
+                                        onChange={handleFileChange} 
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    <HiOutlineDocumentArrowUp className="h-12 w-12 text-slate-300 mb-3" />
+                                    <h3 className="text-sm font-bold text-slate-700">
+                                        {file ? file.name : 'Upload Excel File'}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        {file ? 'Ready to upload' : 'Drag and drop or click to browse'}
+                                    </p>
+                                </div>
+                                <div className="flex justify-end gap-3 mt-4">
+                                    <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700">CANCEL</button>
+                                    <button 
+                                        onClick={handleUpload} 
+                                        disabled={isUploading || !file}
+                                        className="px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-md hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-50 flex items-center gap-2 transition-all"
+                                    >
+                                        {isUploading && <HiOutlineArrowPath className="animate-spin h-4 w-4" />}
+                                        {isUploading ? 'IMPORTING...' : 'START IMPORT'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </>
                 ) : (
                     <div className="space-y-4">

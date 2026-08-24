@@ -31,6 +31,8 @@ export const adminCatalogApi = {
         axiosInstance.post('/admin/catalog/import', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         }),
+    getImportStatus: (taskId) =>
+        axiosInstance.get(`/admin/catalog/import/status/${taskId}`),
     downloadImportTemplate: () => 
         axiosInstance.get('/admin/catalog/template', { responseType: 'blob' }),
     getMasterProducts: (params) =>

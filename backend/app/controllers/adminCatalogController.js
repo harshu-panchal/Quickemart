@@ -1,6 +1,7 @@
 import MasterProduct from "../models/masterProduct.js";
 import Product from "../models/product.js";
 import Category from "../models/category.js";
+import CatalogImportTask from "../models/catalogImportTask.js";
 import xlsx from "xlsx";
 import ExcelJS from "exceljs";
 import axios from "axios";
@@ -31,6 +32,22 @@ const generateUniqueCategorySlug = async (baseName) => {
         count++;
     }
     return slug;
+};
+
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Simple concurrency-limited pool runner: processes `items` with up to `limit`
+// workers running `handler` concurrently.
+const runWithConcurrency = async (items, limit, handler) => {
+    let cursor = 0;
+    const worker = async () => {
+        while (cursor < items.length) {
+            const index = cursor++;
+            await handler(items[index], index);
+        }
+    };
+    const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+    await Promise.all(workers);
 };
 
 export const deleteMasterProduct = async (req, res) => {
@@ -654,6 +671,9 @@ export const getImportTemplate = async (req, res) => {
     }
 };
 
+const IMAGE_UPLOAD_CONCURRENCY = 5;
+const DB_INSERT_BATCH_SIZE = 50;
+
 export const bulkImportMasterProducts = async (req, res) => {
     try {
         if (!req.file) {
@@ -668,209 +688,290 @@ export const bulkImportMasterProducts = async (req, res) => {
             return res.status(400).json({ success: false, message: "Excel file is empty" });
         }
 
-        const report = {
-            total: data.length,
-            success: 0,
-            skipped: 0,
-            failed: 0,
-            errors: []
-        };
-
+        // Filter down to valid, non-empty rows (skip the locked sample row at rowNum 2)
+        const validRows = [];
         for (let i = 0; i < data.length; i++) {
             const row = data[i];
-            const rowNum = i + 2; // Excel is 1-indexed, row 1 is header
-            
-            // Row 2 is the sample data row in the excel template.
-            // We skip it completely so it is never treated as a product.
-            if (rowNum === 2) {
-                report.total--;
-                continue;
-            }
-
-            // Skip rows that are completely empty or have no product details filled
+            const rowNum = i + 2;
+            if (rowNum === 2) continue;
             const hasNoProductDetails = !row['Product Name'] && !row['Header Category'] && !row['Main Category'] && !row['Brand'];
-            if (hasNoProductDetails) {
-                report.total--; // Decrement total processed count
-                continue;
-            }
-            
+            if (hasNoProductDetails) continue;
+            validRows.push({ rowNum, row });
+        }
+
+        // Create background import task
+        const task = new CatalogImportTask({
+            excelBuffer: req.file.buffer,
+            status: "PENDING",
+            total: validRows.length
+        });
+        await task.save();
+
+        // Respond immediately with 202 Accepted and taskId
+        res.status(202).json({
+            success: true,
+            message: "Import task created successfully. Processing in background.",
+            taskId: task._id
+        });
+
+        // Background processing execution
+        setImmediate(async () => {
             try {
-                // Column validations
-                if (!row['Header Category']) {
-                    throw { col: 'Header Category', message: 'Header Category is required' };
-                }
-                if (!row['Main Category']) {
-                    throw { col: 'Main Category', message: 'Main Category is required' };
-                }
-                if (!row['Brand']) {
-                    throw { col: 'Brand', message: 'Brand is required' };
-                }
-                if (!row['Product Name']) {
-                    throw { col: 'Product Name', message: 'Product Name is required' };
-                }
-                if (!row['Unit']) {
-                    throw { col: 'Unit', message: 'Unit is required' };
-                }
-                if (!row['Primary Image URL']) {
-                    throw { col: 'Primary Image URL', message: 'Primary Image URL is required' };
-                }
+                task.status = "PROCESSING";
+                await task.save();
 
-                // Check categories exist or auto-create them dynamically
-                const headerName = String(row['Header Category']).trim();
-                let headerCat = await Category.findOne({ name: { $regex: new RegExp("^" + headerName + "$", "i") } });
-                if (!headerCat) {
-                    const uniqueSlug = await generateUniqueCategorySlug(headerName);
-                    headerCat = new Category({
-                        name: headerName,
-                        slug: uniqueSlug,
-                        type: "header",
-                        status: "active"
-                    });
-                    await headerCat.save();
-                }
-
-                const mainName = String(row['Main Category']).trim();
-                let mainCat = await Category.findOne({ name: { $regex: new RegExp("^" + mainName + "$", "i") } });
-                if (!mainCat) {
-                    const uniqueSlug = await generateUniqueCategorySlug(mainName + '-cat');
-                    mainCat = new Category({
-                        name: mainName,
-                        slug: uniqueSlug,
-                        type: "category",
-                        parentId: headerCat._id,
-                        status: "active"
-                    });
-                    await mainCat.save();
-                }
-
-                let subCat = null;
-                if (row['Sub Category']) {
-                    const subName = String(row['Sub Category']).trim();
-                    subCat = await Category.findOne({ name: { $regex: new RegExp("^" + subName + "$", "i") } });
-                    if (!subCat) {
-                        const uniqueSlug = await generateUniqueCategorySlug(subName + '-sub');
-                        subCat = new Category({
-                            name: subName,
+                // ---- PHASE 1: sequential column validation + category resolution ----
+                // Run strictly sequentially (no concurrency) so that two rows introducing
+                // the same brand-new category never race each other into creating duplicates.
+                const categoryCache = new Map(); // lowercased category name -> Category doc
+                const resolveCategory = async (name, type, parentId, slugSuffix) => {
+                    const key = name.toLowerCase();
+                    if (categoryCache.has(key)) return categoryCache.get(key);
+                    let cat = await Category.findOne({ name: { $regex: new RegExp("^" + escapeRegex(name) + "$", "i") } });
+                    if (!cat) {
+                        const uniqueSlug = await generateUniqueCategorySlug(slugSuffix ? `${name}${slugSuffix}` : name);
+                        cat = new Category({
+                            name,
                             slug: uniqueSlug,
-                            type: "subcategory",
-                            parentId: mainCat._id,
+                            type,
+                            ...(parentId ? { parentId } : {}),
                             status: "active"
                         });
-                        await subCat.save();
+                        await cat.save();
+                    }
+                    categoryCache.set(key, cat);
+                    return cat;
+                };
+
+                const preparedRows = [];
+                for (const { rowNum, row } of validRows) {
+                    try {
+                        if (!row['Header Category']) throw { col: 'Header Category', message: 'Header Category is required' };
+                        if (!row['Main Category']) throw { col: 'Main Category', message: 'Main Category is required' };
+                        if (!row['Brand']) throw { col: 'Brand', message: 'Brand is required' };
+                        if (!row['Product Name']) throw { col: 'Product Name', message: 'Product Name is required' };
+                        if (!row['Unit']) throw { col: 'Unit', message: 'Unit is required' };
+                        if (!row['Primary Image URL']) throw { col: 'Primary Image URL', message: 'Primary Image URL is required' };
+
+                        const headerName = String(row['Header Category']).trim();
+                        const headerCat = await resolveCategory(headerName, 'header', null);
+
+                        const mainName = String(row['Main Category']).trim();
+                        const mainCat = await resolveCategory(mainName, 'category', headerCat._id, '-cat');
+
+                        let subCat = null;
+                        if (row['Sub Category']) {
+                            const subName = String(row['Sub Category']).trim();
+                            subCat = await resolveCategory(subName, 'subcategory', mainCat._id, '-sub');
+                        }
+
+                        preparedRows.push({ rowNum, row, headerCat, mainCat, subCat });
+                    } catch (err) {
+                        task.failed++;
+                        task.processed++;
+                        task.errors.push({
+                            row: rowNum,
+                            col: err.col || 'General',
+                            message: err.message || String(err)
+                        });
                     }
                 }
+                await task.save();
 
-                // Check for duplicates in Master Catalog - skip gracefully
-                const slug = slugify(String(row['Product Name']).trim() + '-' + String(row['Brand']).trim());
-                const existing = await MasterProduct.findOne({ slug });
-                if (existing) {
-                    report.skipped++;
-                    continue;
-                }
+                // ---- PHASE 2: concurrency-limited image upload + batched DB inserts ----
+                const seenSlugs = new Set();
+                let pendingDocs = [];
+                let pendingMeta = [];
+                let itemsSinceSave = 0;
 
-                // Handle image download & upload to Cloudinary
-                let mainImage = null;
-                try {
-                    mainImage = await uploadImageFromUrl(row['Primary Image URL']);
-                    if (!mainImage) {
-                        throw new Error('Image upload to Cloudinary failed');
+                const flushBatch = async () => {
+                    const batchDocs = pendingDocs;
+                    const batchMeta = pendingMeta;
+                    pendingDocs = [];
+                    pendingMeta = [];
+                    itemsSinceSave = 0;
+
+                    if (batchDocs.length > 0) {
+                        task.processed += batchDocs.length;
+                        try {
+                            const inserted = await MasterProduct.insertMany(batchDocs, { ordered: false });
+                            task.success += inserted.length;
+                        } catch (bulkErr) {
+                            const insertedCount = Array.isArray(bulkErr.insertedDocs) ? bulkErr.insertedDocs.length : 0;
+                            task.success += insertedCount;
+                            const writeErrors = bulkErr.writeErrors || [];
+                            for (const we of writeErrors) {
+                                const idx = typeof we.index === 'number' ? we.index : we.err?.index;
+                                const meta = batchMeta[idx] || {};
+                                const code = we.code ?? we.err?.code;
+                                if (code === 11000) {
+                                    task.skipped++;
+                                } else {
+                                    task.failed++;
+                                    task.errors.push({
+                                        row: meta.rowNum || 0,
+                                        col: 'General',
+                                        message: we.errmsg || we.err?.errmsg || 'Failed to insert product'
+                                    });
+                                }
+                            }
+                        }
                     }
-                } catch (imgErr) {
-                    throw { col: 'Primary Image URL', message: `Failed to download or upload image: ${imgErr.message}` };
-                }
 
-                let galleryImages = [];
-                let galleryLabels = [];
+                    await task.save();
+                };
 
-                const getRowVal = (keys) => {
+                const getRowVal = (row, keys) => {
                     for (const key of keys) {
                         if (row[key] !== undefined) return row[key];
                     }
                     return null;
                 };
 
-                const addImage = async (url, label) => {
-                    if (url) {
-                        try {
-                            const uploaded = await uploadImageFromUrl(String(url).trim());
-                            if (uploaded) {
-                                galleryImages.push(uploaded);
-                                galleryLabels.push(label);
+                const processRow = async ({ rowNum, row, headerCat, mainCat, subCat }) => {
+                    try {
+                        const slug = slugify(String(row['Product Name']).trim() + '-' + String(row['Brand']).trim());
+
+                        // Duplicate check: against already-imported catalog and against rows
+                        // staged earlier in this same run (not yet flushed to the DB).
+                        if (seenSlugs.has(slug)) {
+                            task.skipped++;
+                            task.processed++;
+                            itemsSinceSave++;
+                        } else {
+                            const existing = await MasterProduct.findOne({ slug });
+                            if (existing) {
+                                seenSlugs.add(slug);
+                                task.skipped++;
+                                task.processed++;
+                                itemsSinceSave++;
+                            } else {
+                                seenSlugs.add(slug);
+
+                                let mainImage = null;
+                                try {
+                                    mainImage = await uploadImageFromUrl(row['Primary Image URL']);
+                                    if (!mainImage) {
+                                        throw new Error('Image upload to Cloudinary failed');
+                                    }
+                                } catch (imgErr) {
+                                    throw { col: 'Primary Image URL', message: `Failed to download or upload image: ${imgErr.message}` };
+                                }
+
+                                let galleryImages = [];
+                                let galleryLabels = [];
+                                const addImage = async (url, label) => {
+                                    if (url) {
+                                        try {
+                                            const uploaded = await uploadImageFromUrl(String(url).trim());
+                                            if (uploaded) {
+                                                galleryImages.push(uploaded);
+                                                galleryLabels.push(label);
+                                            }
+                                        } catch (imgErr) {
+                                            console.error(`Failed to upload ${label} image:`, imgErr);
+                                        }
+                                    }
+                                };
+
+                                await addImage(getRowVal(row, ['Front Image URL', 'Front Image', 'frontImage', 'FrontImageUrl']), 'Front');
+                                await addImage(getRowVal(row, ['Back Image URL', 'Back Image', 'backImage', 'BackImageUrl']), 'Back');
+                                await addImage(getRowVal(row, ['Details Image URL', 'Details Image', 'detailsImage', 'DetailsImageUrl']), 'Product details image');
+                                await addImage(getRowVal(row, ['Right Side Image URL', 'Right Side Image', 'rightSideImage', 'RightSideImageUrl']), 'Right side');
+                                await addImage(getRowVal(row, ['Left Side Image URL', 'Left Side Image', 'leftSideImage', 'LeftSideImageUrl']), 'Left side');
+
+                                let specifications = [];
+                                if (row['Specifications']) {
+                                    specifications = String(row['Specifications']).split('|').map(spec => {
+                                        const parts = spec.split(':');
+                                        if (parts.length >= 2) {
+                                            return { key: parts[0].trim(), value: parts[1].trim() };
+                                        }
+                                        return null;
+                                    }).filter(Boolean);
+                                }
+
+                                const productData = {
+                                    name: String(row['Product Name']).trim(),
+                                    slug,
+                                    brand: String(row['Brand']).trim(),
+                                    description: row['Product Description'] ? String(row['Product Description']).trim() : '',
+                                    headerId: headerCat._id,
+                                    categoryId: mainCat._id,
+                                    subcategoryId: subCat ? subCat._id : null,
+                                    unit: String(row['Unit']).trim(),
+                                    packSize: row['Pack Size'] ? String(row['Pack Size']).trim() : (row['Variant Name'] ? String(row['Variant Name']).trim() : ''),
+                                    keyFeatures: row['Key Features'] ? String(row['Key Features']).split('|').map(f => f.trim()) : [],
+                                    specifications,
+                                    searchTags: row['Search Tags'] ? String(row['Search Tags']).split(',').map(t => t.trim()) : [],
+                                    mainImage,
+                                    galleryImages,
+                                    galleryLabels,
+                                    gstTax: Number(row['GST Tax (%)'] ?? row['GST Tax'] ?? row['GST'] ?? 0) || 0,
+                                    status: row['Status'] ? String(row['Status']).trim().toLowerCase() : 'active',
+                                    variants: []
+                                };
+
+                                if (row['Variant Name']) {
+                                    productData.variants.push({
+                                        name: String(row['Variant Name']).trim(),
+                                        unit: String(row['Unit']).trim(),
+                                        packSize: row['Pack Size'] ? String(row['Pack Size']).trim() : String(row['Variant Name']).trim(),
+                                        price: 0,
+                                        stock: 0
+                                    });
+                                }
+
+                                pendingDocs.push(productData);
+                                pendingMeta.push({ rowNum });
+                                itemsSinceSave++;
                             }
-                        } catch (imgErr) {
-                            console.error(`Failed to upload ${label} image:`, imgErr);
                         }
+                    } catch (err) {
+                        task.failed++;
+                        task.processed++;
+                        itemsSinceSave++;
+                        task.errors.push({
+                            row: rowNum,
+                            col: err.col || 'General',
+                            message: err.message || String(err)
+                        });
+                    }
+
+                    if (itemsSinceSave >= DB_INSERT_BATCH_SIZE) {
+                        await flushBatch();
                     }
                 };
 
-                await addImage(getRowVal(['Front Image URL', 'Front Image', 'frontImage', 'FrontImageUrl']), 'Front');
-                await addImage(getRowVal(['Back Image URL', 'Back Image', 'backImage', 'BackImageUrl']), 'Back');
-                await addImage(getRowVal(['Details Image URL', 'Details Image', 'detailsImage', 'DetailsImageUrl']), 'Product details image');
-                await addImage(getRowVal(['Right Side Image URL', 'Right Side Image', 'rightSideImage', 'RightSideImageUrl']), 'Right side');
-                await addImage(getRowVal(['Left Side Image URL', 'Left Side Image', 'leftSideImage', 'LeftSideImageUrl']), 'Left side');
+                await runWithConcurrency(preparedRows, IMAGE_UPLOAD_CONCURRENCY, processRow);
+                await flushBatch(); // flush remainder (< batch size)
 
-                // Parse specifications if present (Format: Key: Value | Key2: Value2)
-                let specifications = [];
-                if (row['Specifications']) {
-                    specifications = String(row['Specifications']).split('|').map(spec => {
-                        const parts = spec.split(':');
-                        if (parts.length >= 2) {
-                            return {
-                                name: parts[0].trim(),
-                                value: parts[1].trim()
-                            };
-                        }
-                        return null;
-                    }).filter(Boolean);
-                }
-
-                const productData = {
-                    name: String(row['Product Name']).trim(),
-                    slug,
-                    brand: String(row['Brand']).trim(),
-                    description: row['Product Description'] ? String(row['Product Description']).trim() : '',
-                    headerId: headerCat._id,
-                    categoryId: mainCat._id,
-                    subcategoryId: subCat ? subCat._id : null,
-                    unit: String(row['Unit']).trim(),
-                    packSize: row['Pack Size'] ? String(row['Pack Size']).trim() : (row['Variant Name'] ? String(row['Variant Name']).trim() : ''),
-                    keyFeatures: row['Key Features'] ? String(row['Key Features']).split('|').map(f => f.trim()) : [],
-                    specifications,
-                    searchTags: row['Search Tags'] ? String(row['Search Tags']).split(',').map(t => t.trim()) : [],
-                    mainImage,
-                    galleryImages,
-                    galleryLabels,
-                    gstTax: Number(row['GST Tax (%)'] ?? row['GST Tax'] ?? row['GST'] ?? 0) || 0,
-                    status: row['Status'] ? String(row['Status']).trim().toLowerCase() : 'active',
-                    variants: []
-                };
-
-                // Add default variant
-                if (row['Variant Name']) {
-                    productData.variants.push({
-                        name: String(row['Variant Name']).trim(),
-                        unit: String(row['Unit']).trim(),
-                        packSize: row['Pack Size'] ? String(row['Pack Size']).trim() : String(row['Variant Name']).trim(),
-                        price: 0,
-                        stock: 0
-                    });
-                }
-
-                const newProduct = new MasterProduct(productData);
-                await newProduct.save();
-
-                report.success++;
-            } catch (err) {
-                report.failed++;
-                report.errors.push({
-                    row: rowNum,
-                    col: err.col || 'General',
-                    message: err.message || String(err)
+                task.status = "COMPLETED";
+                await task.save();
+            } catch (taskErr) {
+                console.error("Bulk Import Background Task Error:", taskErr);
+                task.status = "FAILED";
+                task.errors.push({
+                    row: 0,
+                    col: "General",
+                    message: taskErr.message || String(taskErr)
                 });
+                await task.save();
             }
-        }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
 
-        res.status(200).json({ success: true, report });
+export const getCatalogImportStatus = async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const task = await CatalogImportTask.findById(taskId).select("-excelBuffer").lean();
+        if (!task) {
+            return res.status(404).json({ success: false, message: "Import task not found" });
+        }
+        res.status(200).json({ success: true, task });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
