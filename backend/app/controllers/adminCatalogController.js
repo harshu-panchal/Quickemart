@@ -908,12 +908,19 @@ export const bulkImportMasterProducts = async (req, res) => {
                                 };
 
                                 if (row['Variant Name']) {
-                                    productData.variants.push({
-                                        name: String(row['Variant Name']).trim(),
-                                        unit: String(row['Unit']).trim(),
-                                        packSize: row['Pack Size'] ? String(row['Pack Size']).trim() : String(row['Variant Name']).trim(),
-                                        price: 0,
-                                        stock: 0
+                                    const variantNames = String(row['Variant Name'])
+                                        .split(',')
+                                        .map(v => v.trim())
+                                        .filter(Boolean);
+                                    
+                                    variantNames.forEach(variantName => {
+                                        productData.variants.push({
+                                            name: variantName,
+                                            unit: String(row['Unit']).trim(),
+                                            packSize: row['Pack Size'] ? String(row['Pack Size']).trim() : variantName,
+                                            price: 0,
+                                            stock: 0
+                                        });
                                     });
                                 }
 
