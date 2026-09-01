@@ -8,6 +8,11 @@ import Category from "../models/category.js";
 import { calculateCustomerDisplayPrice } from "../services/finance/pricingService.js";
 import { isShopCurrentlyOpen, getShopStatusMeta } from "../services/shopTimingService.js";
 
+import {
+  parseCustomerCoordinates,
+  getNearbySellerIdsForCustomer,
+} from "../services/customerVisibilityService.js";
+
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants";
 
@@ -132,8 +137,18 @@ export const addToCart = async (req, res) => {
     const { productId, quantity = 1, variantSku = "" } = req.body;
     const normalizedVariantSku = String(variantSku || "").trim();
     const customerVisibleProduct = await getCustomerVisibleProductById(productId);
-    if (!customerVisibleProduct) {
-      return handleResponse(res, 404, "Product is not available for purchase");
+    const fullProductDoc = await Product.findById(productId).select("stock status sellerId").lean();
+    if (!fullProductDoc || fullProductDoc.status !== "active" || Number(fullProductDoc.stock || 0) <= 0) {
+      return handleResponse(res, 400, "This product is currently out of stock or unavailable.");
+    }
+
+    const coords = parseCustomerCoordinates(req.body.lat ? req.body : req.query);
+    if (coords.valid) {
+      const nearbySellerIds = await getNearbySellerIdsForCustomer(coords.lat, coords.lng);
+      const sellerIdStr = String(customerVisibleProduct.sellerId?._id || customerVisibleProduct.sellerId);
+      if (!nearbySellerIds.includes(sellerIdStr)) {
+        return handleResponse(res, 400, "This product is not available in your delivery location.");
+      }
     }
 
     const seller = await Seller.findById(customerVisibleProduct.sellerId)

@@ -281,38 +281,29 @@ export const getProducts = async (req, res) => {
         "lat and lng are required for customer product visibility",
       );
     }
-    if (shouldApplyLocationFilter) {
-      const nearbySellerIds = await getNearbySellerIdsForCustomer(
+
+    let nearbySellerIds = [];
+    if (shouldApplyLocationFilter && coords.valid) {
+      nearbySellerIds = await getNearbySellerIdsForCustomer(
         coords.lat,
         coords.lng,
       );
 
-      if (!nearbySellerIds.length) {
-        return handleResponse(res, 200, "No sellers found in your area", {
-          items: [],
-          page: 1,
-          limit: 24,
-          total: 0,
-          totalPages: 1,
-        });
+      // If user explicitly requested a specific sellerId, enforce location radius check on that seller
+      if (requestedSellerIds.length > 0) {
+        const nearbySet = new Set(nearbySellerIds.map(String));
+        const finalSellerIds = requestedSellerIds.filter((id) => nearbySet.has(String(id)));
+        if (!finalSellerIds.length) {
+          return handleResponse(res, 200, "No products available in your area", {
+            items: [],
+            page: 1,
+            limit: 24,
+            total: 0,
+            totalPages: 1,
+          });
+        }
+        query.sellerId = { $in: finalSellerIds };
       }
-
-      const nearbySet = new Set(nearbySellerIds.map(String));
-      const finalSellerIds = requestedSellerIds.length
-        ? requestedSellerIds.filter((id) => nearbySet.has(String(id)))
-        : nearbySellerIds;
-
-      if (!finalSellerIds.length) {
-        return handleResponse(res, 200, "No products available in your area", {
-          items: [],
-          page: 1,
-          limit: 24,
-          total: 0,
-          totalPages: 1,
-        });
-      }
-
-      query.sellerId = { $in: finalSellerIds };
     }
 
     if (categoryIds && typeof categoryIds === "string") {
@@ -468,9 +459,51 @@ export const getProducts = async (req, res) => {
         .lean();
       const categoryMap = new Map(categoryDocs.map(c => [String(c._id), c]));
 
+      const nearbySellerSet = new Set((nearbySellerIds || []).map(String));
+
       const products = combinedRaw.map((p) => {
+        const pSellerId = p.sellerId ? String(p.sellerId._id || p.sellerId) : null;
+        let isAvailable = false;
+        let effectiveStock = Number(p.stock || 0);
+        let effectivePrice = Number(p.price || 0);
+        let effectiveSalePrice = Number(p.salePrice || 0);
+        let activeSellerObj = p.sellerId;
+
+        if (shouldApplyLocationFilter) {
+          if (pSellerId && nearbySellerSet.has(pSellerId) && effectiveStock > 0) {
+            isAvailable = true;
+          } else {
+            // Check if there is another seller in nearbySellerSet providing this master product / SKU
+            const masterIdStr = p.masterProductId ? String(p.masterProductId) : String(p._id);
+            const nearbyOffer = rawProducts.find((other) => {
+              const otherSellerId = String(other.sellerId?._id || other.sellerId || '');
+              const otherMasterId = other.masterProductId ? String(other.masterProductId) : String(other._id);
+              return nearbySellerSet.has(otherSellerId) && Number(other.stock || 0) > 0 && (otherMasterId === masterIdStr || other.sku === p.sku);
+            });
+
+            if (nearbyOffer) {
+              isAvailable = true;
+              effectiveStock = Number(nearbyOffer.stock || 0);
+              effectivePrice = Number(nearbyOffer.price || 0);
+              effectiveSalePrice = Number(nearbyOffer.salePrice || 0);
+              activeSellerObj = nearbyOffer.sellerId;
+            } else {
+              isAvailable = false;
+              effectiveStock = 0;
+            }
+          }
+        } else {
+          isAvailable = effectiveStock > 0;
+        }
+
         const enriched = {
           ...p,
+          stock: effectiveStock,
+          price: effectivePrice,
+          salePrice: effectiveSalePrice,
+          isAvailableInLocation: isAvailable,
+          isOutOfStock: !isAvailable || effectiveStock <= 0,
+          inStock: isAvailable && effectiveStock > 0,
           headerId: p.headerId
             ? { _id: p.headerId, name: nameMap[String(p.headerId)] ?? null }
             : null,
@@ -480,8 +513,8 @@ export const getProducts = async (req, res) => {
           subcategoryId: p.subcategoryId
             ? { _id: p.subcategoryId, name: nameMap[String(p.subcategoryId)] ?? null }
             : null,
-          sellerId: p.sellerId
-            ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
+          sellerId: activeSellerObj
+            ? (typeof activeSellerObj === 'object' ? activeSellerObj : { _id: activeSellerObj, shopName: nameMap[String(activeSellerObj)] ?? null })
             : null,
         };
 
@@ -489,8 +522,8 @@ export const getProducts = async (req, res) => {
         const catIdStr = String(p.categoryId?._id || p.categoryId || '');
         const catConfig = categoryMap.get(headerIdStr) || categoryMap.get(catIdStr) || null;
 
-        const rawSale = Number(p.salePrice || p.price || 0);
-        const rawReg = Number(p.price || p.salePrice || 0);
+        const rawSale = Number(enriched.salePrice || enriched.price || 0);
+        const rawReg = Number(enriched.price || enriched.salePrice || 0);
 
         const saleDisplay = calculateCustomerDisplayPrice(rawSale, catConfig).customerDisplayPrice;
         const regDisplay = calculateCustomerDisplayPrice(rawReg, catConfig).customerDisplayPrice;
@@ -505,6 +538,7 @@ export const getProducts = async (req, res) => {
             sellerBasePrice: vSale,
             salePrice: vSaleDisplay,
             price: vRegDisplay,
+            stock: isAvailable ? Number(v.stock || 0) : 0,
           };
         });
 
@@ -1547,12 +1581,55 @@ export const getProductById = async (req, res) => {
       }
     }
 
-    if (enforceRadius) {
-      const sellerIdForProduct = String(product?.sellerId?._id || product?.sellerId);
-      if (!nearbySellerSet || !nearbySellerSet.has(sellerIdForProduct)) {
-        return handleResponse(res, 404, "Product not available in your area");
+    const sellerIdForProduct = product?.sellerId ? String(product.sellerId._id || product.sellerId) : null;
+    let isAvailableInLocation = true;
+    let finalStock = Number(product?.stock || 0);
+
+    if (enforceRadius || nearbySellerSet) {
+      if (sellerIdForProduct && nearbySellerSet && nearbySellerSet.has(sellerIdForProduct) && finalStock > 0) {
+        isAvailableInLocation = true;
+      } else {
+        // Try finding nearby seller offer
+        const masterIdStr = product.masterProductId ? String(product.masterProductId) : String(product._id);
+        const nearbyOffer = await Product.findOne({
+          $or: [
+            { masterProductId: masterIdStr },
+            { _id: masterIdStr },
+            { sku: product.sku }
+          ],
+          sellerId: { $in: Array.from(nearbySellerSet || []) },
+          status: "active",
+          stock: { $gt: 0 }
+        }).populate("sellerId", "shopName").lean();
+
+        if (nearbyOffer) {
+          isAvailableInLocation = true;
+          finalStock = Number(nearbyOffer.stock || 0);
+          product = {
+            ...product,
+            price: nearbyOffer.price,
+            salePrice: nearbyOffer.salePrice,
+            stock: finalStock,
+            sellerId: nearbyOffer.sellerId,
+            variants: nearbyOffer.variants || product.variants
+          };
+        } else {
+          isAvailableInLocation = false;
+          finalStock = 0;
+          product = {
+            ...product,
+            stock: 0,
+            variants: (product.variants || []).map(v => ({ ...v, stock: 0 }))
+          };
+        }
       }
+    } else {
+      isAvailableInLocation = finalStock > 0;
     }
+
+    product.isAvailableInLocation = isAvailableInLocation;
+    product.isOutOfStock = !isAvailableInLocation || finalStock <= 0;
+    product.inStock = isAvailableInLocation && finalStock > 0;
 
     const payload = normalizeProductDocumentModeration(product);
 
