@@ -14,11 +14,17 @@ import {
     otpRouteRateLimiter,
 } from "../middleware/securityMiddlewares.js";
 
+import { fetchServicedCities } from "../controller/servicedCitiesController.js";
+
 const router = express.Router();
 const smallAuthPayload = createContentLengthGuard(
     parseInt(process.env.AUTH_MAX_PAYLOAD_BYTES || "16384", 10),
     "Auth payload too large",
 );
+
+// Public route for footer & app cities list
+router.get("/serviced-cities", fetchServicedCities);
+
 router.post("/send-signup-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, signupCustomer);
 router.post("/send-login-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, loginCustomer);
 router.post("/verify-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, verifyCustomerOTP);

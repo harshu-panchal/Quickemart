@@ -17,6 +17,7 @@ export const customerApi = {
 
   // Sellers & Location
   getNearbySellers: (params) => getWithDedupe("/seller/nearby", params),
+  getServicedCities: (params) => getWithDedupe("/customer/serviced-cities", params, { ttl: 3000 }),
 
   // Cart
   getCart: () => getWithDedupe("/cart", {}, { ttl: 2000 }), // Very short cache for cart

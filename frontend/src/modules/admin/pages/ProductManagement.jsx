@@ -3,6 +3,7 @@ import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import { adminApi } from '../services/adminApi';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 import {
     HiOutlinePlus,
     HiOutlineCube,
@@ -21,7 +22,8 @@ import {
     HiOutlineFolderOpen,
     HiOutlineSwatch,
     HiOutlineSquaresPlus,
-    HiOutlineLockClosed
+    HiOutlineLockClosed,
+    HiOutlineArrowDownTray
 } from 'react-icons/hi2';
 import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
@@ -39,6 +41,7 @@ const ProductManagement = () => {
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [viewMode, setViewMode] = useState('catalog');
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -171,6 +174,106 @@ const ProductManagement = () => {
             toast.error('Failed to fetch products');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleExportExcel = async () => {
+        setIsExporting(true);
+        const toastId = toast.loading('Preparing Excel download...');
+        try {
+            const params = { page: 1, limit: 10000 };
+            if (searchTerm) params.search = searchTerm;
+            if (filterCategory !== 'all') params.category = filterCategory;
+            if (filterStatus !== 'all') params.status = filterStatus;
+            if (sortBy) params.sort = sortBy;
+
+            let exportList = [];
+            let fileName = '';
+            let sheetName = '';
+
+            if (viewMode === 'catalog') {
+                const response = await adminApi.getMasterProducts(params);
+                if (response.data?.success) {
+                    exportList = response.data.results || response.data.result || [];
+                }
+                fileName = `Master_Catalog_Products_${new Date().toISOString().split('T')[0]}.xlsx`;
+                sheetName = 'Master Catalog';
+            } else {
+                if (filterApprovalStatus !== 'all') params.approvalStatus = filterApprovalStatus;
+                if (filterStockStatus !== 'all') params.stockStatus = filterStockStatus;
+
+                const response = await adminApi.getProductModerationList(params);
+                if (response.data?.success) {
+                    const payload = response.data.result || {};
+                    exportList = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
+                }
+                fileName = `Seller_Listings_Products_${new Date().toISOString().split('T')[0]}.xlsx`;
+                sheetName = 'Seller Listings';
+            }
+
+            if (!exportList || exportList.length === 0) {
+                toast.dismiss(toastId);
+                toast.error('No products available to export');
+                setIsExporting(false);
+                return;
+            }
+
+            const excelRows = exportList.map((item) => {
+                let variantString = '';
+                if (Array.isArray(item.variants) && item.variants.length > 0) {
+                    variantString = item.variants
+                        .map((v) => (typeof v === 'string' ? v : (v.name || v.unit || v.packSize || '').trim()))
+                        .filter(Boolean)
+                        .join(', ');
+                }
+                if (!variantString) {
+                    variantString = item.unit || item.packSize || 'Default';
+                }
+
+                if (viewMode === 'catalog') {
+                    return {
+                        'Brand': item.brand || 'N/A',
+                        'Product Name': item.name || '',
+                        'Variant': variantString,
+                        'Category': item.categoryId?.name || item.headerId?.name || 'N/A',
+                        'Subcategory': item.subcategoryId?.name || 'N/A',
+                        'Status': item.status ? String(item.status).toUpperCase() : 'N/A'
+                    };
+                } else {
+                    return {
+                        'Brand': item.brand || item.sellerId?.shopName || 'N/A',
+                        'Product Name': item.name || '',
+                        'Variant': variantString,
+                        'Seller': item.sellerId?.shopName || item.sellerId?.name || 'Admin',
+                        'Category': item.categoryId?.name || item.headerId?.name || 'N/A',
+                        'Subcategory': item.subcategoryId?.name || 'N/A',
+                        'Status': item.approvalStatus ? String(item.approvalStatus).toUpperCase() : 'N/A'
+                    };
+                }
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                const maxLen = Math.max(
+                    key.length,
+                    ...excelRows.map((row) => String(row[key] || '').length)
+                );
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
+            });
+            worksheet['!cols'] = columnWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+            XLSX.writeFile(workbook, fileName);
+
+            toast.dismiss(toastId);
+            toast.success(`Exported ${excelRows.length} products to Excel successfully!`);
+        } catch (error) {
+            console.error('Excel Export Error:', error);
+            toast.dismiss(toastId);
+            toast.error('Failed to export products to Excel');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -666,6 +769,18 @@ const ProductManagement = () => {
                     >
                         <HiOutlineSquaresPlus className="h-4 w-4" />
                         BULK LISTING
+                    </button>
+                    <button
+                        onClick={handleExportExcel}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                        {isExporting ? (
+                            <HiOutlineArrowPath className="h-4 w-4 animate-spin text-emerald-600" />
+                        ) : (
+                            <HiOutlineArrowDownTray className="h-4 w-4 text-emerald-600" />
+                        )}
+                        DOWNLOAD EXCEL
                     </button>
                     <button
                         onClick={() => openModal()}

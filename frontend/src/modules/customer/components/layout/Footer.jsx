@@ -1,12 +1,27 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Facebook, Twitter, Instagram, Youtube, Mail, MapPin, Phone } from 'lucide-react';
 import Logo from '@/assets/Logo.png';
 import { useSettings } from '@core/context/SettingsContext';
+import { customerApi } from '@modules/customer/services/customerApi';
 
 const Footer = () => {
     const { settings } = useSettings();
     const logoUrl = settings?.logoUrl || Logo;
     const primaryColor = settings?.primaryColor || 'var(--primary)';
+    const [servicedCities, setServicedCities] = useState([]);
+
+    useEffect(() => {
+        customerApi.getServicedCities()
+            .then((res) => {
+                const citiesList = res.data?.results?.cities || res.data?.result?.cities || res.data?.cities || [];
+                if (Array.isArray(citiesList) && citiesList.length > 0) {
+                    setServicedCities(citiesList);
+                }
+            })
+            .catch((err) => {
+                console.error("Failed to load serviced cities:", err);
+            });
+    }, []);
 
     return (
         <footer className="relative bg-[#051108] pt-20 pb-10 mt-20 text-slate-300 md:bg-gradient-to-br md:from-brand-700 md:via-brand-800 md:to-brand-900 md:pt-32 md:pb-16 md:mt-32 overflow-hidden">
@@ -95,7 +110,26 @@ const Footer = () => {
                     </div>
                 </div>
 
-                <div className="border-t border-white/10 mt-12 pt-8 text-center text-sm md:flex md:justify-between md:text-left md:mt-24 md:pt-12">
+                {/* Services in Cities Section */}
+                <div className="border-t border-white/10 mt-10 pt-6">
+                    <h3 className="text-white font-bold text-xs uppercase tracking-widest mb-3 md:text-sm flex items-center gap-2">
+                        <MapPin size={16} className="text-emerald-400" />
+                        Services in Cities
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                        {(servicedCities.length > 0 ? servicedCities : ['Indore', 'Udaipur']).map((city, idx) => (
+                            <span
+                                key={idx}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-full border border-white/10 transition-all cursor-pointer hover:border-white/30"
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                {city}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="border-t border-white/10 mt-8 pt-6 text-center text-sm md:flex md:justify-between md:text-left md:mt-16 md:pt-8">
                     <p className="md:text-base text-white/60">&copy; {new Date().getFullYear()} {settings?.appName || 'App'}. All rights reserved.</p>
                     <div className="flex gap-6 justify-center md:justify-end mt-4 md:mt-0 md:gap-12">
                         <a href="#" className="hover:text-brand-300 md:text-base text-white/60 transition-all">Privacy Policy</a>

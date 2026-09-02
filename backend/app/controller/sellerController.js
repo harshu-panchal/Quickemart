@@ -256,14 +256,15 @@ export const updateSellerProfile = async (req, res) => {
       console.warn("[Seller] Name cache invalidation failed:", err.message);
     });
 
-    if (isActive !== undefined || timingChanged || radius !== undefined || (lat !== undefined && lng !== undefined)) {
+    if (isActive !== undefined || timingChanged || radius !== undefined || (lat !== undefined && lng !== undefined) || city !== undefined || address !== undefined) {
       Promise.all([
         invalidate(buildKey("sellers", "nearby", "*")),
         invalidate(buildKey("catalog", "productList", "*")),
         invalidate(buildKey("experience", "public", "*")),
         invalidate(buildKey("offersections", "public", "*")),
+        invalidate(buildKey("public", "servicedCities")),
       ]).catch((err) => {
-        console.warn("[Seller] Nearby/catalog/homepage cache invalidation failed:", err.message);
+        console.warn("[Seller] Nearby/catalog/homepage/cities cache invalidation failed:", err.message);
       });
     }
 
