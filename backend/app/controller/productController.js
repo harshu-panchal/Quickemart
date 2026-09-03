@@ -267,9 +267,26 @@ export const getProducts = async (req, res) => {
     const finalCategoryId = category || categoryId;
     const finalSubcategoryId = subcategory || subcategoryId;
 
-    if (finalHeaderId && finalHeaderId !== "all") query.headerId = finalHeaderId;
-    if (finalCategoryId && finalCategoryId !== "all") query.categoryId = finalCategoryId;
-    if (finalSubcategoryId && finalSubcategoryId !== "all") query.subcategoryId = finalSubcategoryId;
+    const providedLevels = [finalHeaderId, finalCategoryId, finalSubcategoryId].filter(
+      (v) => v && v !== "all",
+    );
+
+    if (providedLevels.length > 1) {
+      // Multiple distinct levels explicitly provided together -> exact AND match
+      // (used by admin-style filtering where header/category/subcategory are all known).
+      if (finalHeaderId && finalHeaderId !== "all") query.headerId = finalHeaderId;
+      if (finalCategoryId && finalCategoryId !== "all") query.categoryId = finalCategoryId;
+      if (finalSubcategoryId && finalSubcategoryId !== "all") query.subcategoryId = finalSubcategoryId;
+    } else if (providedLevels.length === 1) {
+      // A single, level-ambiguous category id (e.g. from a customer nav link) -> match it
+      // against whichever hierarchy field the product was actually assigned to.
+      const singleId = providedLevels[0];
+      query.$or = [
+        { headerId: singleId },
+        { categoryId: singleId },
+        { subcategoryId: singleId },
+      ];
+    }
 
     const requestedSellerIds = parseSellerIdFilters({ sellerId, sellerIds });
     const coords = parseCustomerCoordinates({ lat, lng });
@@ -379,9 +396,13 @@ export const getProducts = async (req, res) => {
       let masterProducts = [];
       try {
         const masterQuery = { status: { $ne: 'deleted' } };
-        if (query.headerId) masterQuery.headerId = query.headerId;
-        if (query.categoryId) masterQuery.categoryId = query.categoryId;
-        if (query.subcategoryId) masterQuery.subcategoryId = query.subcategoryId;
+        if (query.$or) {
+          masterQuery.$or = query.$or;
+        } else {
+          if (query.headerId) masterQuery.headerId = query.headerId;
+          if (query.categoryId) masterQuery.categoryId = query.categoryId;
+          if (query.subcategoryId) masterQuery.subcategoryId = query.subcategoryId;
+        }
         if (query.name) masterQuery.name = query.name;
         if (query.$text) masterQuery.$text = query.$text;
 

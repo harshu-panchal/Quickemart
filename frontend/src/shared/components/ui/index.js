@@ -26,4 +26,5 @@ export { default as PageHeader } from './PageHeader';
 export { default as Pagination } from './Pagination';
 export { default as StatCard } from './StatCard';
 export { default as StatusBadge } from './StatusBadge';
+export { default as ExportDateModal } from './ExportDateModal';
 export { ToastProvider, useToast } from './Toast';

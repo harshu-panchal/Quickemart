@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import {
@@ -9,6 +10,7 @@ import {
     Search,
     Filter,
     Plus,
+    Download,
     MoreVertical,
     Phone,
     MapPin,
@@ -28,6 +30,8 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import Pagination from '@shared/components/ui/Pagination';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { adminApi } from '../services/adminApi';
 
 const ActiveDeliveryBoys = () => {
@@ -86,6 +90,91 @@ const ActiveDeliveryBoys = () => {
             toast.error('Failed to fetch delivery partners');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
+        setIsExportingExcel(true);
+        const toastId = toast.loading("Generating Excel export for delivery partners...");
+        try {
+            const params = { page: 1, limit: 10000 };
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+            if (statusFilter !== 'all') params.status = statusFilter;
+
+            const response = await adminApi.getDeliveryPartners(params);
+            const payload = response.data.result || {};
+            const rawData = Array.isArray(payload.items) ? payload.items : (response.data.results || response.data.result || []);
+
+            const data = filterRecordsByDateRange(rawData, preset, customFrom, customTo, ['createdAt', 'createdDate', 'joiningDate']);
+
+            if (!data || data.length === 0) {
+                toast.dismiss(toastId);
+                toast.error("No delivery partners found matching the date range");
+                setIsExportingExcel(false);
+                setIsExportModalOpen(false);
+                return;
+            }
+
+            const excelRows = data.map((r) => {
+                const assignedCount = Number(r.ordersAssigned || r.totalOrders || 0);
+                const deliveredCount = Number(r.deliveredOrders || r.totalDelivered || 0);
+                const cancelledCount = Number(r.cancelledOrders || 0);
+                const failedCount = Number(r.failedDeliveries || 0);
+                const codAmount = Number(r.codCollected || r.totalCod || 0);
+                const distanceKm = r.totalDistanceKm || r.totalDistance || 0;
+                const joinDate = r.createdAt 
+                    ? new Date(r.createdAt).toLocaleDateString("en-GB") 
+                    : "N/A";
+                const driverStatus = r.isOnline 
+                    ? "Online / Available" 
+                    : (r.isVerified ? "Offline" : "Pending Review");
+
+                return {
+                    "Driver ID": r._id || r.id || "N/A",
+                    "Driver Name": r.name || "N/A",
+                    "Mobile": r.phone || "N/A",
+                    "Vehicle Number": r.vehicleNumber || "N/A",
+                    "Vehicle Type": (r.vehicleType || "N/A").toUpperCase(),
+                    "Area": r.currentArea || r.address || "N/A",
+                    "Joining Date": joinDate,
+                    "Orders Assigned": assignedCount,
+                    "Delivered": deliveredCount,
+                    "Cancelled": cancelledCount,
+                    "Failed Deliveries": failedCount,
+                    "COD Collected": `₹${codAmount}`,
+                    "Total Distance": `${distanceKm} km`,
+                    "Average Delivery Time": r.avgDeliveryTime || "N/A",
+                    "Rating": r.rating || 4.5,
+                    "Driver Status": driverStatus,
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+            });
+            worksheet['!cols'] = columnWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Delivery Partners");
+
+            const dateStr = new Date().toISOString().split("T")[0];
+            const fileName = `Active_Delivery_Partners_${dateStr}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+
+            toast.dismiss(toastId);
+            toast.success(`Exported ${excelRows.length} delivery partners to Excel successfully!`);
+            setIsExportModalOpen(false);
+        } catch (error) {
+            console.error("Export Delivery Partners Error:", error);
+            toast.dismiss(toastId);
+            toast.error("Failed to export delivery partners to Excel");
+        } finally {
+            setIsExportingExcel(false);
         }
     };
 
@@ -200,13 +289,23 @@ return (
                 </h1>
                 <p className="ds-description mt-1">Manage all your active delivery partners here.</p>
             </div>
-            <button
-                onClick={() => setIsOnboardModalOpen(true)}
-                className="flex items-center space-x-2 bg-slate-900 text-white px-6 py-3.5 rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-xl hover:shadow-slate-200 active:scale-95 group"
-            >
-                <Plus className="h-4 w-4 group-hover:rotate-90 transition-transform" />
-                <span>ADD NEW RIDER</span>
-            </button>
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={() => setIsExportModalOpen(true)}
+                    disabled={isExportingExcel}
+                    className="flex items-center space-x-2 bg-emerald-600 text-white px-5 py-3.5 rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-xl active:scale-95 disabled:opacity-50"
+                >
+                    <Download className={cn("h-4 w-4", isExportingExcel && "animate-bounce")} />
+                    <span>{isExportingExcel ? "EXPORTING EXCEL..." : "EXPORT EXCEL"}</span>
+                </button>
+                <button
+                    onClick={() => setIsOnboardModalOpen(true)}
+                    className="flex items-center space-x-2 bg-slate-900 text-white px-6 py-3.5 rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-xl hover:shadow-slate-200 active:scale-95 group"
+                >
+                    <Plus className="h-4 w-4 group-hover:rotate-90 transition-transform" />
+                    <span>ADD NEW RIDER</span>
+                </button>
+            </div>
         </div>
 
         {/* Quick Stats Grid */}
@@ -264,6 +363,15 @@ return (
                             </button>
                         ))}
                     </div>
+                    <button
+                        onClick={handleExportExcel}
+                        disabled={isExportingExcel}
+                        title="Export Delivery Partners to Excel"
+                        className="flex items-center gap-2 px-4 py-3.5 bg-emerald-50 ring-1 ring-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        <Download className="h-4 w-4 text-emerald-600" />
+                        <span className="hidden sm:inline">Export Excel</span>
+                    </button>
                     <button className="p-3.5 bg-white ring-1 ring-slate-200 rounded-2xl text-slate-600 hover:text-primary hover:ring-primary/30 transition-all shadow-sm">
                         <Filter className="h-5 w-5" />
                     </button>
@@ -496,7 +604,7 @@ return (
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Submitted Documents</h4>
                                     <div className="grid grid-cols-3 gap-4">
                                         {Object.entries(viewingRider.documents)
-                                            .filter(([_, val]) => val)
+                                            .filter(([, val]) => val)
                                             .map(([key, val]) => {
                                                 const docLabel = key === 'aadhar' ? 'Aadhar Card' : key === 'pan' ? 'PAN Card' : key === 'drivingLicense' ? 'Driving License' : key;
                                                 return (
@@ -692,6 +800,14 @@ return (
                 </div>
             )}
         </AnimatePresence>
+        {/* Export Date Modal */}
+        <ExportDateModal
+            isOpen={isExportModalOpen}
+            onClose={() => setIsExportModalOpen(false)}
+            onConfirmExport={handlePerformExport}
+            isExporting={isExportingExcel}
+            title="Export Delivery Partners Report"
+        />
     </div>
 );
 };

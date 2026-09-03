@@ -47,15 +47,18 @@ const CategoryProductsPage = () => {
                 Number.isFinite(currentLocation?.latitude) &&
                 Number.isFinite(currentLocation?.longitude);
 
-            // Fetch products and categories in parallel instead of sequentially
+            // Always fetch products for the category; only attach lat/lng when we have a
+            // real location so browsing/preview still works before location is set.
             const [prodRes, catRes] = await Promise.all([
-                hasValidLocation
-                    ? customerApi.getProducts({
-                        categoryId: catId,
-                        lat: currentLocation.latitude,
-                        lng: currentLocation.longitude,
-                    })
-                    : Promise.resolve({ data: { success: true, result: { items: [] } } }),
+                customerApi.getProducts(
+                    hasValidLocation
+                        ? {
+                            categoryId: catId,
+                            lat: currentLocation.latitude,
+                            lng: currentLocation.longitude,
+                        }
+                        : { categoryId: catId },
+                ),
                 customerApi.getCategories({ tree: true }),
             ]);
 
@@ -89,17 +92,37 @@ const CategoryProductsPage = () => {
             if (catRes.data.success) {
                 const tree = catRes.data.results || catRes.data.result || [];
                 let currentCat = null;
+                let sidebarChildren = [];
+
+                // catId may point to a header, a category, or a subcategory - resolve it
+                // at whichever level it lives so the page and sidebar populate correctly.
+                resolve:
                 for (const header of tree) {
-                    const found = (header.children || []).find(c => c._id === catId);
-                    if (found) {
-                        currentCat = found;
+                    if (header._id === catId) {
+                        currentCat = header;
+                        sidebarChildren = header.children || [];
                         break;
+                    }
+                    for (const cat of header.children || []) {
+                        if (cat._id === catId) {
+                            currentCat = cat;
+                            sidebarChildren = cat.children || [];
+                            break resolve;
+                        }
+                        for (const sub of cat.children || []) {
+                            if (sub._id === catId) {
+                                currentCat = sub;
+                                // Show sibling subcategories under the same parent category.
+                                sidebarChildren = cat.children || [];
+                                break resolve;
+                            }
+                        }
                     }
                 }
 
                 if (currentCat) {
                     setCategory(currentCat);
-                    const subs = (currentCat.children || []).map(s => ({
+                    const subs = sidebarChildren.map(s => ({
                         id: s._id,
                         name: s.name,
                         icon: s.image || 'https://cdn-icons-png.flaticon.com/128/2321/2321801.png'
@@ -118,6 +141,10 @@ const CategoryProductsPage = () => {
         fetchData();
         setSelectedSubCategory(location.state?.activeSubcategoryId || 'all');
     }, [catId, location.state?.activeSubcategoryId, currentLocation?.latitude, currentLocation?.longitude]);
+
+    const hasValidLocation =
+        Number.isFinite(currentLocation?.latitude) &&
+        Number.isFinite(currentLocation?.longitude);
 
     const safeProducts = Array.isArray(products) ? products : [];
 
@@ -156,27 +183,44 @@ const CategoryProductsPage = () => {
 
             <div className="flex flex-1 relative items-start">
                 {(safeProducts.length === 0 && !isLoading) ? (
-                    <div className="w-full flex-1 py-20 px-8 flex flex-col items-center justify-center text-center">
-                        <div className="w-64 h-64 mb-6">
-                            {noServiceData ? (
-                                <Lottie animationData={noServiceData} loop={true} />
-                            ) : (
-                                <div className="w-64 h-64" />
-                            )}
+                    !hasValidLocation ? (
+                        <div className="w-full flex-1 py-20 px-8 flex flex-col items-center justify-center text-center">
+                            <h3 className="text-2xl font-[1000] text-slate-800 tracking-tighter mb-4 uppercase">
+                                Set Your <span className="text-primary">Location</span>
+                            </h3>
+                            <p className="text-slate-500 font-bold text-sm max-w-[280px] mb-8 leading-relaxed">
+                                Share your location to see products and delivery availability in your area.
+                            </p>
+                            <button
+                                onClick={fetchData}
+                                className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-black/10"
+                            >
+                                Select Location
+                            </button>
                         </div>
-                        <h3 className="text-3xl font-[1000] text-slate-800 tracking-tighter mb-4 uppercase">
-                            Service <span className="text-primary">Unavailable</span>
-                        </h3>
-                        <p className="text-slate-500 font-bold text-sm max-w-[280px] mb-8 leading-relaxed">
-                            {settings?.appName || 'Our service'} is not available in your area yet. We're expanding fast!
-                        </p>
-                        <button 
-                            onClick={fetchData}
-                            className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-black/10"
-                        >
-                            Try Refreshing
-                        </button>
-                    </div>
+                    ) : (
+                        <div className="w-full flex-1 py-20 px-8 flex flex-col items-center justify-center text-center">
+                            <div className="w-64 h-64 mb-6">
+                                {noServiceData ? (
+                                    <Lottie animationData={noServiceData} loop={true} />
+                                ) : (
+                                    <div className="w-64 h-64" />
+                                )}
+                            </div>
+                            <h3 className="text-2xl font-[1000] text-slate-800 tracking-tighter mb-4 uppercase">
+                                No Products Found
+                            </h3>
+                            <p className="text-slate-500 font-bold text-sm max-w-[280px] mb-8 leading-relaxed">
+                                There are no products available in this category right now. Please check back later.
+                            </p>
+                            <button
+                                onClick={fetchData}
+                                className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-black/10"
+                            >
+                                Try Refreshing
+                            </button>
+                        </div>
+                    )
                 ) : (
                     <>
                         {/* Sidebar */}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import PageHeader from '@shared/components/ui/PageHeader';
@@ -20,6 +21,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import Pagination from '@shared/components/ui/Pagination';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { adminApi } from '../services/adminApi';
 import { toast } from 'sonner';
 
@@ -132,56 +135,84 @@ const CustomerManagement = () => {
         });
     }, [customers, searchTerm, filterStatus]);
 
-    const handleExport = async () => {
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
         setIsExporting(true);
+        const toastId = toast.loading("Generating Customer Excel database...");
         try {
-            const { data } = await adminApi.getUsers({ page: 1, limit: 10000 });
+            const params = { page: 1, limit: 10000 };
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+            if (filterStatus !== 'all') params.status = filterStatus;
+
+            const { data } = await adminApi.getUsers(params);
             if (data.success) {
                 const payload = data.result || {};
-                const list = Array.isArray(payload.items) ? payload.items : (data.results || []);
+                const rawList = Array.isArray(payload.items) ? payload.items : (data.results || []);
 
-                if (list.length === 0) {
-                    toast.error("No customers found to export");
+                const list = filterRecordsByDateRange(rawList, preset, customFrom, customTo, ['createdAt', 'createdDate']);
+
+                if (!list || list.length === 0) {
+                    toast.dismiss(toastId);
+                    toast.error("No customers found matching the date range");
+                    setIsExporting(false);
+                    setIsExportModalOpen(false);
                     return;
                 }
 
-                // Build CSV content
-                const csvRows = [];
-                const headers = ["ID", "Name", "Email", "Phone", "Status", "Total Orders", "Total Spent (Rs)", "Joined Date", "Last Order Date"];
-                csvRows.push(headers.join(","));
+                const excelRows = list.map((customer) => {
+                    const stats = customer.stats || {};
+                    const totalOrders = stats.totalOrders != null ? stats.totalOrders : (customer.totalOrders || 0);
+                    const totalSpent = stats.totalSpent != null ? stats.totalSpent : (customer.totalSpent || customer.totalPurchase || 0);
+                    const avgOrderVal = totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0;
+                    const addressObj = customer.address || {};
 
-                list.forEach(customer => {
-                    const row = [
-                        customer.id || customer._id || "",
-                        `"${(customer.name || "").replace(/"/g, '""')}"`,
-                        `"${(customer.email || "").replace(/"/g, '""')}"`,
-                        `"${(customer.phone || "").replace(/"/g, '""')}"`,
-                        customer.status || "active",
-                        customer.totalOrders || 0,
-                        customer.totalSpent || 0,
-                        customer.joinedDate ? new Date(customer.joinedDate).toLocaleDateString() : "N/A",
-                        customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "N/A"
-                    ];
-                    csvRows.push(row.join(","));
+                    return {
+                        "Customer ID": customer._id || customer.id || "N/A",
+                        "Customer Name": customer.name || "N/A",
+                        "Mobile": customer.phone || "N/A",
+                        "Email": customer.email || "N/A",
+                        "City": addressObj.city || customer.city || "N/A",
+                        "Area": addressObj.area || customer.area || "N/A",
+                        "Registration Date": customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('en-GB') : "N/A",
+                        "Total Orders": totalOrders,
+                        "Delivered": stats.deliveredOrders != null ? stats.deliveredOrders : (customer.deliveredCount || 0),
+                        "Cancelled": stats.cancelledOrders != null ? stats.cancelledOrders : (customer.cancelledCount || 0),
+                        "Total Purchase": totalSpent,
+                        "Average Order Value": avgOrderVal,
+                        "Wallet Balance": customer.walletBalance || 0,
+                        "Refund Amount": stats.totalRefunded || 0,
+                        "Coupon Used": stats.couponsUsedCount || 0,
+                        "Last Order Date": customer.lastOrderDate || customer.lastOrderAt ? new Date(customer.lastOrderDate || customer.lastOrderAt).toLocaleDateString('en-GB') : "Never",
+                        "Rating": customer.rating != null ? customer.rating : "N/A",
+                        "Customer Status": customer.status ? String(customer.status).toUpperCase() : (customer.isActive === false ? "INACTIVE" : "ACTIVE"),
+                    };
                 });
 
-                const csvContent = "\uFEFF" + csvRows.join("\n");
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.setAttribute("href", url);
-                link.setAttribute("download", `customers_export_${new Date().toISOString().split('T')[0]}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                const worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = columnWidths;
 
-                toast.success('Customer database exported successfully!');
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Customers");
+
+                const dateStr = new Date().toISOString().split('T')[0];
+                const fileName = `Customer_Database_Report_${dateStr}.xlsx`;
+                XLSX.writeFile(workbook, fileName);
+
+                toast.dismiss(toastId);
+                toast.success(`Exported ${excelRows.length} customers to Excel successfully!`);
+                setIsExportModalOpen(false);
             } else {
+                toast.dismiss(toastId);
                 toast.error("Failed to export customers");
             }
         } catch (error) {
             console.error("Export error:", error);
+            toast.dismiss(toastId);
             toast.error("An error occurred during export");
         } finally {
             setIsExporting(false);
@@ -214,12 +245,12 @@ const CustomerManagement = () => {
                 actions={
                     <>
                         <button
-                            onClick={handleExport}
+                            onClick={() => setIsExportModalOpen(true)}
                             disabled={isExporting}
-                            className="ds-btn ds-btn-md bg-white ring-1 ring-gray-200 text-gray-700 hover:bg-gray-50"
+                            className="ds-btn ds-btn-md bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-md disabled:opacity-50"
                         >
-                            {isExporting ? <RotateCw className="ds-icon-sm animate-spin" /> : <Download className="ds-icon-sm" />}
-                            {isExporting ? 'EXPORTING...' : 'EXPORT'}
+                            {isExporting ? <RotateCw className="ds-icon-sm animate-spin text-white" /> : <Download className="ds-icon-sm text-white" />}
+                            {isExporting ? 'EXPORTING EXCEL...' : 'EXPORT EXCEL'}
                         </button>
                         <button
                             onClick={() => setIsAddModalOpen(true)}
@@ -485,6 +516,14 @@ const CustomerManagement = () => {
                     </div>
                 </div>
             )}
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExporting}
+                title="Export Customers Excel Database"
+            />
         </div>
     );
 };

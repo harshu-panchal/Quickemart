@@ -1,5 +1,6 @@
 // Ultimate FAQ Management System - Functional Version
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
@@ -8,6 +9,7 @@ import {
     Plus,
     Search,
     Filter,
+    Download,
     MoreVertical,
     Edit3,
     Trash2,
@@ -31,6 +33,8 @@ import { useToast } from '@shared/components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Pagination from '@shared/components/ui/Pagination';
 import { adminApi } from '../services/adminApi';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { useEffect } from 'react';
 
 const FAQManagement = () => {
@@ -180,6 +184,60 @@ const FAQManagement = () => {
         }
     };
 
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
+        try {
+            setIsExportingExcel(true);
+            showToast('Generating FAQs Excel report...', 'info');
+
+            const res = await adminApi.getFAQs({ page: 1, limit: 10000 });
+            const rawList = res.data?.result?.items || res.data?.results || faqs || [];
+
+            const list = filterRecordsByDateRange(rawList, preset, customFrom, customTo, ['createdAt', 'updatedAt']);
+
+            if (!list || list.length === 0) {
+                showToast('No FAQs found matching the selected date range', 'error');
+                setIsExportingExcel(false);
+                setIsExportModalOpen(false);
+                return;
+            }
+
+            const excelRows = list.map((faq, index) => ({
+                "FAQ ID": faq._id || `FAQ-${index + 1}`,
+                "Category": faq.category || "General",
+                "Question": faq.question || "N/A",
+                "Answer": faq.answer || "N/A",
+                "Language": faq.language || "English",
+                "Display Order": faq.displayOrder != null ? faq.displayOrder : (faq.order || index + 1),
+                "Status": (faq.status || "PUBLISHED").toUpperCase(),
+                "Created Date": faq.createdAt ? new Date(faq.createdAt).toLocaleDateString('en-GB') : "N/A",
+                "Updated Date": faq.updatedAt ? new Date(faq.updatedAt).toLocaleDateString('en-GB') : "N/A",
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
+            });
+            worksheet['!cols'] = colWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "FAQs");
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(workbook, `FAQ_List_Report_${dateStr}.xlsx`);
+            showToast(`Exported ${excelRows.length} FAQs to Excel successfully!`, 'success');
+            setIsExportModalOpen(false);
+        } catch (error) {
+            console.error("Export FAQ Error:", error);
+            showToast("Failed to export FAQs", 'error');
+        } finally {
+            setIsExportingExcel(false);
+        }
+    };
+
     const handleAddCategory = () => {
         if (!newCategoryName.trim()) return;
         const colors = ['sky', 'emerald', 'amber', 'rose', 'indigo', 'pink', 'violet'];
@@ -208,6 +266,14 @@ const FAQManagement = () => {
                     <p className="ds-description mt-1">Manage categories and help customers with common questions.</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsExportModalOpen(true)}
+                        disabled={isExportingExcel}
+                        className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
+                    >
+                        <Download className="h-4 w-4 text-pink-600" />
+                        {isExportingExcel ? 'EXPORTING...' : 'DOWNLOAD EXCEL'}
+                    </button>
                     <button
                         onClick={() => setIsCategoryModalOpen(true)}
                         className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm"
@@ -539,6 +605,14 @@ const FAQManagement = () => {
                     <button onClick={handleAddCategory} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all">GENERATE NEW CATEGORY</button>
                 </div>
             </Modal>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExportingExcel}
+                title="Export FAQ List Report"
+            />
         </div>
     );
 };

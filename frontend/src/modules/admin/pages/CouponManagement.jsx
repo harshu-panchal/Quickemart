@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
@@ -16,11 +17,14 @@ import {
     HiOutlineClock,
     HiOutlineCheckCircle,
     HiOutlineXMark,
-    HiOutlineEye
+    HiOutlineEye,
+    HiOutlineArrowDownTray
 } from 'react-icons/hi2';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi } from '../services/adminApi';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 
 const CouponManagement = () => {
     const { showToast } = useToast();
@@ -178,6 +182,87 @@ const CouponManagement = () => {
         }
     };
 
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
+        try {
+            setIsExportingExcel(true);
+            showToast('Generating Marketing Tools Excel...', 'info');
+
+            const res = await adminApi.getCoupons({ limit: 10000 });
+            const rawList = res.data?.result || res.data?.results || coupons || [];
+
+            const list = filterRecordsByDateRange(rawList, preset, customFrom, customTo, ['createdAt', 'validFrom']);
+
+            if (!list || list.length === 0) {
+                showToast('No marketing campaigns found matching the date range', 'error');
+                setIsExportingExcel(false);
+                setIsExportModalOpen(false);
+                return;
+            }
+
+            const excelRows = list.map((c) => {
+                const discountStr = c.discountType === 'percentage'
+                    ? `${c.discountValue}%`
+                    : `₹${c.discountValue}`;
+                
+                const isExpired = c.validTill && new Date(c.validTill) < new Date();
+                const statusStr = c.status ? String(c.status).toUpperCase() : (isExpired ? "EXPIRED" : "ACTIVE");
+
+                const usageLim = c.usageLimit != null ? c.usageLimit : "Unlimited";
+                const used = c.usedCount || 0;
+                const remUsage = c.usageLimit != null ? Math.max(0, c.usageLimit - used) : "Unlimited";
+
+                const eligibleCust = c.couponType ? String(c.couponType).replace('_', ' ').toUpperCase() : "ALL CUSTOMERS";
+                const custType = (c.couponType === 'first_order' || c.perUserLimit === 1) ? "NEW CUSTOMERS / FIRST ORDER" : "ALL CUSTOMERS";
+
+                const stats = c.stats || {};
+
+                return {
+                    "Campaign ID": c._id || c.code || "N/A",
+                    "Campaign Name": c.title || c.code || "N/A",
+                    "Coupon Code": c.code || "N/A",
+                    "Offer Type": (c.discountType || "PERCENTAGE").toUpperCase(),
+                    "Discount": discountStr,
+                    "Minimum Order Value": c.minOrderValue || 0,
+                    "Maximum Discount": c.maxDiscount != null ? c.maxDiscount : "N/A",
+                    "Start Date": c.validFrom ? new Date(c.validFrom).toLocaleDateString('en-GB') : "N/A",
+                    "End Date": c.validTill ? new Date(c.validTill).toLocaleDateString('en-GB') : "N/A",
+                    "Usage Limit": usageLim,
+                    "Used Count": used,
+                    "Remaining Usage": remUsage,
+                    "Eligible Customers": eligibleCust,
+                    "New/Existing Customer": custType,
+                    "Status": statusStr,
+                    "Total Discount Given": stats.totalDiscountGiven || 0,
+                    "Total Orders": stats.totalOrders || used,
+                    "Total Sale": stats.totalSalesGenerated || 0,
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+            });
+            worksheet['!cols'] = colWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Campaigns");
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(workbook, `Marketing_Campaigns_Report_${dateStr}.xlsx`);
+            showToast(`Exported ${excelRows.length} marketing campaigns to Excel successfully!`, 'success');
+            setIsExportModalOpen(false);
+        } catch (error) {
+            console.error("Export Marketing Campaigns Error:", error);
+            showToast("Failed to export marketing campaigns", 'error');
+        } finally {
+            setIsExportingExcel(false);
+        }
+    };
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
             {/* Header Area */}
@@ -189,13 +274,23 @@ const CouponManagement = () => {
                     </h1>
                     <p className="ds-description mt-1">Design, deploy, and track high-conversion discount campaigns.</p>
                 </div>
-                <button
-                    onClick={() => handleOpenModal()}
-                    className="flex items-center gap-2 px-6 py-3.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all"
-                >
-                    <HiOutlinePlus className="h-5 w-5" />
-                    CREATE NEW PROMO
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsExportModalOpen(true)}
+                        disabled={isExportingExcel}
+                        className="flex items-center gap-2 px-5 py-3.5 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50"
+                    >
+                        <HiOutlineArrowDownTray className="h-5 w-5 text-brand-600" />
+                        {isExportingExcel ? 'EXPORTING...' : 'DOWNLOAD EXCEL'}
+                    </button>
+                    <button
+                        onClick={() => handleOpenModal()}
+                        className="flex items-center gap-2 px-6 py-3.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all"
+                    >
+                        <HiOutlinePlus className="h-5 w-5" />
+                        CREATE NEW PROMO
+                    </button>
+                </div>
             </div>
 
             {/* Stats Grid */}
@@ -618,6 +713,14 @@ const CouponManagement = () => {
                     </div>
                 </form>
             </Modal>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExportingExcel}
+                title="Export Marketing Campaigns Report"
+            />
         </div>
     );
 };

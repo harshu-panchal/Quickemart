@@ -3,6 +3,8 @@ import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import { adminApi } from '../services/adminApi';
 import { toast } from 'sonner';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import * as XLSX from 'xlsx';
 import {
     HiOutlinePlus,
@@ -177,7 +179,9 @@ const ProductManagement = () => {
         }
     };
 
-    const handleExportExcel = async () => {
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
         setIsExporting(true);
         const toastId = toast.loading('Preparing Excel download...');
         try {
@@ -187,14 +191,14 @@ const ProductManagement = () => {
             if (filterStatus !== 'all') params.status = filterStatus;
             if (sortBy) params.sort = sortBy;
 
-            let exportList = [];
+            let rawExportList = [];
             let fileName = '';
             let sheetName = '';
 
             if (viewMode === 'catalog') {
                 const response = await adminApi.getMasterProducts(params);
                 if (response.data?.success) {
-                    exportList = response.data.results || response.data.result || [];
+                    rawExportList = response.data.results || response.data.result || [];
                 }
                 fileName = `Master_Catalog_Products_${new Date().toISOString().split('T')[0]}.xlsx`;
                 sheetName = 'Master Catalog';
@@ -205,16 +209,19 @@ const ProductManagement = () => {
                 const response = await adminApi.getProductModerationList(params);
                 if (response.data?.success) {
                     const payload = response.data.result || {};
-                    exportList = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
+                    rawExportList = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
                 }
                 fileName = `Seller_Listings_Products_${new Date().toISOString().split('T')[0]}.xlsx`;
                 sheetName = 'Seller Listings';
             }
 
+            const exportList = filterRecordsByDateRange(rawExportList, preset, customFrom, customTo, ['createdAt', 'updatedAt']);
+
             if (!exportList || exportList.length === 0) {
                 toast.dismiss(toastId);
-                toast.error('No products available to export');
+                toast.error('No products found matching the selected date range');
                 setIsExporting(false);
+                setIsExportModalOpen(false);
                 return;
             }
 
@@ -227,29 +234,43 @@ const ProductManagement = () => {
                         .join(', ');
                 }
                 if (!variantString) {
-                    variantString = item.unit || item.packSize || 'Default';
+                    variantString = item.variantName || item.packSize || item.unit || 'Default';
                 }
 
-                if (viewMode === 'catalog') {
-                    return {
-                        'Brand': item.brand || 'N/A',
-                        'Product Name': item.name || '',
-                        'Variant': variantString,
-                        'Category': item.categoryId?.name || item.headerId?.name || 'N/A',
-                        'Subcategory': item.subcategoryId?.name || 'N/A',
-                        'Status': item.status ? String(item.status).toUpperCase() : 'N/A'
-                    };
-                } else {
-                    return {
-                        'Brand': item.brand || item.sellerId?.shopName || 'N/A',
-                        'Product Name': item.name || '',
-                        'Variant': variantString,
-                        'Seller': item.sellerId?.shopName || item.sellerId?.name || 'Admin',
-                        'Category': item.categoryId?.name || item.headerId?.name || 'N/A',
-                        'Subcategory': item.subcategoryId?.name || 'N/A',
-                        'Status': item.approvalStatus ? String(item.approvalStatus).toUpperCase() : 'N/A'
-                    };
+                let specsString = '';
+                if (Array.isArray(item.specifications) && item.specifications.length > 0) {
+                    specsString = item.specifications
+                        .map((s) => {
+                            if (typeof s === 'string') return s;
+                            if (s && s.key) return `${s.key}: ${s.value || ''}`;
+                            return '';
+                        })
+                        .filter(Boolean)
+                        .join(' | ');
+                } else if (typeof item.specifications === 'string') {
+                    specsString = item.specifications;
                 }
+
+                let searchTagsString = '';
+                if (Array.isArray(item.searchTags)) {
+                    searchTagsString = item.searchTags.join(', ');
+                } else if (typeof item.searchTags === 'string') {
+                    searchTagsString = item.searchTags;
+                }
+
+                return {
+                    'Header Category': item.headerId?.name || item.headerCategory || '',
+                    'Main Category': item.categoryId?.name || item.mainCategory || '',
+                    'Sub Category': item.subcategoryId?.name || item.subCategory || '',
+                    'Brand': item.brand || item.brandName || '',
+                    'Product Name': item.name || item.title || '',
+                    'Variant Name': variantString,
+                    'Unit': item.unit || '',
+                    'Pack Size': item.packSize || '',
+                    'Product Description': item.description || item.productDescription || '',
+                    'Specifications': specsString,
+                    'Search Tags': searchTagsString
+                };
             });
 
             const worksheet = XLSX.utils.json_to_sheet(excelRows);
@@ -268,6 +289,7 @@ const ProductManagement = () => {
 
             toast.dismiss(toastId);
             toast.success(`Exported ${excelRows.length} products to Excel successfully!`);
+            setIsExportModalOpen(false);
         } catch (error) {
             console.error('Excel Export Error:', error);
             toast.dismiss(toastId);
@@ -771,7 +793,7 @@ const ProductManagement = () => {
                         BULK LISTING
                     </button>
                     <button
-                        onClick={handleExportExcel}
+                        onClick={() => setIsExportModalOpen(true)}
                         disabled={isExporting}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
                     >
@@ -1798,6 +1820,15 @@ const ProductManagement = () => {
                 isOpen={isBulkImportModalOpen}
                 onClose={() => setIsBulkImportModalOpen(false)}
                 onSuccess={() => fetchProducts(1)}
+            />
+
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExporting}
+                title="Export Products Catalog Excel"
             />
 
         </div>

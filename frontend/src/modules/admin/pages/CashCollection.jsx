@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import Pagination from '@shared/components/ui/Pagination';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { adminApi } from '../services/adminApi';
 import { toast } from 'sonner';
 import Card from '@shared/components/ui/Card';
@@ -170,6 +173,92 @@ const CashCollection = () => {
         }
     };
 
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
+        setIsExportingExcel(true);
+        const toastId = toast.loading("Generating Cash Collection Ledger Excel...");
+        try {
+            const commonParams = { page: 1, limit: 10000 };
+            if (searchTerm.trim()) commonParams.search = searchTerm.trim();
+
+            const [cashRes, historyRes] = await Promise.all([
+                adminApi.getDeliveryCashBalances(commonParams),
+                adminApi.getCashSettlementHistory(commonParams)
+            ]);
+
+            const liveRiders = cashRes.data?.success
+                ? (Array.isArray(cashRes.data.result?.items) ? cashRes.data.result.items : (cashRes.data.result?.riders || []))
+                : ridersCashData;
+
+            const logsList = historyRes.data?.success
+                ? (Array.isArray(historyRes.data.result?.items) ? historyRes.data.result.items : (historyRes.data.results || historyRes.data.result || []))
+                : historyData;
+
+            const rawItems = logsList && logsList.length > 0 ? logsList : liveRiders;
+            const itemsToExport = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['date', 'createdAt', 'settledAt', 'submissionDate']);
+
+            if (!itemsToExport || itemsToExport.length === 0) {
+                toast.dismiss(toastId);
+                toast.error("No cash collection data found matching the date range");
+                setIsExportingExcel(false);
+                setIsExportModalOpen(false);
+                return;
+            }
+
+            const excelRows = itemsToExport.map((item) => {
+                const orderAmt = Number(item.orderAmount || item.amount || 0);
+                const collectedAmt = Number(item.cashCollected || item.amount || item.currentCash || 0);
+                const pendingAmt = Number(item.cashPending || Math.max(0, orderAmt - collectedAmt));
+                const diff = Number(item.difference != null ? item.difference : (collectedAmt - orderAmt));
+                const isSubmitted = (item.status === 'SETTLED' || item.status === 'processed' || item.isSubmitted) ? "YES" : "NO";
+                const subDate = item.settledAt || item.submissionDate || item.date || item.lastSettlement;
+
+                return {
+                    "Collection ID": item.id || item._id || "N/A",
+                    "Order ID": item.orderId?.orderId || item.orderId || "N/A",
+                    "Customer ID": item.customer?._id || item.customerId || item.orderId?.customer || "N/A",
+                    "Customer Name": item.customer?.name || item.customerName || item.orderId?.customer?.name || "N/A",
+                    "Driver ID": item.rider?._id || item.driverId || item.riderId || item.id || "N/A",
+                    "Driver Name": item.rider || item.riderName || item.driverName || item.name || "N/A",
+                    "Order Amount": orderAmt,
+                    "Cash Collected": collectedAmt,
+                    "Cash Pending": pendingAmt,
+                    "Collection Date/Time": item.date ? new Date(item.date).toLocaleString("en-GB") : (item.createdAt ? new Date(item.createdAt).toLocaleString("en-GB") : "N/A"),
+                    "Submitted to Company": isSubmitted,
+                    "Submission Date": (subDate && subDate !== 'Never') ? new Date(subDate).toLocaleString("en-GB") : "N/A",
+                    "Difference": diff,
+                    "Status": (item.status || "PENDING").replace('_', ' ').toUpperCase(),
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+            });
+            worksheet['!cols'] = colWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Cash Collection");
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            const fileName = `Cash_Collection_Report_${dateStr}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+
+            toast.dismiss(toastId);
+            toast.success(`Exported ${excelRows.length} cash collection records to Excel successfully!`);
+            setIsExportModalOpen(false);
+        } catch (error) {
+            console.error("Export Ledger Error:", error);
+            toast.dismiss(toastId);
+            toast.error("Failed to export cash collection ledger");
+        } finally {
+            setIsExportingExcel(false);
+        }
+    };
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12 pt-6 relative z-10">
             {/* Header Section */}
@@ -184,9 +273,13 @@ const CashCollection = () => {
                     <p className="ds-description mt-1">Manage physical cash collected by delivery partners and track settlements.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
-                        <Download className="h-4 w-4" />
-                        EXPORT LEDGER
+                    <button
+                        onClick={() => setIsExportModalOpen(true)}
+                        disabled={isExportingExcel}
+                        className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                    >
+                        <Download className={cn("h-4 w-4", isExportingExcel && "animate-bounce")} />
+                        <span>{isExportingExcel ? "EXPORTING LEDGER..." : "EXPORT LEDGER"}</span>
                     </button>
                     <button className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95 shadow-slate-200">
                         <CheckCircle2 className="h-4 w-4 text-slate-100" />
@@ -556,6 +649,14 @@ const CashCollection = () => {
                     </div>
                 )}
             </Modal>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExportingExcel}
+                title="Export Cash Collection Report"
+            />
         </div>
     );
 };

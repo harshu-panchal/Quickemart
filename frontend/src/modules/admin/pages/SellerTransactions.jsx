@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { adminApi } from '../services/adminApi';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -139,10 +142,12 @@ const SellerTransactions = () => {
         });
     }, [transactions, searchTerm, filterStatus, filterType, selectedSeller]);
 
-    const handleExport = async () => {
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
         try {
             setIsExporting(true);
-            toast.loading("Generating Master Ledger...", { id: "export-ledger" });
+            toast.loading("Generating Seller Payments Excel...", { id: "export-ledger" });
             
             const params = { page: 1, limit: 5000 };
             if (searchTerm.trim()) params.search = searchTerm.trim();
@@ -154,50 +159,62 @@ const SellerTransactions = () => {
             if (!res.data.success) throw new Error("Failed to fetch data");
             
             const payload = res.data.result || {};
-            const items = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
+            const rawItems = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
             
+            const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'date']);
+
             if (!items.length) {
-                toast.error("No transactions found to export", { id: "export-ledger" });
+                toast.error("No transactions found matching the date range", { id: "export-ledger" });
+                setIsExporting(false);
+                setIsExportModalOpen(false);
                 return;
             }
 
-            const csvRows = [];
-            csvRows.push(['Date', 'Time', 'Shop Name', 'Transaction Type', 'Amount (INR)', 'Commission (INR)', 'Net Payable (INR)', 'Status', 'Reference ID', 'Order ID', 'Payment Method'].join(','));
-            
-            items.forEach(t => {
-                const dt = new Date(t.createdAt);
-                const date = dt.toLocaleDateString('en-IN');
-                const time = dt.toLocaleTimeString('en-IN');
-                const seller = `"${(t.user?.shopName || t.user?.name || 'Unknown').replace(/"/g, '""')}"`;
-                
-                const rawType = t.type || '';
-                const type = rawType === 'Seller Earning' ? 'Sale' : (rawType === 'Withdrawal' || rawType === 'Payout') ? 'Payout' : rawType;
-                
-                const amount = t.amount || 0;
-                const commission = t.order?.pricing?.platformFee || 0;
-                const netPayable = amount;
-                
-                const status = (t.status || 'Unknown').toUpperCase();
-                const ref = t.reference || t._id || 'N/A';
-                const orderId = t.order?.orderId || 'N/A';
-                const method = t.paymentMethod || 'Wallet';
-                
-                csvRows.push([date, time, seller, type, amount, commission, netPayable, status, ref, orderId, method].join(','));
+            const excelRows = items.map((t) => {
+                const userObj = t.user || {};
+                const pricing = t.order?.pricing || {};
+                const isRefund = (t.type || '').toLowerCase() === 'refund';
+                const orderAmount = pricing.total || Math.abs(t.amount || 0);
+                const commission = pricing.platformFee || 0;
+                const gstTax = pricing.tax || 0;
+                const refundAmt = isRefund ? Math.abs(t.amount || 0) : 0;
+                const netPayable = Number(t.amount || 0);
+
+                return {
+                    "Payment ID": t.reference || t._id || "N/A",
+                    "Seller ID": userObj._id || userObj.sellerId || t.sellerId || "N/A",
+                    "Seller Name": userObj.shopName || userObj.name || "N/A",
+                    "Order ID": t.order?.orderId || "N/A",
+                    "Order Amount": orderAmount,
+                    "Commission": commission,
+                    "GST/TDS/Other Adjustments": gstTax,
+                    "Refund": refundAmt,
+                    "Net Payable": netPayable,
+                    "Payment Status": (t.status || "PENDING").toUpperCase(),
+                    "Payment Date": t.createdAt ? new Date(t.createdAt).toLocaleString("en-GB") : "N/A",
+                    "Transaction/UTR Number": t.reference || t.paymentMethod || "N/A",
+                };
             });
 
-            const csvString = csvRows.join('\n');
-            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `master_ledger_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+            });
+            worksheet['!cols'] = columnWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Seller Payments");
+
+            const dateStr = new Date().toISOString().split("T")[0];
+            const fileName = `Seller_Payments_Report_${dateStr}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
             
-            toast.success("Master Ledger downloaded successfully", { id: "export-ledger" });
+            toast.success(`Exported ${excelRows.length} seller payments to Excel successfully!`, { id: "export-ledger" });
+            setIsExportModalOpen(false);
         } catch (error) {
             console.error("Export error:", error);
-            toast.error("Failed to generate ledger", { id: "export-ledger" });
+            toast.error("Failed to generate seller payments report", { id: "export-ledger" });
         } finally {
             setIsExporting(false);
         }
@@ -232,7 +249,7 @@ const SellerTransactions = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={handleExport}
+                        onClick={() => setIsExportModalOpen(true)}
                         disabled={isExporting}
                         className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
                     >
@@ -646,6 +663,14 @@ const SellerTransactions = () => {
                     </div>
                 )}
             </Modal>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExporting}
+                title="Export Seller Transactions Master Ledger"
+            />
         </div>
     );
 };

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import Pagination from "@shared/components/ui/Pagination";
@@ -24,8 +25,11 @@ import {
   HiOutlineEyeSlash,
   HiOutlineCloudArrowUp,
   HiOutlineCheckCircle,
+  HiOutlineArrowDownTray,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
@@ -592,93 +596,105 @@ const ActiveSellers = () => {
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [showAddSeller, setShowAddSeller] = useState(false);
   const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  const handleDownloadReport = async () => {
+  const handlePerformExport = async ({ preset, customFrom, customTo }) => {
     setIsDownloadingReport(true);
+    const toastId = toast.loading("Generating Excel report for sellers...");
     try {
-      // Fetch both active and pending sellers concurrently
       const [activeRes, pendingRes] = await Promise.all([
-        adminApi.getActiveSellers({ page: 1, limit: 10000 }),
+        adminApi.getActiveSellers({
+          page: 1,
+          limit: 10000,
+          q: debouncedSearch || undefined,
+          category: categoryFilter !== "all" ? categoryFilter : undefined,
+        }),
         adminApi.getPendingSellers({ page: 1, limit: 10000 }),
       ]);
 
-      const activeList = activeRes.data?.result?.items || activeRes.data?.results || [];
-      const pendingList = pendingRes.data?.result?.items || pendingRes.data?.results || [];
+      const rawActive = activeRes.data?.result?.items || activeRes.data?.results || [];
+      const rawPending = pendingRes.data?.result?.items || pendingRes.data?.results || [];
 
-      // Combine both lists
-      const csvRows = [];
-      const headers = [
-        "Seller ID",
-        "Shop Name",
-        "Owner Name",
-        "Email",
-        "Phone",
-        "Category",
-        "Location",
-        "Service Radius (km)",
-        "Status",
-        "Joined Date",
-        "Total Orders",
-        "Total Revenue (Rs)",
-        "Product Count",
-      ];
-      csvRows.push(headers.join(","));
+      const activeList = filterRecordsByDateRange(rawActive, preset, customFrom, customTo, ['createdAt', 'joinedDate']);
+      const pendingList = filterRecordsByDateRange(rawPending, preset, customFrom, customTo, ['createdAt', 'joinedDate']);
 
-      // Add Active Sellers
-      activeList.forEach((seller) => {
-        const row = [
-          seller.sellerId || seller.id || seller._id || "N/A",
-          `"${(seller.shopName || "").replace(/"/g, '""')}"`,
-          `"${(seller.ownerName || seller.name || "").replace(/"/g, '""')}"`,
-          `"${(seller.email || "").replace(/"/g, '""')}"`,
-          `"${(seller.phone || "").replace(/"/g, '""')}"`,
-          `"${(seller.category || "General").replace(/"/g, '""')}"`,
-          `"${(seller.location || "").replace(/"/g, '""')}"`,
-          seller.serviceRadius || 5,
-          "Active / Approved",
-          seller.joinedDate || "N/A",
-          seller.totalOrders || 0,
-          seller.totalRevenue || 0,
-          seller.productCount || 0,
-        ];
-        csvRows.push(row.join(","));
-      });
+      if (activeList.length === 0 && pendingList.length === 0) {
+        toast.dismiss(toastId);
+        toast.error("No sellers found matching the selected date range");
+        setIsDownloadingReport(false);
+        setIsExportModalOpen(false);
+        return;
+      }
 
-      // Add Pending / Waiting Review Sellers
-      pendingList.forEach((seller) => {
-        const row = [
-          seller.sellerId || seller._id || "N/A",
-          `"${(seller.shopName || "").replace(/"/g, '""')}"`,
-          `"${(seller.name || "").replace(/"/g, '""')}"`,
-          `"${(seller.email || "").replace(/"/g, '""')}"`,
-          `"${(seller.phone || "").replace(/"/g, '""')}"`,
-          `"${(seller.category || "General").replace(/"/g, '""')}"`,
-          `"${(seller.address || "").replace(/"/g, '""')}"`,
-          seller.serviceRadius || 5,
-          "Pending / Waiting Review",
-          seller.createdAt ? new Date(seller.createdAt).toLocaleDateString("en-GB") : "N/A",
-          0,
-          0,
-          0,
-        ];
-        csvRows.push(row.join(","));
-      });
+      const formatSellerRow = (seller, defaultStatus) => {
+        const totalSales = Number(seller.totalRevenue || seller.totalSales || 0);
+        const totalProducts = Number(seller.productCount || seller.totalProducts || 0);
+        const activeProducts = Number(seller.activeProductCount || seller.activeProducts || 0);
+        const outOfStock = Math.max(0, totalProducts - activeProducts);
+        const regDate = seller.joinedDate || seller.createdAt 
+          ? new Date(seller.createdAt || Date.now()).toLocaleDateString("en-GB") 
+          : "N/A";
 
-      const csvContent = "\uFEFF" + csvRows.join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `sellers_report_${new Date().toISOString().split("T")[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+        return {
+          "Seller ID": seller.sellerId || seller.id || seller._id || "N/A",
+          "Seller Name": seller.ownerName || seller.name || "N/A",
+          "Business Name": seller.shopName || "N/A",
+          "Mobile": seller.phone || "N/A",
+          "Email": seller.email || "N/A",
+          "Address": seller.address || seller.location || "N/A",
+          "City": seller.city || seller.locality || "N/A",
+          "GST Number": seller.documents?.gstCertificate ? "Available (Doc)" : "N/A",
+          "PAN": "N/A",
+          "Bank Details (restricted access)": "Restricted / Not Provided",
+          "IFSC": "N/A",
+          "Total Products": totalProducts,
+          "Active Products": activeProducts,
+          "Out of Stock": outOfStock,
+          "Total Orders": Number(seller.totalOrders || 0),
+          "Total Sales": totalSales,
+          "Commission": "N/A",
+          "Seller Payable": totalSales,
+          "Status": seller.status === "active" ? "Active / Approved" : (defaultStatus || seller.status || "Pending"),
+          "Registration Date": regDate,
+        };
+      };
 
-      toast.success("Sellers report downloaded successfully!");
+      const activeRows = activeList.map((seller) => formatSellerRow(seller, "Active / Approved"));
+      const pendingRows = pendingList.map((seller) => formatSellerRow(seller, "Pending Review"));
+
+      const workbook = XLSX.utils.book_new();
+
+      if (activeRows.length > 0) {
+        const activeSheet = XLSX.utils.json_to_sheet(activeRows);
+        const colWidths = Object.keys(activeRows[0]).map((key) => {
+          const maxLen = Math.max(key.length, ...activeRows.map((r) => String(r[key] || "").length));
+          return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+        });
+        activeSheet["!cols"] = colWidths;
+        XLSX.utils.book_append_sheet(workbook, activeSheet, "Active Sellers");
+      }
+
+      if (pendingRows.length > 0) {
+        const pendingSheet = XLSX.utils.json_to_sheet(pendingRows);
+        const colWidths = Object.keys(pendingRows[0]).map((key) => {
+          const maxLen = Math.max(key.length, ...pendingRows.map((r) => String(r[key] || "").length));
+          return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+        });
+        pendingSheet["!cols"] = colWidths;
+        XLSX.utils.book_append_sheet(workbook, pendingSheet, "Pending Sellers");
+      }
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      const fileName = `Sellers_Report_${dateStr}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast.dismiss(toastId);
+      toast.success(`Exported ${activeRows.length + pendingRows.length} sellers to Excel successfully!`);
+      setIsExportModalOpen(false);
     } catch (err) {
-      console.error("Failed to download report", err);
-      toast.error("Failed to download sellers report");
+      console.error("Failed to export sellers to Excel", err);
+      toast.dismiss(toastId);
+      toast.error("Failed to export sellers report to Excel");
     } finally {
       setIsDownloadingReport(false);
     }
@@ -831,8 +847,20 @@ const ActiveSellers = () => {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setIsExportModalOpen(true)}
+            disabled={isDownloadingReport}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black shadow-lg hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isDownloadingReport ? (
+              <HiOutlineArrowPath className="h-4 w-4 animate-spin text-white" />
+            ) : (
+              <HiOutlineArrowDownTray className="h-4 w-4 text-white" />
+            )}
+            Export Excel
+          </button>
+          <button
             onClick={() => setShowAddSeller(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black shadow-lg hover:bg-emerald-700 transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black shadow-lg hover:bg-slate-800 transition-all active:scale-95"
           >
             <HiOutlinePlus className="h-4 w-4" />
             Add Seller
@@ -850,7 +878,7 @@ const ActiveSellers = () => {
           </div>
           <button
             onClick={() => setRefreshTick((value) => value + 1)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-xl hover:bg-slate-800 transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-800 rounded-xl text-xs font-bold ring-1 ring-slate-200 hover:bg-slate-200 transition-all"
           >
             <HiOutlineArrowPath className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
@@ -899,14 +927,14 @@ const ActiveSellers = () => {
             <button
               onClick={handleDownloadReport}
               disabled={isDownloadingReport}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-white ring-1 ring-slate-200 rounded-2xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 ring-1 ring-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all active:scale-95 disabled:opacity-50"
             >
               {isDownloadingReport ? (
-                <HiOutlineArrowPath className="h-4 w-4 animate-spin text-slate-500" />
+                <HiOutlineArrowPath className="h-4 w-4 animate-spin text-emerald-600" />
               ) : (
-                <HiOutlineCloudArrowUp className="h-4 w-4 text-slate-500" />
+                <HiOutlineArrowDownTray className="h-4 w-4 text-emerald-600" />
               )}
-              {isDownloadingReport ? "DOWNLOADING..." : "DOWNLOAD REPORT"}
+              {isDownloadingReport ? "EXPORTING..." : "EXPORT EXCEL"}
             </button>
 
             <select
@@ -1419,6 +1447,15 @@ const ActiveSellers = () => {
           onSuccess={() => setRefreshTick((t) => t + 1)}
         />
       )}
+
+      {/* Export Date Modal */}
+      <ExportDateModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirmExport={handlePerformExport}
+        isExporting={isDownloadingReport}
+        title="Export Sellers Excel Report"
+      />
     </div>
   );
 };

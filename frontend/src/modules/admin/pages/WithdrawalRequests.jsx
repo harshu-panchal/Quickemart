@@ -26,6 +26,8 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import Pagination from '@shared/components/ui/Pagination';
 import { adminApi } from "../services/adminApi";
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { toast } from "sonner";
 
 const WithdrawalRequests = () => {
@@ -145,8 +147,12 @@ const WithdrawalRequests = () => {
         }
     };
 
-    const handleExport = async () => {
+    const [isExporting, setIsExporting] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
         try {
+            setIsExporting(true);
             toast.loading(`Exporting ${activeTab} data...`, { id: "export" });
             const apiMethod = activeTab === 'sellers' ? adminApi.getSellerWithdrawals : adminApi.getDeliveryWithdrawals;
             
@@ -159,10 +165,14 @@ const WithdrawalRequests = () => {
             if (!res.data.success) throw new Error("Failed to fetch data");
             
             const payload = res.data.result || {};
-            const items = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
+            const rawItems = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
             
+            const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'date']);
+
             if (!items.length) {
-                toast.error("No data to export", { id: "export" });
+                toast.error("No withdrawal requests found matching the date range", { id: "export" });
+                setIsExporting(false);
+                setIsExportModalOpen(false);
                 return;
             }
 
@@ -191,9 +201,12 @@ const WithdrawalRequests = () => {
             document.body.removeChild(link);
             
             toast.success("Export successful", { id: "export" });
+            setIsExportModalOpen(false);
         } catch (error) {
             console.error("Export error:", error);
             toast.error("Export failed", { id: "export" });
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -216,8 +229,9 @@ const WithdrawalRequests = () => {
                         <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
                     </button>
                     <button 
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm">
+                        onClick={() => setIsExportModalOpen(true)}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50">
                         <Download className="h-4 w-4" />
                         EXPORT ALL
                     </button>
@@ -527,6 +541,14 @@ const WithdrawalRequests = () => {
                     </div>
                 )}
             </Modal>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExporting}
+                title="Export Withdrawal Requests Report"
+            />
         </div>
     );
 };

@@ -1,5 +1,6 @@
 // Comprehensive Order Management System
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
@@ -28,6 +29,8 @@ import {
     getLegacyStatusFromOrder,
     adminRouteMatchesOrder,
 } from '@/shared/utils/orderStatus';
+import { ExportDateModal } from '@shared/components/ui';
+import { filterRecordsByDateRange } from '@/shared/utils/dateFilterUtils';
 
 const OrdersList = () => {
     const { status = 'all' } = useParams();
@@ -211,38 +214,128 @@ const OrdersList = () => {
         }
     };
 
-    const handleExport = () => {
-        if (safeOrders.length === 0) {
-            showToast('No data to export', 'warning');
-            return;
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handleOpenExportModal = () => {
+        setIsExportModalOpen(true);
+    };
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
+        setIsExporting(true);
+        showToast("Generating Date-Filtered Orders Excel report...", "info");
+        try {
+            const params = { page: 1, limit: 10000 };
+            if (status !== 'all') params.status = status;
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            const response = await adminApi.getOrders(params);
+            if (response.data?.success) {
+                const payload = response.data.result || {};
+                const rawOrders = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
+
+                const dbOrders = filterRecordsByDateRange(rawOrders, preset, customFrom, customTo, ['createdAt', 'createdDate']);
+
+                if (!dbOrders || dbOrders.length === 0) {
+                    showToast("No orders found matching the selected date range", "warning");
+                    setIsExporting(false);
+                    setIsExportModalOpen(false);
+                    return;
+                }
+
+                const excelRows = [];
+                dbOrders.forEach((o) => {
+                    const items = Array.isArray(o.items) && o.items.length > 0 ? o.items : [{}];
+                    items.forEach((item) => {
+                        const custObj = o.user || o.customer || {};
+                        const addrObj = o.address || {};
+                        const prodObj = item.product || {};
+                        const sellerObj = item.seller || o.seller || {};
+                        const driverObj = o.deliveryPartner || {};
+
+                        const qty = item.quantity || 1;
+                        const price = item.price || item.sellingPrice || 0;
+                        const prodTotal = qty * price;
+
+                        // Timeline summary
+                        const timeline = [
+                            o.assignedAt ? `Assigned: ${new Date(o.assignedAt).toLocaleTimeString('en-GB')}` : null,
+                            o.packedAt ? `Packed: ${new Date(o.packedAt).toLocaleTimeString('en-GB')}` : null,
+                            o.dispatchedAt ? `Dispatched: ${new Date(o.dispatchedAt).toLocaleTimeString('en-GB')}` : null,
+                            o.deliveredAt ? `Delivered: ${new Date(o.deliveredAt).toLocaleTimeString('en-GB')}` : null,
+                        ].filter(Boolean).join(' | ') || "N/A";
+
+                        excelRows.push({
+                            "Order ID": o.orderId || o._id || 'N/A',
+                            "Order Date/Time": o.createdAt ? new Date(o.createdAt).toLocaleString('en-GB') : 'N/A',
+                            "Customer ID": custObj._id || custObj.id || 'N/A',
+                            "Customer Name": custObj.name || 'N/A',
+                            "Mobile": custObj.phone || addrObj.phone || 'N/A',
+                            "Delivery Address": addrObj.street || addrObj.addressLine1 || addrObj.fullAddress || 'N/A',
+                            "City": addrObj.city || 'N/A',
+                            "Area": addrObj.area || 'N/A',
+                            "Product ID": prodObj._id || prodObj.id || item.product || 'N/A',
+                            "SKU": prodObj.sku || item.sku || 'N/A',
+                            "Product Name": prodObj.name || item.name || 'N/A',
+                            "Variant": item.variant?.name || item.variant || 'Standard',
+                            "Quantity": qty,
+                            "MRP": item.mrp || price,
+                            "Selling Price": price,
+                            "Discount": item.discount || 0,
+                            "Product Total": prodTotal,
+                            "Delivery Charge": o.pricing?.deliveryFee || 0,
+                            "Platform Fee": o.pricing?.platformFee || 0,
+                            "GST": o.pricing?.tax || 0,
+                            "Coupon Discount": o.pricing?.couponDiscount || 0,
+                            "Wallet Used": o.pricing?.walletDiscount || 0,
+                            "Total Order Value": o.pricing?.total || o.totalAmount || 0,
+                            "Payment Method": (o.paymentMethod || o.payment?.method || 'COD').toUpperCase(),
+                            "Payment ID": o.paymentId || o.paymentDetails?.paymentId || 'N/A',
+                            "Payment Status": (o.paymentStatus || o.payment?.status || 'PENDING').toUpperCase(),
+                            "Order Status": getLegacyStatusFromOrder(o).toUpperCase(),
+                            "Seller": sellerObj.shopName || sellerObj.name || 'N/A',
+                            "Seller ID": sellerObj._id || sellerObj.sellerId || 'N/A',
+                            "Driver ID/Name": driverObj.name || o.driverName || 'Unassigned',
+                            "Assigned/Packed/Dispatched/Delivered Time": timeline,
+                            "Delivery Time": o.deliveredAt ? new Date(o.deliveredAt).toLocaleString('en-GB') : 'N/A',
+                            "Cancellation Reason": o.cancellationReason || 'N/A',
+                            "Refund Amount": o.refundAmount || 0,
+                            "Refund Status": o.refundStatus || 'N/A',
+                        });
+                    });
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = colWidths;
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
+
+                const dateStr = new Date().toISOString().split('T')[0];
+                const fileName = `Master_Orders_Report_${preset}_${dateStr}.xlsx`;
+                XLSX.writeFile(workbook, fileName);
+
+                showToast(`Exported ${excelRows.length} order items (${preset}) to Excel successfully!`, "success");
+                setIsExportModalOpen(false);
+            } else {
+                showToast("Failed to fetch orders for export", "error");
+            }
+        } catch (error) {
+            console.error("Export Orders Error:", error);
+            showToast("Failed to export orders", "error");
+        } finally {
+            setIsExporting(false);
         }
-
-        const headers = ['Order ID', 'Date', 'Customer', 'Seller', 'Items', 'Amount', 'Status', 'Payment'];
-        const csvContent = [
-            headers.join(','),
-            ...safeOrders.map(o => [
-                String(o.id || ''),
-                String(o.date || '').replace(/,/g, ''),
-                String(o.customer || '').replace(/,/g, ''),
-                String(o.seller || '').replace(/,/g, ''),
-                o.items,
-                o.amount,
-                o.status,
-                o.payment
-            ].join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `noyo-orders-${status}-${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        showToast('Order ledger exported successfully', 'success');
+    };
+        } catch (error) {
+            console.error("Export orders error:", error);
+            showToast("Failed to export orders to Excel", "error");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const pageTitle = status === 'all' ? 'All Orders' : status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -263,10 +356,11 @@ const OrdersList = () => {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleExport}
-                        className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm"
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-lg active:scale-95 disabled:opacity-50"
                     >
-                        <Download className="h-4 w-4 text-brand-500" />
-                        EXPORT
+                        <Download className={cn("h-4 w-4 text-white", isExporting && "animate-bounce")} />
+                        <span>{isExporting ? "EXPORTING EXCEL..." : "EXPORT EXCEL"}</span>
                     </button>
                     <div className="h-10 w-px bg-slate-200 mx-1 hidden lg:block" />
                     <div className="relative">

@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Pagination from '@shared/components/ui/Pagination';
@@ -15,11 +16,14 @@ import {
     HiOutlineClock,
     HiOutlineCheckCircle,
     HiOutlineExclamationTriangle,
-    HiOutlineChevronRight
+    HiOutlineChevronRight,
+    HiOutlineArrowDownTray
 } from 'react-icons/hi2';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@shared/components/ui/Toast';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@core/context/AuthContext';
 import { joinTicketRoom, leaveTicketRoom, onTicketCreated, onTicketMessage } from '@/core/services/orderSocket';
@@ -47,6 +51,121 @@ const SupportTickets = () => {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(25);
     const [total, setTotal] = useState(0);
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
+        try {
+            setIsExportingExcel(true);
+            showToast("Generating Tickets Excel...", "info");
+            
+            const res = await adminApi.getTickets({ page: 1, limit: 10000 });
+            if (!res.data.success) {
+                showToast("Failed to fetch tickets for export", "error");
+                return;
+            }
+            const payload = res.data.result || {};
+            const rawTickets = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
+
+            const ticketsToExport = filterRecordsByDateRange(rawTickets, preset, customFrom, customTo, ['createdAt', 'updatedAt']);
+
+            if (ticketsToExport.length === 0) {
+                showToast("No tickets found matching the date range", "error");
+                setIsExportingExcel(false);
+                setIsExportModalOpen(false);
+                return;
+            }
+
+            const formatDuration = (ms) => {
+                if (!ms || ms <= 0) return "N/A";
+                const mins = Math.floor(ms / (1000 * 60));
+                if (mins < 60) return `${mins} min${mins === 1 ? '' : 's'}`;
+                const hours = Math.floor(mins / 60);
+                const remMins = mins % 60;
+                if (hours < 24) return `${hours}h ${remMins}m`;
+                const days = Math.floor(hours / 24);
+                return `${days} day${days === 1 ? '' : 's'}`;
+            };
+
+            const excelRows = ticketsToExport.map((t) => {
+                const createdDate = new Date(t.createdAt);
+                const userObj = t.userId || {};
+                const messages = Array.isArray(t.messages) ? t.messages : [];
+                
+                const firstAdminMsg = messages.find(m => m.isAdmin || m.senderType === 'Admin');
+                let responseTime = "Pending";
+                if (firstAdminMsg && firstAdminMsg.createdAt) {
+                    const diffMs = new Date(firstAdminMsg.createdAt).getTime() - createdDate.getTime();
+                    responseTime = formatDuration(diffMs);
+                }
+
+                const isClosed = t.status === 'closed';
+                let resolutionTime = "N/A";
+                let closedDate = "N/A";
+                let resolutionText = "N/A";
+
+                if (isClosed) {
+                    const updatedAt = new Date(t.updatedAt || Date.now());
+                    closedDate = updatedAt.toLocaleString("en-GB");
+                    const diffMs = updatedAt.getTime() - createdDate.getTime();
+                    resolutionTime = formatDuration(diffMs);
+
+                    const lastAdminMsg = [...messages].reverse().find(m => m.isAdmin || m.senderType === 'Admin');
+                    if (lastAdminMsg && lastAdminMsg.text) {
+                        resolutionText = lastAdminMsg.text;
+                    } else {
+                        resolutionText = "Resolved";
+                    }
+                }
+
+                const assignedAgent = firstAdminMsg ? (firstAdminMsg.sender || "Admin") : "Unassigned";
+                const orderMatch = (t.subject || "").match(/Order\s*#?\s*([A-Za-z0-9_-]+)/i);
+                const orderId = orderMatch ? orderMatch[1] : "N/A";
+
+                return {
+                    "Ticket ID": t._id || "N/A",
+                    "Customer ID": userObj._id || "N/A",
+                    "Customer Name": userObj.name || t.user || "Unknown",
+                    "Mobile": userObj.phone || "N/A",
+                    "Order ID": orderId,
+                    "Complaint Type": t.subject || "General Support",
+                    "Reason": "N/A",
+                    "Description": t.description || "N/A",
+                    "Created Date": createdDate.toLocaleString("en-GB"),
+                    "Assigned Agent": assignedAgent,
+                    "Priority": (t.priority || "medium").toUpperCase(),
+                    "Status": (t.status || "open").toUpperCase(),
+                    "Resolution": resolutionText,
+                    "Refund Amount": "N/A",
+                    "Replacement": "N/A",
+                    "Response Time": responseTime,
+                    "Resolution Time": resolutionTime,
+                    "Closed Date": closedDate,
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            const colWidths = Object.keys(excelRows[0]).map((key) => {
+                const maxLen = Math.max(key.length, ...excelRows.map((r) => String(r[key] || "").length));
+                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+            });
+            worksheet["!cols"] = colWidths;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Help Tickets");
+
+            const dateStr = new Date().toISOString().split("T")[0];
+            XLSX.writeFile(workbook, `Customer_Support_Tickets_${dateStr}.xlsx`);
+
+            showToast("Tickets exported to Excel successfully!", "success");
+            setIsExportModalOpen(false);
+        } catch (error) {
+            console.error("Export Tickets Excel Error:", error);
+            showToast("Failed to export tickets Excel", "error");
+        } finally {
+            setIsExportingExcel(false);
+        }
+    };
 
     useEffect(() => {
         setIsViewingSupportChat(true);
@@ -351,7 +470,22 @@ const SupportTickets = () => {
                     <div className="p-6 border-b border-slate-50 space-y-4">
                         <div className="flex items-center justify-between">
                             <h2 className="text-xl font-black text-slate-900 tracking-tight">Support Desk</h2>
-                            <Badge variant="blue" className="text-[10px] font-black">{tickets.length} ACTIVE</Badge>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="blue" className="text-[10px] font-black">{tickets.length} ACTIVE</Badge>
+                                <button
+                                    onClick={() => setIsExportModalOpen(true)}
+                                    disabled={isExportingExcel}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                    title="Download Excel Report"
+                                >
+                                    {isExportingExcel ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <HiOutlineArrowDownTray className="h-3.5 w-3.5" />
+                                    )}
+                                    <span>Excel</span>
+                                </button>
+                            </div>
                         </div>
                         <div className="relative group">
                             <HiOutlineMagnifyingGlass className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -598,6 +732,14 @@ const SupportTickets = () => {
                     </div>
                 )}
             </div>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExportingExcel}
+                title="Export Support Tickets Report"
+            />
         </div>
     );
 };

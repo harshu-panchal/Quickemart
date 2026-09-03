@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import PageHeader from '@shared/components/ui/PageHeader';
@@ -29,6 +30,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
+import ExportDateModal from '@shared/components/ui/ExportDateModal';
+import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import { adminApi } from "../services/adminApi";
 import { toast } from "sonner";
 
@@ -254,22 +257,114 @@ const AdminWallet = () => {
         ),
         [sellerRequests]);
 
-    const handleExport = async () => {
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    const handlePerformExport = async ({ preset, customFrom, customTo }) => {
         try {
             setIsExporting(true);
-            const res = await adminApi.exportFinanceStatement();
-            const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `finance_statement_${new Date().toISOString().slice(0, 10)}.csv`);
-            link.style.visibility = "hidden";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            toast.success("Statement exported successfully");
+
+            if (activeTab === 'seller_requests') {
+                toast.info("Generating Money Requests Excel...");
+                const res = await adminApi.getFinancePayouts({ page: 1, limit: 10000 });
+                const payload = res.data?.result || {};
+                const rawItems = Array.isArray(payload.items) ? payload.items : (res.data?.results || sellerRequests || []);
+
+                const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'processedAt']);
+
+                if (!items || items.length === 0) {
+                    toast.error("No money requests found matching the date range");
+                    setIsExporting(false);
+                    setIsExportModalOpen(false);
+                    return;
+                }
+
+                const excelRows = items.map((req) => {
+                    const beneficiary = req.beneficiaryId || req.beneficiary || {};
+                    const bId = beneficiary._id || req.beneficiaryId || "N/A";
+                    const name = beneficiary.shopName || beneficiary.name || "N/A";
+                    const approvedBy = req.createdBy?.name || (req.status === 'COMPLETED' ? "Admin / System" : "N/A");
+                    const approvedDate = req.processedAt ? new Date(req.processedAt).toLocaleString("en-GB") : "N/A";
+
+                    return {
+                        "Request ID": req._id || "N/A",
+                        "User/Seller ID": bId,
+                        "Name": name,
+                        "Request Type": req.payoutType || "SELLER",
+                        "Amount": Math.abs(req.amount || 0),
+                        "Reason": req.remarks || "Money Request / Withdrawal",
+                        "Requested Date": req.createdAt ? new Date(req.createdAt).toLocaleString("en-GB") : "N/A",
+                        "Approved By": approvedBy,
+                        "Approved Date": approvedDate,
+                        "Rejection Reason": req.failedReason || "N/A",
+                        "Status": req.status || "PENDING",
+                        "Transaction ID": req.metadata?.transactionId || req._id || "N/A",
+                    };
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = columnWidths;
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Money Requests");
+
+                const dateStr = new Date().toISOString().split("T")[0];
+                XLSX.writeFile(workbook, `Money_Requests_Report_${dateStr}.xlsx`);
+
+                toast.success(`Exported ${excelRows.length} money requests to Excel successfully!`);
+                setIsExportModalOpen(false);
+            } else {
+                toast.info("Generating Wallet Transactions Excel...");
+                const res = await adminApi.getFinanceLedger({ page: 1, limit: 10000 });
+                const ledger = res.data?.result || {};
+                const rawItems = Array.isArray(ledger.items) ? ledger.items : (res.data?.results || []);
+
+                const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'date']);
+
+                if (!items || items.length === 0) {
+                    toast.error("No wallet transactions found matching the date range");
+                    setIsExporting(false);
+                    setIsExportModalOpen(false);
+                    return;
+                }
+
+                const excelRows = items.map((entry) => ({
+                    "Transaction ID": entry.transactionId || entry._id || "N/A",
+                    "User ID": entry.actorId || entry.walletId || "N/A",
+                    "User Name": entry.actorType || "System",
+                    "Transaction Type": entry.type || "UNKNOWN",
+                    "Credit/Debit": entry.direction || "CREDIT",
+                    "Amount": Number(entry.amount || 0),
+                    "Previous Balance": entry.balanceBefore != null ? Number(entry.balanceBefore) : 0,
+                    "New Balance": entry.balanceAfter != null ? Number(entry.balanceAfter) : 0,
+                    "Payment/Reference ID": entry.reference || entry.paymentMode || "N/A",
+                    "Reason": entry.description || entry.type || "N/A",
+                    "Date & Time": entry.createdAt ? new Date(entry.createdAt).toLocaleString("en-GB") : "N/A",
+                    "Status": entry.status || "COMPLETED",
+                }));
+
+                const worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = columnWidths;
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Wallet Transactions");
+
+                const dateStr = new Date().toISOString().split("T")[0];
+                XLSX.writeFile(workbook, `Wallet_Transactions_Report_${dateStr}.xlsx`);
+
+                toast.success(`Exported ${excelRows.length} wallet transactions to Excel successfully!`);
+                setIsExportModalOpen(false);
+            }
         } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to export statement");
+            console.error("Export Error:", error);
+            toast.error(error.response?.data?.message || "Failed to export data");
         } finally {
             setIsExporting(false);
         }
@@ -304,7 +399,7 @@ const AdminWallet = () => {
                 </div>
                 <div className="flex items-center space-x-3">
                     <button
-                        onClick={handleExport}
+                        onClick={() => setIsExportModalOpen(true)}
                         disabled={isExporting}
                         className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
                     >
@@ -482,7 +577,7 @@ const AdminWallet = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
-                                            {filteredTransactions.map((txn, i) => (
+                                            {filteredTransactions.map((txn) => (
                                                 <tr
                                                     key={txn.id}
                                                     onClick={() => setSelectedTransaction(txn)}
@@ -712,6 +807,14 @@ const AdminWallet = () => {
                     </div>
                 )}
             </Modal>
+            {/* Export Date Modal */}
+            <ExportDateModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onConfirmExport={handlePerformExport}
+                isExporting={isExporting}
+                title="Export Finance & Wallet Report"
+            />
         </div>
     );
 };
