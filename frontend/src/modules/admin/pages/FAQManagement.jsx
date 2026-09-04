@@ -1,6 +1,7 @@
 // Ultimate FAQ Management System - Functional Version
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
@@ -35,7 +36,6 @@ import Pagination from '@shared/components/ui/Pagination';
 import { adminApi } from '../services/adminApi';
 import ExportDateModal from '@shared/components/ui/ExportDateModal';
 import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
-import { useEffect } from 'react';
 
 const FAQManagement = () => {
     const { showToast } = useToast();
@@ -197,14 +197,12 @@ const FAQManagement = () => {
 
             const list = filterRecordsByDateRange(rawList, preset, customFrom, customTo, ['createdAt', 'updatedAt']);
 
-            if (!list || list.length === 0) {
-                showToast('No FAQs found matching the selected date range', 'error');
-                setIsExportingExcel(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const FAQ_HEADERS = [
+                "FAQ ID", "Category", "Question", "Answer", "Language",
+                "Display Order", "Status", "Created Date", "Updated Date"
+            ];
 
-            const excelRows = list.map((faq, index) => ({
+            const excelRows = (list || []).map((faq, index) => ({
                 "FAQ ID": faq._id || `FAQ-${index + 1}`,
                 "Category": faq.category || "General",
                 "Question": faq.question || "N/A",
@@ -216,13 +214,22 @@ const FAQManagement = () => {
                 "Updated Date": faq.updatedAt ? new Date(faq.updatedAt).toLocaleDateString('en-GB') : "N/A",
             }));
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
-            });
-            worksheet['!cols'] = colWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
+                });
+                worksheet['!cols'] = colWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: FAQ_HEADERS });
+                worksheet['!cols'] = FAQ_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 60)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "FAQs");
 

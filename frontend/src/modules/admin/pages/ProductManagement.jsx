@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import ExportDateModal from '@shared/components/ui/ExportDateModal';
 import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import {
     HiOutlinePlus,
     HiOutlineCube,
@@ -25,12 +26,14 @@ import {
     HiOutlineSwatch,
     HiOutlineSquaresPlus,
     HiOutlineLockClosed,
-    HiOutlineArrowDownTray
+    HiOutlineArrowDownTray,
+    HiOutlineArrowsPointingOut
 } from 'react-icons/hi2';
 import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
 import BulkImportModal from '../components/BulkImportModal';
 import BrandSelect from '@shared/components/BrandSelect';
+import ImageZoomModal from '@shared/components/ui/ImageZoomModal';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -77,6 +80,7 @@ const ProductManagement = () => {
     const [editingItem, setEditingItem] = useState(null);
     const [modalTab, setModalTab] = useState('general');
     const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
+    const [zoomImage, setZoomImage] = useState({ isOpen: false, src: '', title: '' });
 
     const [formData, setFormData] = useState({
         name: '',
@@ -217,15 +221,13 @@ const ProductManagement = () => {
 
             const exportList = filterRecordsByDateRange(rawExportList, preset, customFrom, customTo, ['createdAt', 'updatedAt']);
 
-            if (!exportList || exportList.length === 0) {
-                toast.dismiss(toastId);
-                toast.error('No products found matching the selected date range');
-                setIsExporting(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const PRODUCT_HEADERS = [
+                'Header Category', 'Main Category', 'Sub Category', 'Brand',
+                'Product Name', 'Variant Name', 'Unit', 'Pack Size',
+                'Product Description', 'Specifications', 'Search Tags'
+            ];
 
-            const excelRows = exportList.map((item) => {
+            const excelRows = (exportList || []).map((item) => {
                 let variantString = '';
                 if (Array.isArray(item.variants) && item.variants.length > 0) {
                     variantString = item.variants
@@ -273,16 +275,25 @@ const ProductManagement = () => {
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                const maxLen = Math.max(
-                    key.length,
-                    ...excelRows.map((row) => String(row[key] || '').length)
-                );
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
-            });
-            worksheet['!cols'] = columnWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(
+                        key.length,
+                        ...excelRows.map((row) => String(row[key] || '').length)
+                    );
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
+                });
+                worksheet['!cols'] = columnWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: PRODUCT_HEADERS });
+                worksheet['!cols'] = PRODUCT_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 60)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
             XLSX.writeFile(workbook, fileName);
@@ -1019,8 +1030,19 @@ const ProductManagement = () => {
                                     {/* Product Column */}
                                     <td className="px-6 py-5 align-middle">
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <div className="h-11 w-11 shrink-0 rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200 shadow-sm">
-                                                <img src={p.mainImage || p.images?.[0]} alt={p.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                            <div
+                                                className="h-10 w-10 shrink-0 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden relative group/thumb cursor-pointer"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const img = p.mainImage || p.images?.[0];
+                                                    if (img) setZoomImage({ isOpen: true, src: img, title: p.name || 'Product Image' });
+                                                }}
+                                                title="Click to view full screen"
+                                            >
+                                                <img src={p.mainImage || p.images?.[0]} alt={p.name} className="h-full w-full object-cover group-hover/thumb:scale-110 transition-transform duration-500" />
+                                                <div className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                                                    <HiOutlineArrowsPointingOut className="h-4 w-4" />
+                                                </div>
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="truncate text-[13px] font-semibold leading-5 text-slate-900" title={p.name}>{p.name}</p>
@@ -1509,14 +1531,30 @@ const ProductManagement = () => {
                                                     {formData.mainImage ? (
                                                         <div className="w-full h-full relative group">
                                                             <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleRemoveMainImage}
-                                                                className="absolute top-2 right-2 p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-rose-600 transition-colors z-20 shadow-md"
-                                                                title="Remove cover photo"
-                                                            >
-                                                                <HiOutlineTrash className="h-4 w-4" />
-                                                            </button>
+                                                            <div className="absolute top-2 right-2 flex items-center gap-1 z-20">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setZoomImage({ isOpen: true, src: formData.mainImage, title: "Main Cover Photo" });
+                                                                    }}
+                                                                    className="p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-primary transition-colors shadow-md"
+                                                                    title="Zoom / Full Screen"
+                                                                >
+                                                                    <HiOutlineArrowsPointingOut className="h-4 w-4" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleRemoveMainImage();
+                                                                    }}
+                                                                    className="p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-rose-600 transition-colors shadow-md"
+                                                                    title="Remove cover photo"
+                                                                >
+                                                                    <HiOutlineTrash className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ) : (
                                                         <div className="flex flex-col items-center p-3 text-center">
@@ -1592,8 +1630,19 @@ const ProductManagement = () => {
                                                                             onChange={(e) => handleSlotImageUpload(slotIdx, e)}
                                                                         />
                                                                         {currentImg ? (
-                                                                            <div className="w-full h-full relative">
+                                                                            <div className="w-full h-full relative group">
                                                                                 <img src={currentImg} alt={`Slot ${slotIdx + 1}`} className="w-full h-full object-cover" />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setZoomImage({ isOpen: true, src: currentImg, title: `Slot ${slotIdx + 1}: ${currentLabel}` });
+                                                                                    }}
+                                                                                    className="absolute top-2 right-2 p-1.5 rounded-xl bg-slate-900/80 text-white hover:bg-primary transition-colors z-20 shadow-md"
+                                                                                    title="Zoom / Full Screen"
+                                                                                >
+                                                                                    <HiOutlineArrowsPointingOut className="h-4 w-4" />
+                                                                                </button>
                                                                                 <span className="absolute bottom-2 left-2 right-2 text-center text-[9px] font-bold bg-slate-900/80 text-white px-2 py-1 rounded-lg backdrop-blur-xs">
                                                                                     {currentLabel}
                                                                                 </span>
@@ -1829,6 +1878,14 @@ const ProductManagement = () => {
                 onConfirmExport={handlePerformExport}
                 isExporting={isExporting}
                 title="Export Products Catalog Excel"
+            />
+
+            {/* Image Zoom Modal */}
+            <ImageZoomModal
+                isOpen={zoomImage.isOpen}
+                src={zoomImage.src}
+                title={zoomImage.title}
+                onClose={() => setZoomImage({ isOpen: false, src: '', title: '' })}
             />
 
         </div>

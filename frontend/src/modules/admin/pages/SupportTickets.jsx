@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Pagination from '@shared/components/ui/Pagination';
@@ -69,12 +70,12 @@ const SupportTickets = () => {
 
             const ticketsToExport = filterRecordsByDateRange(rawTickets, preset, customFrom, customTo, ['createdAt', 'updatedAt']);
 
-            if (ticketsToExport.length === 0) {
-                showToast("No tickets found matching the date range", "error");
-                setIsExportingExcel(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const SUPPORT_TICKET_HEADERS = [
+                "Ticket ID", "Customer ID", "Customer Name", "Mobile", "Order ID",
+                "Complaint Type", "Reason", "Description", "Created Date", "Assigned Agent",
+                "Priority", "Status", "Resolution", "Refund Amount", "Replacement",
+                "Response Time", "Resolution Time", "Closed Date"
+            ];
 
             const formatDuration = (ms) => {
                 if (!ms || ms <= 0) return "N/A";
@@ -87,7 +88,7 @@ const SupportTickets = () => {
                 return `${days} day${days === 1 ? '' : 's'}`;
             };
 
-            const excelRows = ticketsToExport.map((t) => {
+            const excelRows = (ticketsToExport || []).map((t) => {
                 const createdDate = new Date(t.createdAt);
                 const userObj = t.userId || {};
                 const messages = Array.isArray(t.messages) ? t.messages : [];
@@ -144,20 +145,29 @@ const SupportTickets = () => {
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const colWidths = Object.keys(excelRows[0]).map((key) => {
-                const maxLen = Math.max(key.length, ...excelRows.map((r) => String(r[key] || "").length));
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-            });
-            worksheet["!cols"] = colWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((r) => String(r[key] || "").length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet["!cols"] = colWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: SUPPORT_TICKET_HEADERS });
+                worksheet["!cols"] = SUPPORT_TICKET_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 50)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Help Tickets");
 
             const dateStr = new Date().toISOString().split("T")[0];
             XLSX.writeFile(workbook, `Customer_Support_Tickets_${dateStr}.xlsx`);
 
-            showToast("Tickets exported to Excel successfully!", "success");
+            showToast(`Exported ${excelRows.length} tickets to Excel successfully!`, "success");
             setIsExportModalOpen(false);
         } catch (error) {
             console.error("Export Tickets Excel Error:", error);

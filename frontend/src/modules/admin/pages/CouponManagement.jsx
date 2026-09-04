@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
@@ -195,14 +196,14 @@ const CouponManagement = () => {
 
             const list = filterRecordsByDateRange(rawList, preset, customFrom, customTo, ['createdAt', 'validFrom']);
 
-            if (!list || list.length === 0) {
-                showToast('No marketing campaigns found matching the date range', 'error');
-                setIsExportingExcel(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const COUPON_HEADERS = [
+                "Campaign ID", "Campaign Name", "Coupon Code", "Offer Type", "Discount",
+                "Minimum Order Value", "Maximum Discount", "Start Date", "End Date",
+                "Usage Limit", "Used Count", "Remaining Usage", "Eligible Customers",
+                "New/Existing Customer", "Status", "Total Discount Given", "Total Orders", "Total Sale"
+            ];
 
-            const excelRows = list.map((c) => {
+            const excelRows = (list || []).map((c) => {
                 const discountStr = c.discountType === 'percentage'
                     ? `${c.discountValue}%`
                     : `₹${c.discountValue}`;
@@ -241,13 +242,22 @@ const CouponManagement = () => {
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-            });
-            worksheet['!cols'] = colWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = colWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: COUPON_HEADERS });
+                worksheet['!cols'] = COUPON_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 50)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Campaigns");
 

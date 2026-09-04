@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Pagination from '@shared/components/ui/Pagination';
 import ExportDateModal from '@shared/components/ui/ExportDateModal';
 import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
@@ -199,15 +200,14 @@ const CashCollection = () => {
             const rawItems = logsList && logsList.length > 0 ? logsList : liveRiders;
             const itemsToExport = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['date', 'createdAt', 'settledAt', 'submissionDate']);
 
-            if (!itemsToExport || itemsToExport.length === 0) {
-                toast.dismiss(toastId);
-                toast.error("No cash collection data found matching the date range");
-                setIsExportingExcel(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const CASH_COLLECTION_HEADERS = [
+                "Collection ID", "Order ID", "Customer ID", "Customer Name", "Driver ID",
+                "Driver Name", "Order Amount", "Cash Collected", "Cash Pending",
+                "Collection Date/Time", "Submitted to Company", "Submission Date",
+                "Difference", "Status"
+            ];
 
-            const excelRows = itemsToExport.map((item) => {
+            const excelRows = (itemsToExport || []).map((item) => {
                 const orderAmt = Number(item.orderAmount || item.amount || 0);
                 const collectedAmt = Number(item.cashCollected || item.amount || item.currentCash || 0);
                 const pendingAmt = Number(item.cashPending || Math.max(0, orderAmt - collectedAmt));
@@ -233,13 +233,22 @@ const CashCollection = () => {
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-            });
-            worksheet['!cols'] = colWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = colWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: CASH_COLLECTION_HEADERS });
+                worksheet['!cols'] = CASH_COLLECTION_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 50)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Cash Collection");
 

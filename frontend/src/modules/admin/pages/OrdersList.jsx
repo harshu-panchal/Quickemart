@@ -1,6 +1,7 @@
 // Comprehensive Order Management System
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
@@ -235,15 +236,19 @@ const OrdersList = () => {
 
                 const dbOrders = filterRecordsByDateRange(rawOrders, preset, customFrom, customTo, ['createdAt', 'createdDate']);
 
-                if (!dbOrders || dbOrders.length === 0) {
-                    showToast("No orders found matching the selected date range", "warning");
-                    setIsExporting(false);
-                    setIsExportModalOpen(false);
-                    return;
-                }
+                const ORDER_HEADERS = [
+                    "Order ID", "Order Date/Time", "Customer ID", "Customer Name", "Mobile",
+                    "Delivery Address", "City", "Area", "Product ID", "SKU", "Product Name",
+                    "Variant", "Quantity", "MRP", "Selling Price", "Discount", "Product Total",
+                    "Delivery Charge", "Platform Fee", "GST", "Coupon Discount", "Wallet Used",
+                    "Total Order Value", "Payment Method", "Payment ID", "Payment Status",
+                    "Order Status", "Seller", "Seller ID", "Driver ID/Name",
+                    "Assigned/Packed/Dispatched/Delivered Time", "Delivery Time",
+                    "Cancellation Reason", "Refund Amount", "Refund Status"
+                ];
 
                 const excelRows = [];
-                dbOrders.forEach((o) => {
+                (dbOrders || []).forEach((o) => {
                     const items = Array.isArray(o.items) && o.items.length > 0 ? o.items : [{}];
                     items.forEach((item) => {
                         const custObj = o.user || o.customer || {};
@@ -304,13 +309,22 @@ const OrdersList = () => {
                     });
                 });
 
-                const worksheet = XLSX.utils.json_to_sheet(excelRows);
-                const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-                });
-                worksheet['!cols'] = colWidths;
+                let worksheet;
+                if (excelRows.length > 0) {
+                    worksheet = XLSX.utils.json_to_sheet(excelRows);
+                    const colWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                        const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                        return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                    });
+                    worksheet['!cols'] = colWidths;
+                } else {
+                    worksheet = XLSX.utils.json_to_sheet([], { header: ORDER_HEADERS });
+                    worksheet['!cols'] = ORDER_HEADERS.map((key) => ({
+                        wch: Math.min(Math.max(key.length + 4, 12), 50)
+                    }));
+                }
 
+                protectWorksheetHeaders(worksheet);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
 
@@ -355,7 +369,7 @@ const OrdersList = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={handleExport}
+                        onClick={handleOpenExportModal}
                         disabled={isExporting}
                         className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-lg active:scale-95 disabled:opacity-50"
                     >

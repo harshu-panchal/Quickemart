@@ -75,7 +75,7 @@ export const financeSummaryQuerySchema = Joi.object({
 
 export const financeLedgerQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(200).default(25),
+  limit: Joi.number().integer().min(1).max(10000).default(25),
   type: Joi.string().optional(),
   actorType: Joi.string().optional(),
   actorId: Joi.string().optional(),

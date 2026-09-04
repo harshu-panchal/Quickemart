@@ -169,17 +169,10 @@ const WithdrawalRequests = () => {
             
             const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'date']);
 
-            if (!items.length) {
-                toast.error("No withdrawal requests found matching the date range", { id: "export" });
-                setIsExporting(false);
-                setIsExportModalOpen(false);
-                return;
-            }
-
             const csvRows = [];
             csvRows.push(['Date', 'Time', 'Requester Name', 'Requester Phone', 'Amount (INR)', 'Status', 'Reference ID'].join(','));
             
-            items.forEach(req => {
+            (items || []).forEach(req => {
                 const dt = new Date(req.createdAt);
                 const date = dt.toLocaleDateString();
                 const time = dt.toLocaleTimeString();
@@ -200,7 +193,7 @@ const WithdrawalRequests = () => {
             link.click();
             document.body.removeChild(link);
             
-            toast.success("Export successful", { id: "export" });
+            toast.success(`Exported ${items ? items.length : 0} records successfully`, { id: "export" });
             setIsExportModalOpen(false);
         } catch (error) {
             console.error("Export error:", error);

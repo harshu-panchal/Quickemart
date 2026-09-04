@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { protectWorksheetHeaders } from "@shared/utils/excelExportUtils";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import Pagination from "@shared/components/ui/Pagination";
@@ -618,13 +619,12 @@ const ActiveSellers = () => {
       const activeList = filterRecordsByDateRange(rawActive, preset, customFrom, customTo, ['createdAt', 'joinedDate']);
       const pendingList = filterRecordsByDateRange(rawPending, preset, customFrom, customTo, ['createdAt', 'joinedDate']);
 
-      if (activeList.length === 0 && pendingList.length === 0) {
-        toast.dismiss(toastId);
-        toast.error("No sellers found matching the selected date range");
-        setIsDownloadingReport(false);
-        setIsExportModalOpen(false);
-        return;
-      }
+      const SELLER_HEADERS = [
+        "Seller ID", "Seller Name", "Business Name", "Mobile", "Email", "Address", "City",
+        "GST Number", "PAN", "Bank Details (restricted access)", "IFSC", "Total Products",
+        "Active Products", "Out of Stock", "Total Orders", "Total Sales", "Commission",
+        "Seller Payable", "Status", "Registration Date"
+      ];
 
       const formatSellerRow = (seller, defaultStatus) => {
         const totalSales = Number(seller.totalRevenue || seller.totalSales || 0);
@@ -659,8 +659,8 @@ const ActiveSellers = () => {
         };
       };
 
-      const activeRows = activeList.map((seller) => formatSellerRow(seller, "Active / Approved"));
-      const pendingRows = pendingList.map((seller) => formatSellerRow(seller, "Pending Review"));
+      const activeRows = (activeList || []).map((seller) => formatSellerRow(seller, "Active / Approved"));
+      const pendingRows = (pendingList || []).map((seller) => formatSellerRow(seller, "Pending Review"));
 
       const workbook = XLSX.utils.book_new();
 
@@ -671,6 +671,7 @@ const ActiveSellers = () => {
           return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
         });
         activeSheet["!cols"] = colWidths;
+        protectWorksheetHeaders(activeSheet);
         XLSX.utils.book_append_sheet(workbook, activeSheet, "Active Sellers");
       }
 
@@ -681,7 +682,17 @@ const ActiveSellers = () => {
           return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
         });
         pendingSheet["!cols"] = colWidths;
+        protectWorksheetHeaders(pendingSheet);
         XLSX.utils.book_append_sheet(workbook, pendingSheet, "Pending Sellers");
+      }
+
+      if (activeRows.length === 0 && pendingRows.length === 0) {
+        const emptySheet = XLSX.utils.json_to_sheet([], { header: SELLER_HEADERS });
+        emptySheet["!cols"] = SELLER_HEADERS.map((key) => ({
+          wch: Math.min(Math.max(key.length + 4, 12), 50)
+        }));
+        protectWorksheetHeaders(emptySheet);
+        XLSX.utils.book_append_sheet(workbook, emptySheet, "Sellers");
       }
 
       const dateStr = new Date().toISOString().split("T")[0];
@@ -925,7 +936,7 @@ const ActiveSellers = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
             <button
-              onClick={handleDownloadReport}
+              onClick={() => setIsExportModalOpen(true)}
               disabled={isDownloadingReport}
               className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 ring-1 ring-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all active:scale-95 disabled:opacity-50"
             >

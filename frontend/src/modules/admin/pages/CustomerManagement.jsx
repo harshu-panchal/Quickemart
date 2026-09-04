@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import PageHeader from '@shared/components/ui/PageHeader';
@@ -152,15 +153,14 @@ const CustomerManagement = () => {
 
                 const list = filterRecordsByDateRange(rawList, preset, customFrom, customTo, ['createdAt', 'createdDate']);
 
-                if (!list || list.length === 0) {
-                    toast.dismiss(toastId);
-                    toast.error("No customers found matching the date range");
-                    setIsExporting(false);
-                    setIsExportModalOpen(false);
-                    return;
-                }
+                const CUSTOMER_HEADERS = [
+                    "Customer ID", "Customer Name", "Mobile", "Email", "City", "Area",
+                    "Registration Date", "Total Orders", "Delivered", "Cancelled",
+                    "Total Purchase", "Average Order Value", "Wallet Balance", "Refund Amount",
+                    "Coupon Used", "Last Order Date", "Rating", "Customer Status"
+                ];
 
-                const excelRows = list.map((customer) => {
+                const excelRows = (list || []).map((customer) => {
                     const stats = customer.stats || {};
                     const totalOrders = stats.totalOrders != null ? stats.totalOrders : (customer.totalOrders || 0);
                     const totalSpent = stats.totalSpent != null ? stats.totalSpent : (customer.totalSpent || customer.totalPurchase || 0);
@@ -189,13 +189,22 @@ const CustomerManagement = () => {
                     };
                 });
 
-                const worksheet = XLSX.utils.json_to_sheet(excelRows);
-                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-                });
-                worksheet['!cols'] = columnWidths;
+                let worksheet;
+                if (excelRows.length > 0) {
+                    worksheet = XLSX.utils.json_to_sheet(excelRows);
+                    const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                        const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                        return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                    });
+                    worksheet['!cols'] = columnWidths;
+                } else {
+                    worksheet = XLSX.utils.json_to_sheet([], { header: CUSTOMER_HEADERS });
+                    worksheet['!cols'] = CUSTOMER_HEADERS.map((key) => ({
+                        wch: Math.min(Math.max(key.length + 4, 12), 50)
+                    }));
+                }
 
+                protectWorksheetHeaders(worksheet);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Customers");
 

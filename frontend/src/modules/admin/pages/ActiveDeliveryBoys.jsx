@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import {
@@ -110,15 +111,14 @@ const ActiveDeliveryBoys = () => {
 
             const data = filterRecordsByDateRange(rawData, preset, customFrom, customTo, ['createdAt', 'createdDate', 'joiningDate']);
 
-            if (!data || data.length === 0) {
-                toast.dismiss(toastId);
-                toast.error("No delivery partners found matching the date range");
-                setIsExportingExcel(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const DELIVERY_PARTNER_HEADERS = [
+                "Driver ID", "Driver Name", "Mobile", "Vehicle Number", "Vehicle Type",
+                "Area", "Joining Date", "Orders Assigned", "Delivered", "Cancelled",
+                "Failed Deliveries", "COD Collected", "Total Distance", "Average Delivery Time",
+                "Rating", "Driver Status"
+            ];
 
-            const excelRows = data.map((r) => {
+            const excelRows = (data || []).map((r) => {
                 const assignedCount = Number(r.ordersAssigned || r.totalOrders || 0);
                 const deliveredCount = Number(r.deliveredOrders || r.totalDelivered || 0);
                 const cancelledCount = Number(r.cancelledOrders || 0);
@@ -152,13 +152,22 @@ const ActiveDeliveryBoys = () => {
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-            });
-            worksheet['!cols'] = columnWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = columnWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: DELIVERY_PARTNER_HEADERS });
+                worksheet['!cols'] = DELIVERY_PARTNER_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 50)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Delivery Partners");
 
@@ -364,7 +373,7 @@ return (
                         ))}
                     </div>
                     <button
-                        onClick={handleExportExcel}
+                        onClick={() => setIsExportModalOpen(true)}
                         disabled={isExportingExcel}
                         title="Export Delivery Partners to Excel"
                         className="flex items-center gap-2 px-4 py-3.5 bg-emerald-50 ring-1 ring-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all active:scale-95 disabled:opacity-50"

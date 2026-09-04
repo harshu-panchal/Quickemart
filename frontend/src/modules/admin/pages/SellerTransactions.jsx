@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
@@ -163,14 +164,13 @@ const SellerTransactions = () => {
             
             const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'date']);
 
-            if (!items.length) {
-                toast.error("No transactions found matching the date range", { id: "export-ledger" });
-                setIsExporting(false);
-                setIsExportModalOpen(false);
-                return;
-            }
+            const SELLER_TRANSACTION_HEADERS = [
+                "Payment ID", "Seller ID", "Seller Name", "Order ID", "Order Amount",
+                "Commission", "GST/TDS/Other Adjustments", "Refund", "Net Payable",
+                "Payment Status", "Payment Date", "Transaction/UTR Number"
+            ];
 
-            const excelRows = items.map((t) => {
+            const excelRows = (items || []).map((t) => {
                 const userObj = t.user || {};
                 const pricing = t.order?.pricing || {};
                 const isRefund = (t.type || '').toLowerCase() === 'refund';
@@ -196,13 +196,22 @@ const SellerTransactions = () => {
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-            });
-            worksheet['!cols'] = columnWidths;
+            let worksheet;
+            if (excelRows.length > 0) {
+                worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                });
+                worksheet['!cols'] = columnWidths;
+            } else {
+                worksheet = XLSX.utils.json_to_sheet([], { header: SELLER_TRANSACTION_HEADERS });
+                worksheet['!cols'] = SELLER_TRANSACTION_HEADERS.map((key) => ({
+                    wch: Math.min(Math.max(key.length + 4, 12), 50)
+                }));
+            }
 
+            protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Seller Payments");
 

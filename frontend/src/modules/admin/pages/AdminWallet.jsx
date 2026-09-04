@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import PageHeader from '@shared/components/ui/PageHeader';
@@ -271,14 +272,13 @@ const AdminWallet = () => {
 
                 const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'processedAt']);
 
-                if (!items || items.length === 0) {
-                    toast.error("No money requests found matching the date range");
-                    setIsExporting(false);
-                    setIsExportModalOpen(false);
-                    return;
-                }
+                const MONEY_REQUEST_HEADERS = [
+                    "Request ID", "User/Seller ID", "Name", "Request Type", "Amount",
+                    "Reason", "Requested Date", "Approved By", "Approved Date",
+                    "Rejection Reason", "Status", "Transaction ID"
+                ];
 
-                const excelRows = items.map((req) => {
+                const excelRows = (items || []).map((req) => {
                     const beneficiary = req.beneficiaryId || req.beneficiary || {};
                     const bId = beneficiary._id || req.beneficiaryId || "N/A";
                     const name = beneficiary.shopName || beneficiary.name || "N/A";
@@ -301,13 +301,22 @@ const AdminWallet = () => {
                     };
                 });
 
-                const worksheet = XLSX.utils.json_to_sheet(excelRows);
-                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-                });
-                worksheet['!cols'] = columnWidths;
+                let worksheet;
+                if (excelRows.length > 0) {
+                    worksheet = XLSX.utils.json_to_sheet(excelRows);
+                    const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                        const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                        return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                    });
+                    worksheet['!cols'] = columnWidths;
+                } else {
+                    worksheet = XLSX.utils.json_to_sheet([], { header: MONEY_REQUEST_HEADERS });
+                    worksheet['!cols'] = MONEY_REQUEST_HEADERS.map((key) => ({
+                        wch: Math.min(Math.max(key.length + 4, 12), 50)
+                    }));
+                }
 
+                protectWorksheetHeaders(worksheet);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Money Requests");
 
@@ -324,14 +333,13 @@ const AdminWallet = () => {
 
                 const items = filterRecordsByDateRange(rawItems, preset, customFrom, customTo, ['createdAt', 'date']);
 
-                if (!items || items.length === 0) {
-                    toast.error("No wallet transactions found matching the date range");
-                    setIsExporting(false);
-                    setIsExportModalOpen(false);
-                    return;
-                }
+                const WALLET_TRANSACTION_HEADERS = [
+                    "Transaction ID", "User ID", "User Name", "Transaction Type", "Credit/Debit",
+                    "Amount", "Previous Balance", "New Balance", "Payment/Reference ID",
+                    "Reason", "Date & Time", "Status"
+                ];
 
-                const excelRows = items.map((entry) => ({
+                const excelRows = (items || []).map((entry) => ({
                     "Transaction ID": entry.transactionId || entry._id || "N/A",
                     "User ID": entry.actorId || entry.walletId || "N/A",
                     "User Name": entry.actorType || "System",
@@ -346,13 +354,22 @@ const AdminWallet = () => {
                     "Status": entry.status || "COMPLETED",
                 }));
 
-                const worksheet = XLSX.utils.json_to_sheet(excelRows);
-                const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
-                    const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
-                    return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
-                });
-                worksheet['!cols'] = columnWidths;
+                let worksheet;
+                if (excelRows.length > 0) {
+                    worksheet = XLSX.utils.json_to_sheet(excelRows);
+                    const columnWidths = Object.keys(excelRows[0] || {}).map((key) => {
+                        const maxLen = Math.max(key.length, ...excelRows.map((row) => String(row[key] || '').length));
+                        return { wch: Math.min(Math.max(maxLen + 4, 12), 50) };
+                    });
+                    worksheet['!cols'] = columnWidths;
+                } else {
+                    worksheet = XLSX.utils.json_to_sheet([], { header: WALLET_TRANSACTION_HEADERS });
+                    worksheet['!cols'] = WALLET_TRANSACTION_HEADERS.map((key) => ({
+                        wch: Math.min(Math.max(key.length + 4, 12), 50)
+                    }));
+                }
 
+                protectWorksheetHeaders(worksheet);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Wallet Transactions");
 
