@@ -344,13 +344,6 @@ const OrdersList = () => {
             setIsExporting(false);
         }
     };
-        } catch (error) {
-            console.error("Export orders error:", error);
-            showToast("Failed to export orders to Excel", "error");
-        } finally {
-            setIsExporting(false);
-        }
-    };
 
     const pageTitle = status === 'all' ? 'All Orders' : status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
