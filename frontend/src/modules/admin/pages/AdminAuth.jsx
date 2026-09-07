@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
@@ -11,7 +11,8 @@ import {
     ShieldCheck,
     ArrowRight,
     Eye,
-    EyeOff
+    EyeOff,
+    Users
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Lottie from 'lottie-react';
@@ -22,21 +23,45 @@ const AdminAuth = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const { login, isAuthenticated, role } = useAuth();
+    const [employees, setEmployees] = useState([]);
+    const [isEmployeesLoading, setIsEmployeesLoading] = useState(true);
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+    const { login, isAuthenticated, role, user } = useAuth();
     const { settings } = useSettings();
     const navigate = useNavigate();
 
-    React.useEffect(() => {
+    useEffect(() => {
         import('@core/auth/activeRoleStore').then(({ setActiveRole, ROLES }) => {
             setActiveRole(ROLES.ADMIN);
         });
+
+        const fetchEmployees = async () => {
+            try {
+                setIsEmployeesLoading(true);
+                const res = await adminApi.getPublicEmployees();
+                const list = res.data?.results || res.data?.result || [];
+                if (Array.isArray(list)) {
+                    setEmployees(list);
+                }
+            } catch (err) {
+                console.error('Failed to load employee list:', err);
+            } finally {
+                setIsEmployeesLoading(false);
+            }
+        };
+        fetchEmployees();
     }, []);
 
-    React.useEffect(() => {
-        if (isAuthenticated && role === 'admin') {
-            navigate('/admin', { replace: true });
+    useEffect(() => {
+        if (isAuthenticated) {
+            const activeRole = user?.role || role;
+            if (activeRole === 'product') {
+                navigate('/admin/products', { replace: true });
+            } else if (activeRole === 'admin') {
+                navigate('/admin', { replace: true });
+            }
         }
-    }, [isAuthenticated, role, navigate]);
+    }, [isAuthenticated, role, user, navigate]);
     const appName = settings?.appName || 'App';
     const logoUrl = settings?.logoUrl || '';
 
@@ -53,15 +78,30 @@ const AdminAuth = () => {
         setFormData({ ...formData, [name]: value });
     };
 
+    const handleSelectEmployee = (e) => {
+        const empId = e.target.value;
+        setSelectedEmployeeId(empId);
+        if (!empId) return;
+        const emp = employees.find(item => item._id === empId);
+        if (emp) {
+            setFormData(prev => ({ ...prev, email: emp.email }));
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
+
+        if (isLogin && !selectedEmployeeId) {
+            toast.error('Please select an Employee / Staff Account first.');
+            setIsLoading(false);
+            return;
+        }
 
         // Debug logging
         console.log('=== FRONTEND LOGIN ATTEMPT ===');
         console.log('Email:', formData.email);
         console.log('Password:', formData.password);
-        console.log('Password Length:', formData.password?.length);
         console.log('Is Login:', isLogin);
         console.log('==============================');
 
@@ -91,30 +131,25 @@ const AdminAuth = () => {
         }
 
         try {
-            console.log('Sending request to API...');
             const response = isLogin
                 ? await adminApi.login({ email: formData.email, password: formData.password })
                 : await adminApi.signup({ name: formData.name, email: formData.email, password: formData.password });
-
-            console.log('API Response:', response);
 
             const { token, admin } = response.data.result;
 
             const authData = {
                 ...admin,
                 token,
-                role: 'admin'
+                role: admin.role || 'admin'
             };
-
-            console.log('Login successful! Auth Data:', authData);
 
             login(authData);
 
-            toast.success(isLogin ? 'Welcome back, Administrator.' : 'Administrator Account Created.');
-            navigate('/admin');
+            toast.success(isLogin ? `Welcome back, ${admin.name || 'Admin'}.` : 'Administrator Account Created.');
+            const targetPath = admin.role === 'product' ? '/admin/products' : '/admin';
+            navigate(targetPath);
         } catch (error) {
             console.error('Login error:', error);
-            console.error('Error response:', error.response?.data);
             toast.error(error.response?.data?.message || 'Authentication failed');
         } finally {
             setIsLoading(false);
@@ -190,6 +225,29 @@ const AdminAuth = () => {
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
+
+                                {isLogin && (
+                                    <div className="group relative">
+                                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-brand-600 transition-colors z-10">
+                                            <Users size={20} />
+                                        </div>
+                                        <select
+                                            value={selectedEmployeeId}
+                                            onChange={handleSelectEmployee}
+                                            disabled={isEmployeesLoading}
+                                            className="w-full pl-14 pr-5 py-4 bg-[#f0f3ff] border-2 border-brand-100 rounded-[24px] text-xs font-bold text-brand-900 outline-none focus:bg-white focus:border-brand-300 focus:ring-4 focus:ring-brand-100 transition-all appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="">
+                                                {isEmployeesLoading ? '-- Loading Staff Accounts... --' : '-- Select Employee / Staff Account --'}
+                                            </option>
+                                            {employees.map((emp) => (
+                                                <option key={emp._id} value={emp._id}>
+                                                    {emp.name} ({emp.role === 'product' ? 'Product Manager' : 'Admin'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="group relative">
                                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand-600 transition-colors">

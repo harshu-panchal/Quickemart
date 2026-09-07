@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
 import { useSupportUnread } from "@core/context/SupportUnreadContext";
 import { setActiveRole, ROLES } from "@core/auth/activeRoleStore";
+import { useAuth } from "@core/context/AuthContext";
 import {
   LayoutDashboard,
   Tag,
@@ -22,6 +23,7 @@ import {
   Sparkles,
   User,
   Store,
+  ShieldCheck,
 } from "lucide-react";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -93,6 +95,7 @@ const ShopByStoreManagement = React.lazy(
 const AdminSettings = React.lazy(() => import("../pages/AdminSettings"));
 const EnvSettings = React.lazy(() => import("../pages/EnvSettings"));
 const AdminProfile = React.lazy(() => import("../pages/AdminProfile"));
+const RoleAssign = React.lazy(() => import("../pages/RoleAssign"));
 
 const navItems = [
   {
@@ -101,6 +104,12 @@ const navItems = [
     icon: LayoutDashboard,
     color: "indigo",
     end: true,
+  },
+  {
+    label: "Role Assign",
+    path: "/admin/role-assign",
+    icon: ShieldCheck,
+    color: "indigo",
   },
   {
     label: "Categories",
@@ -217,20 +226,35 @@ const AdminRoutes = () => {
   }, []);
 
   const { totalUnread } = useSupportUnread();
+  const { role, user } = useAuth();
+
+  const activeUserRole = user?.role || role;
 
   const navItemsWithBadges = React.useMemo(() => {
     const count = Number.isFinite(totalUnread) ? totalUnread : 0;
-    if (count <= 0) return navItems;
-    return navItems.map((item) => {
-      if (item?.label !== "Customer Support") return item;
-      return { ...item, badgeCount: count };
-    });
-  }, [totalUnread]);
+    let items = navItems;
+    if (count > 0) {
+      items = navItems.map((item) => {
+        if (item?.label !== "Customer Support") return item;
+        return { ...item, badgeCount: count };
+      });
+    }
+
+    // Role-based navigation filtering (Product Manager gets specific subset: Categories, Products, My Profile)
+    if (activeUserRole === "product") {
+      items = items.filter((item) =>
+        ["Categories", "Products", "My Profile"].includes(item.label)
+      );
+    }
+
+    return items;
+  }, [totalUnread, activeUserRole]);
 
   return (
-    <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">
+    <DashboardLayout navItems={navItemsWithBadges} title={activeUserRole === "product" ? "Product Manager Center" : "Admin Center"}>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={activeUserRole === "product" ? <Navigate to="/admin/products" replace /> : <Dashboard />} />
+        <Route path="/role-assign" element={<RoleAssign />} />
         <Route path="/users" element={<UserManagement />} />
         <Route path="/profile" element={<AdminProfile />} />
         {/* Lazy routes for new sections */}

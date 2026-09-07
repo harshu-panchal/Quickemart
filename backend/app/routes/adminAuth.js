@@ -3,6 +3,11 @@ import {
     bootstrapAdmin,
     signupAdmin,
     loginAdmin,
+    getPublicEmployees,
+    createEmployee,
+    getEmployees,
+    updateEmployee,
+    deleteEmployee,
 } from "../controller/adminAuthController.js";
 import {
     getAdminProfile,
@@ -65,12 +70,19 @@ const smallAdminPayload = createContentLengthGuard(
 router.post("/bootstrap", adminBootstrapRateLimiter, smallAdminPayload, bootstrapAdmin);
 router.post("/signup", adminBootstrapRateLimiter, smallAdminPayload, signupAdmin);
 router.post("/login", authRouteRateLimiter, smallAdminPayload, loginAdmin);
+router.get("/public-employees", getPublicEmployees);
 
-// Profile routes
+// Role Assignment & Employee Credential Management (Super Admin only)
+router.get("/employees", verifyToken, allowRoles("admin"), getEmployees);
+router.post("/role-assign", verifyToken, allowRoles("admin"), createEmployee);
+router.put("/role-assign/:id", verifyToken, allowRoles("admin"), updateEmployee);
+router.delete("/role-assign/:id", verifyToken, allowRoles("admin"), deleteEmployee);
+
+// Profile routes (allow both admin and product roles)
 router.get(
     "/profile",
     verifyToken,
-    allowRoles("admin"),
+    allowRoles("admin", "product"),
     getAdminProfile
 );
 

@@ -220,10 +220,11 @@ const SidebarItem = ({
 
 const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hoveredIdx, setHoveredIdx }) => {
   const { settings } = useSettings();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const appName = settings?.appName || 'App';
   
-  const homePath = role === 'admin' ? '/admin' : (role === 'seller' ? '/seller' : '/');
+  const activeRole = user?.role || role;
+  const homePath = (activeRole === 'product') ? '/admin/products' : (activeRole === 'admin' ? '/admin' : (activeRole === 'seller' ? '/seller' : '/'));
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -304,7 +305,7 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
                 {title?.toLowerCase().includes('seller') ? 'Seller Console' : 'Admin Console'}
               </p>
               <p className="text-[9px] text-gray-500 truncate font-black uppercase tracking-widest">
-                {title?.toLowerCase().includes('seller') ? 'Seller' : 'Super Admin'}
+                {title?.toLowerCase().includes('seller') ? 'Seller' : (activeRole === 'product' ? 'Product Manager' : 'Super Admin')}
               </p>
             </div>
           </div>

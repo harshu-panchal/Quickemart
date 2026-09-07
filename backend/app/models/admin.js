@@ -32,7 +32,20 @@ const adminSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      default: "admin",
+      default: "admin", // "admin" (Super Admin) or "product" (Product Manager) or custom
+    },
+    permissions: {
+      type: [String],
+      default: [],
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
     isVerified: {
       type: Boolean,

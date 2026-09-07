@@ -69,21 +69,30 @@ const BillingCharges = () => {
         fetchSettings();
     }, []);
 
+    const getNumericValue = (val) => {
+        const parsed = parseFloat(val);
+        return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    };
+
     const handleSave = async () => {
         try {
             setIsSaving(true);
+            const baseChargeNum = getNumericValue(config.baseCharge);
+            const extraPerKmNum = getNumericValue(config.extraPerKm);
+            const fixedChargeNum = getNumericValue(config.fixedCharge);
+
             await Promise.all([
                 adminApi.updatePlatformSettings({}),
                 adminApi.updateDeliveryFinanceSettings({
                     deliveryPricingMode: deliveryMode === 'fixed' ? 'fixed_price' : 'distance_based',
-                    customerBaseDeliveryFee: config.baseCharge,
-                    riderBasePayout: config.baseCharge,
-                    baseDeliveryCharge: config.baseCharge,
-                    baseDistanceCapacityKm: config.baseDistance,
-                    incrementalKmSurcharge: config.extraPerKm,
-                    deliveryPartnerRatePerKm: config.extraPerKm,
-                    fleetCommissionRatePerKm: config.extraPerKm,
-                    fixedDeliveryFee: config.fixedCharge,
+                    customerBaseDeliveryFee: baseChargeNum,
+                    riderBasePayout: baseChargeNum,
+                    baseDeliveryCharge: baseChargeNum,
+                    baseDistanceCapacityKm: getNumericValue(config.baseDistance),
+                    incrementalKmSurcharge: extraPerKmNum,
+                    deliveryPartnerRatePerKm: extraPerKmNum,
+                    fleetCommissionRatePerKm: extraPerKmNum,
+                    fixedDeliveryFee: fixedChargeNum,
                     handlingFeeStrategy: config.handlingFeeStrategy,
                     codEnabled: config.codEnabled,
                     onlineEnabled: config.onlineEnabled,
@@ -100,9 +109,23 @@ const BillingCharges = () => {
     };
 
     const handleInputChange = (field, value) => {
-        let parsed = parseFloat(value) || 0;
-        if (parsed < 0) parsed = 0;
-        setConfig(prev => ({ ...prev, [field]: parsed }));
+        if (value === '') {
+            setConfig(prev => ({ ...prev, [field]: '' }));
+            return;
+        }
+        let cleanVal = value;
+        if (cleanVal.length > 1 && cleanVal.startsWith('0') && !cleanVal.startsWith('0.')) {
+            cleanVal = cleanVal.replace(/^0+/, '');
+            if (cleanVal === '') cleanVal = '0';
+        }
+        setConfig(prev => ({ ...prev, [field]: cleanVal }));
+    };
+
+    const handleInputBlur = (field) => {
+        setConfig(prev => ({
+            ...prev,
+            [field]: (prev[field] === '' || prev[field] === null || prev[field] === undefined) ? 0 : prev[field]
+        }));
     };
 
     return (
@@ -165,7 +188,9 @@ const BillingCharges = () => {
                                         type="number"
                                         min="0"
                                         value={config.platformFee}
+                                        onFocus={(e) => e.target.select()}
                                         onChange={(e) => handleInputChange('platformFee', e.target.value)}
+                                        onBlur={() => handleInputBlur('platformFee')}
                                         className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-red-500/10 transition-all"
                                     />
                                 </div>
@@ -182,7 +207,9 @@ const BillingCharges = () => {
                                         type="number"
                                         min="0"
                                         value={config.freeDeliveryThreshold}
+                                        onFocus={(e) => e.target.select()}
                                         onChange={(e) => handleInputChange('freeDeliveryThreshold', e.target.value)}
+                                        onBlur={() => handleInputBlur('freeDeliveryThreshold')}
                                         className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-red-500/10 transition-all"
                                     />
                                 </div>
@@ -227,7 +254,9 @@ const BillingCharges = () => {
                                                 type="number"
                                                 min="0"
                                                 value={config.baseCharge}
+                                                onFocus={(e) => e.target.select()}
                                                 onChange={(e) => handleInputChange('baseCharge', e.target.value)}
+                                                onBlur={() => handleInputBlur('baseCharge')}
                                                 className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
                                             />
                                             <p className="text-[10px] font-bold text-slate-400 italic">Customer-facing minimum fee for first X kms.</p>
@@ -240,7 +269,9 @@ const BillingCharges = () => {
                                                     min="0"
                                                     step="0.1"
                                                     value={config.baseDistance}
+                                                    onFocus={(e) => e.target.select()}
                                                     onChange={(e) => handleInputChange('baseDistance', e.target.value)}
+                                                    onBlur={() => handleInputBlur('baseDistance')}
                                                     className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
                                                 />
                                                 <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase pointer-events-none">km</span>
@@ -253,7 +284,9 @@ const BillingCharges = () => {
                                                 type="number"
                                                 min="0"
                                                 value={config.extraPerKm}
+                                                onFocus={(e) => e.target.select()}
                                                 onChange={(e) => handleInputChange('extraPerKm', e.target.value)}
+                                                onBlur={() => handleInputBlur('extraPerKm')}
                                                 className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
                                             />
                                             <p className="text-[10px] font-bold text-slate-400 italic">Charged for every km beyond base radius.</p>
@@ -270,7 +303,9 @@ const BillingCharges = () => {
                                                 type="number"
                                                 min="0"
                                                 value={config.fixedCharge}
+                                                onFocus={(e) => e.target.select()}
                                                 onChange={(e) => handleInputChange('fixedCharge', e.target.value)}
+                                                onBlur={() => handleInputBlur('fixedCharge')}
                                                 className="w-full pl-10 pr-5 py-4 bg-white ring-1 ring-slate-200 border-none rounded-xl text-base font-medium text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 transition-all"
                                             />
                                         </div>

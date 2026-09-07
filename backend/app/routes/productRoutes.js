@@ -38,21 +38,21 @@ router.get("/seller/me", verifyToken, allowRoles("seller"), requireApprovedSelle
 router.get("/stock-history", verifyToken, allowRoles("seller"), requireApprovedSeller, getStockHistory);
 router.post("/adjust-stock", verifyToken, allowRoles("seller"), requireApprovedSeller, adjustStock);
 router.post("/bulk", verifyToken, allowRoles("seller"), requireApprovedSeller, bulkImportProducts);
-router.get("/moderation", verifyToken, allowRoles("admin"), getModerationProducts);
-router.patch("/moderation/:id/approve", verifyToken, allowRoles("admin"), approveProduct);
-router.patch("/moderation/:id/reject", verifyToken, allowRoles("admin"), rejectProduct);
+router.get("/moderation", verifyToken, allowRoles("admin", "product"), getModerationProducts);
+router.patch("/moderation/:id/approve", verifyToken, allowRoles("admin", "product"), approveProduct);
+router.patch("/moderation/:id/reject", verifyToken, allowRoles("admin", "product"), rejectProduct);
 
 // Catalog selection routes for sellers
-router.get("/catalog/brands", verifyToken, allowRoles("seller", "admin"), getCatalogBrands);
-router.get("/catalog/products", verifyToken, allowRoles("seller", "admin"), getCatalogProducts);
+router.get("/catalog/brands", verifyToken, allowRoles("seller", "admin", "product"), getCatalogBrands);
+router.get("/catalog/products", verifyToken, allowRoles("seller", "admin", "product"), getCatalogProducts);
 
 router.get("/:id", optionalVerifyToken, getProductById);
 
-// Admin-only: create full product (master catalog item with all metadata)
+// Admin-only / Product Manager: create full product (master catalog item with all metadata)
 router.post(
     "/",
     verifyToken,
-    allowRoles("admin"),
+    allowRoles("admin", "product"),
     upload.any(),
     createProduct
 );
@@ -69,7 +69,7 @@ router.post(
 router.put(
     "/:id",
     verifyToken,
-    allowRoles("seller", "admin"),
+    allowRoles("seller", "admin", "product"),
     requireApprovedSeller,
     upload.any(),
     updateProduct
@@ -78,7 +78,7 @@ router.put(
 router.delete(
     "/:id",
     verifyToken,
-    allowRoles("seller", "admin"),
+    allowRoles("seller", "admin", "product"),
     requireApprovedSeller,
     deleteProduct
 );

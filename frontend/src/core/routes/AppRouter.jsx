@@ -151,7 +151,7 @@ const AppRouter = () => {
                     path: 'admin/*',
                     element: (
                         <ProtectedRoute>
-                            <RoleGuard allowedRoles={[UserRole.ADMIN]}>
+                            <RoleGuard allowedRoles={[UserRole.ADMIN, UserRole.PRODUCT]}>
                                 <AdminModule />
                             </RoleGuard>
                         </ProtectedRoute>

@@ -20,6 +20,7 @@ const ROLE_STORAGE_KEYS = {
     customer: STORAGE_KEYS.AUTH_CUSTOMER,
     seller: STORAGE_KEYS.AUTH_SELLER,
     admin: STORAGE_KEYS.AUTH_ADMIN,
+    product: STORAGE_KEYS.AUTH_ADMIN,
     delivery: STORAGE_KEYS.AUTH_DELIVERY,
 };
 
@@ -128,7 +129,8 @@ export const AuthProvider = ({ children }) => {
                 try {
                     setIsLoading(true);
                     // Use deduplicated fetch to avoid multiple simultaneous profile calls
-                    const endpoint = `/${currentRole}/profile`;
+                    const portalRole = (currentRole === 'admin' || currentRole === 'product') ? 'admin' : currentRole;
+                    const endpoint = `/${portalRole}/profile`;
                     const response = await getWithDedupe(endpoint, {}, { ttl: 5000 });
                     setUser(response.data.result);
                 } catch (error) {
@@ -241,24 +243,26 @@ export const AuthProvider = ({ children }) => {
     }, [token]);
 
     const login = (userData) => {
-        const role = userData.role?.toLowerCase() || 'customer';
-        const storageKey = ROLE_STORAGE_KEYS[role];
+        const rawRole = userData.role?.toLowerCase() || 'customer';
+        const isAdminPortal = rawRole === 'admin' || rawRole === 'product';
+        const role = isAdminPortal ? 'admin' : rawRole;
+        const storageKey = ROLE_STORAGE_KEYS[role] || ROLE_STORAGE_KEYS[rawRole];
 
         if (storageKey && userData.token) {
-            // Persist only the raw JWT string; everything else lives in memory
-            // until the next profile fetch.
+            // Persist raw JWT string under auth storage key
             rawSet(storageKey, userData.token);
 
-            // Guard against state leaking from a previous account on the same
-            // browser (e.g. abandoned guest cart, leftover recent searches).
-            // Backend cart will replace it as soon as fetchCart resolves.
             rawRemove(STORAGE_KEYS.CART);
             rawRemove(STORAGE_KEYS.WISHLIST);
 
-            setAuthData(prev => ({ ...prev, [role]: userData.token }));
+            setAuthData(prev => ({
+                ...prev,
+                admin: isAdminPortal ? userData.token : prev.admin,
+                [rawRole]: userData.token
+            }));
             setUser(userData); // Set full data initially
         } else {
-            console.error('Invalid role or missing token for login:', role);
+            console.error('Invalid role or missing token for login:', rawRole);
         }
     };
 

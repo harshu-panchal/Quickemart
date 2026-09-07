@@ -16,14 +16,14 @@ const upload = multer({ storage });
 
 const router = express.Router();
 
-// All routes here should be protected and restricted to admin
+// All routes here should be protected and restricted to admin/product roles
 router.use(verifyToken);
-router.use(allowRoles("admin", "superadmin"));
+router.use(allowRoles("admin", "superadmin", "product"));
 
 router.get("/", getMasterProducts);
 router.post("/", upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 5 }]), addMasterProduct);
 router.put("/:id", upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 5 }]), updateMasterProduct);
-router.delete("/:id", deleteMasterProduct);
+router.delete("/:id", allowRoles("admin", "superadmin"), deleteMasterProduct);
 
 // Bulk Import Excel
 router.get("/template", getImportTemplate);

@@ -16,11 +16,11 @@ const router = express.Router();
 // Public route to get categories
 router.get("/", getCategories);
 
-// Admin only routes
+// Admin and Product Manager routes
 router.post(
     "/",
     verifyToken,
-    allowRoles("admin"),
+    allowRoles("admin", "product"),
     upload.single("image"),
     createCategory
 );
@@ -28,7 +28,7 @@ router.post(
 router.put(
     "/:id",
     verifyToken,
-    allowRoles("admin"),
+    allowRoles("admin", "product"),
     upload.single("image"),
     updateCategory
 );
@@ -36,7 +36,7 @@ router.put(
 router.delete(
     "/:id",
     verifyToken,
-    allowRoles("admin"),
+    allowRoles("admin", "product"),
     deleteCategory
 );
 

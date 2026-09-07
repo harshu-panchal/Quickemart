@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import { adminApi } from '../services/adminApi';
+import { useAuth } from '@core/context/AuthContext';
 import { toast } from 'sonner';
 import ExportDateModal from '@shared/components/ui/ExportDateModal';
 import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
@@ -38,6 +39,9 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ProductManagement = () => {
+    const { user } = useAuth();
+    const isProductRole = user?.role === 'product';
+
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]); // All categories for dropdowns
     const [availableBrands, setAvailableBrands] = useState([]);
@@ -803,18 +807,20 @@ const ProductManagement = () => {
                         <HiOutlineSquaresPlus className="h-4 w-4" />
                         BULK LISTING
                     </button>
-                    <button
-                        onClick={() => setIsExportModalOpen(true)}
-                        disabled={isExporting}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
-                    >
-                        {isExporting ? (
-                            <HiOutlineArrowPath className="h-4 w-4 animate-spin text-emerald-600" />
-                        ) : (
-                            <HiOutlineArrowDownTray className="h-4 w-4 text-emerald-600" />
-                        )}
-                        DOWNLOAD EXCEL
-                    </button>
+                    {!isProductRole && (
+                        <button
+                            onClick={() => setIsExportModalOpen(true)}
+                            disabled={isExporting}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+                        >
+                            {isExporting ? (
+                                <HiOutlineArrowPath className="h-4 w-4 animate-spin text-emerald-600" />
+                            ) : (
+                                <HiOutlineArrowDownTray className="h-4 w-4 text-emerald-600" />
+                            )}
+                            DOWNLOAD EXCEL
+                        </button>
+                    )}
                     <button
                         onClick={() => openModal()}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-brand-200"
@@ -1168,12 +1174,15 @@ const ProductManagement = () => {
                                             >
                                                 <HiOutlinePencilSquare className="h-4 w-4" />
                                             </button>
-                                            <button
-                                                onClick={() => (setItemToDelete(p), setIsDeleteModalOpen(true))}
-                                                className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100"
-                                            >
-                                                <HiOutlineTrash className="h-4 w-4" />
-                                            </button>
+                                            {!isProductRole && (
+                                                <button
+                                                    onClick={() => (setItemToDelete(p), setIsDeleteModalOpen(true))}
+                                                    className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100"
+                                                    title="Delete Product"
+                                                >
+                                                    <HiOutlineTrash className="h-4 w-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

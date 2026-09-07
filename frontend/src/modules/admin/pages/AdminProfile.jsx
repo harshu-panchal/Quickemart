@@ -28,6 +28,14 @@ const AdminProfile = () => {
         role: 'Admin'
     });
 
+    const isProductRole = user?.role === 'product' || profile.role?.toLowerCase() === 'product';
+
+    useEffect(() => {
+        if (isProductRole && activeTab === 'security') {
+            setActiveTab('profile');
+        }
+    }, [isProductRole, activeTab]);
+
     const [security, setSecurity] = useState({
         currentPassword: '',
         newPassword: '',
@@ -160,18 +168,20 @@ const AdminProfile = () => {
                                 <User className="h-4 w-4" />
                                 Profile Information
                             </button>
-                            <button
-                                onClick={() => setActiveTab('security')}
-                                className={cn(
-                                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all mt-1",
-                                    activeTab === 'security'
-                                        ? "bg-white text-brand-600 shadow-sm ring-1 ring-slate-100"
-                                        : "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50"
-                                )}
-                            >
-                                <Lock className="h-4 w-4" />
-                                Security & Password
-                            </button>
+                            {!isProductRole && (
+                                <button
+                                    onClick={() => setActiveTab('security')}
+                                    className={cn(
+                                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all mt-1",
+                                        activeTab === 'security'
+                                            ? "bg-white text-brand-600 shadow-sm ring-1 ring-slate-100"
+                                            : "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50"
+                                    )}
+                                >
+                                    <Lock className="h-4 w-4" />
+                                    Security & Password
+                                </button>
+                            )}
                         </div>
                     </Card>
                 </div>
@@ -184,7 +194,7 @@ const AdminProfile = () => {
                         <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
                             <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
                                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
-                                    Edit Profile
+                                    {isProductRole ? 'Profile Information' : 'Edit Profile'}
                                 </h3>
                             </div>
                             <form onSubmit={handleProfileUpdate} className="p-8 space-y-6">
@@ -195,7 +205,9 @@ const AdminProfile = () => {
                                             type="text"
                                             value={profile.name}
                                             onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                                            className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all block"
+                                            readOnly={isProductRole}
+                                            disabled={isProductRole}
+                                            className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all block disabled:opacity-75 disabled:cursor-not-allowed"
                                             required
                                         />
                                     </div>
@@ -207,31 +219,35 @@ const AdminProfile = () => {
                                                 type="email"
                                                 value={profile.email}
                                                 onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                                                className="w-full pl-12 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all block"
+                                                readOnly={isProductRole}
+                                                disabled={isProductRole}
+                                                className="w-full pl-12 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all block disabled:opacity-75 disabled:cursor-not-allowed"
                                                 required
                                             />
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="pt-6 border-t border-slate-50 flex justify-end">
-                                    <button
-                                        type="submit"
-                                        disabled={isSaving}
-                                        className={cn(
-                                            "flex items-center gap-2 px-4 py-4 bg-black  text-primary-foreground rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-brand-100 active:scale-95",
-                                            isSaving ? "opacity-70 cursor-wait" : "hover:bg-brand-700"
-                                        )}
-                                    >
-                                        {isSaving ? 'Saving...' : 'Save Changes'}
-                                    </button>
-                                </div>
+                                {!isProductRole && (
+                                    <div className="pt-6 border-t border-slate-50 flex justify-end">
+                                        <button
+                                            type="submit"
+                                            disabled={isSaving}
+                                            className={cn(
+                                                "flex items-center gap-2 px-4 py-4 bg-black  text-primary-foreground rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-brand-100 active:scale-95",
+                                                isSaving ? "opacity-70 cursor-wait" : "hover:bg-brand-700"
+                                            )}
+                                        >
+                                            {isSaving ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                    </div>
+                                )}
                             </form>
                         </Card>
                     )}
 
                     {/* Security Tab */}
-                    {activeTab === 'security' && (
+                    {activeTab === 'security' && !isProductRole && (
                         <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
                             <div className="p-6 border-b border-slate-50 bg-slate-50/30">
                                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">

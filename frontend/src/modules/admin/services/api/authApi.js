@@ -13,6 +13,13 @@ export const adminAuthApi = {
     getProfile: () => axiosInstance.get('/admin/profile'),
     updateProfile: (data) => axiosInstance.put('/admin/profile', data),
     updatePassword: (data) => axiosInstance.put('/admin/profile/password', data),
+
+    // Employee Role Assignment APIs
+    getPublicEmployees: () => axiosInstance.get('/admin/public-employees'),
+    getEmployees: () => axiosInstance.get('/admin/employees'),
+    createEmployee: (data) => axiosInstance.post('/admin/role-assign', data),
+    updateEmployee: (id, data) => axiosInstance.put(`/admin/role-assign/${id}`, data),
+    deleteEmployee: (id) => axiosInstance.delete(`/admin/role-assign/${id}`),
 };
 
 export default adminAuthApi;

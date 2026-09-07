@@ -37,7 +37,8 @@ const Topbar = ({ onMenuClick }) => {
 
     const isSeller = location.pathname.startsWith('/seller');
     const isAdmin = location.pathname.startsWith('/admin');
-    const homePath = role === 'admin' ? '/admin' : (role === 'seller' ? '/seller' : '/');
+    const activeRole = user?.role || role;
+    const homePath = (activeRole === 'product') ? '/admin/products' : (activeRole === 'admin' ? '/admin' : (activeRole === 'seller' ? '/seller' : '/'));
 
     const handleSearchSubmit = (e) => {
         e?.preventDefault();
@@ -256,7 +257,7 @@ const Topbar = ({ onMenuClick }) => {
                     </div>
                     <div>
                         <p className="text-xs font-bold text-gray-900 leading-tight">{user?.name || 'Demo User'}</p>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{user?.role || 'Member'}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{user?.role === 'product' ? 'Product Manager' : (user?.role || 'Member')}</p>
                     </div>
                 </button>
                 <button
