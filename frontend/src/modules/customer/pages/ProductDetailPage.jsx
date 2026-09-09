@@ -55,10 +55,13 @@ const ProductDetailPage = () => {
             const res = await customerApi.getProductById(id, params);
             if (res.data.success) {
                 const p = res.data.result;
+                const galleryImgs = (p.galleryImages && Array.isArray(p.galleryImages) && p.galleryImages.length > 0)
+                    ? p.galleryImages
+                    : [p.mainImage].filter(Boolean);
                 const formatted = {
                     ...p,
                     id: p._id,
-                    images: [p.mainImage, ...(p.galleryImages || [])].filter(Boolean)
+                    images: galleryImgs
                 };
                 setProduct(formatted);
                 setActiveImage(formatted.images[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600&auto=format&fit=crop');
@@ -219,7 +222,7 @@ const ProductDetailPage = () => {
                     </div>
 
                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                        {product.images.map((img, idx) => (
+                        {product.images.slice(0, 5).map((img, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => setActiveImage(img)}

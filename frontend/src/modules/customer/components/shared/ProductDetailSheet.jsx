@@ -98,12 +98,12 @@ const ProductDetailSheet = () => {
 
     const allImages = useMemo(() => {
         if (!selectedProduct) return [];
-        const images = [];
-        if (selectedProduct.mainImage) images.push(selectedProduct.mainImage);
-        else if (selectedProduct.image) images.push(selectedProduct.image);
-
-        if (selectedProduct.galleryImages && Array.isArray(selectedProduct.galleryImages)) {
-            images.push(...selectedProduct.galleryImages);
+        let images = [];
+        if (selectedProduct.galleryImages && Array.isArray(selectedProduct.galleryImages) && selectedProduct.galleryImages.length > 0) {
+            images = [...selectedProduct.galleryImages];
+        } else {
+            const fallback = selectedProduct.mainImage || selectedProduct.image;
+            if (fallback) images.push(fallback);
         }
         return images.length > 0
           ? images
@@ -430,12 +430,10 @@ const ProductDetailSheet = () => {
                                                 />
                                             </AnimatePresence>
                                         </div>
-                                    </div>
-
-                                    {/* Carousel dot indicators */}
+                                    </div>                                     {/* Carousel dot indicators */}
                                     {allImages.length > 1 && (
                                         <div className="flex justify-center gap-2 pb-5">
-                                            {allImages.map((_, i) => (
+                                            {allImages.slice(0, 5).map((_, i) => (
                                                 <button
                                                     key={i}
                                                     onClick={() => setActiveImageIndex(i)}
@@ -446,7 +444,7 @@ const ProductDetailSheet = () => {
                                                 />
                                             ))}
                                         </div>
-                                    )}
+                                    )})}
                                 </div>
 
                                 {/* Right: Product Info (scrollable naturally) */}
