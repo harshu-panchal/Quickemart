@@ -98,18 +98,28 @@ const ProductDetailSheet = () => {
 
     const allImages = useMemo(() => {
         if (!selectedProduct) return [];
-        let images = [];
-        if (selectedProduct.galleryImages && Array.isArray(selectedProduct.galleryImages) && selectedProduct.galleryImages.length > 0) {
-            images = [...selectedProduct.galleryImages];
-        } else {
-            const fallback = selectedProduct.mainImage || selectedProduct.image;
-            if (fallback) images.push(fallback);
+        const primary = selectedProduct.mainImage || selectedProduct.image || null;
+        const gallery = Array.isArray(selectedProduct.galleryImages)
+            ? selectedProduct.galleryImages.filter(Boolean)
+            : [];
+        
+        let filteredGallery = [];
+        if (primary && gallery.length > 0) {
+            filteredGallery = gallery.filter((img) => img !== primary);
         }
-        return images.length > 0
-          ? images
-          : [
-              "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-            ];
+        
+        if (filteredGallery.length > 0) {
+            return filteredGallery;
+        }
+        if (gallery.length > 0) {
+            return gallery;
+        }
+        if (primary) {
+            return [primary];
+        }
+        return [
+            "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+        ];
     }, [selectedProduct]);
 
     // Update variant when product changes
@@ -395,8 +405,8 @@ const ProductDetailSheet = () => {
                                     <div className="flex-1 flex mt-[64px] mb-3 overflow-hidden">
                                         {/* Vertical thumbnail strip (left side) */}
                                         {allImages.length > 1 && (
-                                            <div className="flex flex-col gap-2 px-3 py-2 overflow-y-auto no-scrollbar">
-                                                {allImages.slice(0, 5).map((img, i) => (
+                                            <div className="flex flex-col gap-2 px-3 py-2 overflow-y-auto max-h-[440px] scrollbar-thin">
+                                                {allImages.map((img, i) => (
                                                     <motion.button
                                                         key={i}
                                                         whileHover={{ scale: 1.08 }}
@@ -424,16 +434,17 @@ const ProductDetailSheet = () => {
                                                     animate={{ scale: 1, opacity: 1 }}
                                                     exit={{ scale: 0.93, opacity: 0 }}
                                                     transition={{ duration: 0.15 }}
-                                                    src={applyCloudinaryTransform(allImages[activeImageIndex], "f_auto,q_auto:best,w_1200,dpr_auto")}
+                                                    src={applyCloudinaryTransform(allImages[activeImageIndex] || allImages[0], "f_auto,q_auto:best,w_1200,dpr_auto")}
                                                     alt={`${selectedProduct.name} ${activeImageIndex + 1}`}
                                                     className="w-full h-full object-contain mix-blend-multiply drop-shadow-2xl hover:scale-[1.03] transition-transform duration-500 absolute inset-0 m-auto p-12"
                                                 />
                                             </AnimatePresence>
                                         </div>
-                                    </div>                                     {/* Carousel dot indicators */}
+                                    </div>
+                                    {/* Carousel dot indicators */}
                                     {allImages.length > 1 && (
                                         <div className="flex justify-center gap-2 pb-5">
-                                            {allImages.slice(0, 5).map((_, i) => (
+                                            {allImages.map((_, i) => (
                                                 <button
                                                     key={i}
                                                     onClick={() => setActiveImageIndex(i)}
@@ -444,7 +455,7 @@ const ProductDetailSheet = () => {
                                                 />
                                             ))}
                                         </div>
-                                    )})}
+                                    )}
                                 </div>
 
                                 {/* Right: Product Info (scrollable naturally) */}

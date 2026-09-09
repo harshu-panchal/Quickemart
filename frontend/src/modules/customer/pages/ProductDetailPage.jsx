@@ -55,9 +55,18 @@ const ProductDetailPage = () => {
             const res = await customerApi.getProductById(id, params);
             if (res.data.success) {
                 const p = res.data.result;
-                const galleryImgs = (p.galleryImages && Array.isArray(p.galleryImages) && p.galleryImages.length > 0)
-                    ? p.galleryImages
-                    : [p.mainImage].filter(Boolean);
+                const primary = p.mainImage || p.image || null;
+                const gallery = (p.galleryImages && Array.isArray(p.galleryImages))
+                    ? p.galleryImages.filter(Boolean)
+                    : [];
+                let filteredGallery = [];
+                if (primary && gallery.length > 0) {
+                    filteredGallery = gallery.filter((img) => img !== primary);
+                }
+                const galleryImgs = filteredGallery.length > 0
+                    ? filteredGallery
+                    : (gallery.length > 0 ? gallery : [primary].filter(Boolean));
+
                 const formatted = {
                     ...p,
                     id: p._id,
@@ -222,7 +231,7 @@ const ProductDetailPage = () => {
                     </div>
 
                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                        {product.images.slice(0, 5).map((img, idx) => (
+                        {product.images.map((img, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => setActiveImage(img)}

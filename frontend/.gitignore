@@ -28,6 +28,7 @@ node_modules/
 
 node_modules
 dist
+dist_test
 dist-ssr
 *.local
 
