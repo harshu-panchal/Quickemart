@@ -90,6 +90,10 @@ const categorySchema = new mongoose.Schema(
       type: String,
       trim: true, // Hex color for icons (e.g. #ffffff)
     },
+    showInHomepageGrids: {
+      type: Boolean,
+      default: true, // Existing categories must default to visible so homepage UI is unchanged
+    },
   },
   {
     timestamps: true,

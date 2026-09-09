@@ -303,6 +303,95 @@ function makeMasterProductSku(name) {
     return `QM-${prefix.toUpperCase()}-${randomSuffix}`;
 }
 
+async function resolveMasterGalleryPayload(productData, reqFiles) {
+    let galleryLabels = [];
+    if (productData.galleryLabels) {
+        if (typeof productData.galleryLabels === 'string') {
+            try {
+                galleryLabels = JSON.parse(productData.galleryLabels);
+            } catch (e) {
+                galleryLabels = productData.galleryLabels.split(',').map(s => s.trim());
+            }
+        } else if (Array.isArray(productData.galleryLabels)) {
+            galleryLabels = productData.galleryLabels;
+        }
+    }
+
+    let gallerySlotUrls = null;
+    if (productData.gallerySlotUrls) {
+        try {
+            gallerySlotUrls = typeof productData.gallerySlotUrls === 'string'
+                ? JSON.parse(productData.gallerySlotUrls)
+                : productData.gallerySlotUrls;
+        } catch (e) {
+            gallerySlotUrls = null;
+        }
+    }
+
+    let galleryFileSlots = [];
+    if (productData.galleryFileSlots) {
+        try {
+            galleryFileSlots = typeof productData.galleryFileSlots === 'string'
+                ? JSON.parse(productData.galleryFileSlots)
+                : productData.galleryFileSlots;
+        } catch (e) {
+            galleryFileSlots = [];
+        }
+    }
+
+    let finalGalleryImages = [];
+    let finalGalleryLabels = [];
+
+    if (Array.isArray(gallerySlotUrls)) {
+        const slots = Array(5).fill("");
+        for (let i = 0; i < 5; i++) {
+            if (gallerySlotUrls[i] && typeof gallerySlotUrls[i] === 'string') {
+                slots[i] = gallerySlotUrls[i];
+            }
+        }
+
+        const galleryUploads = (reqFiles && reqFiles.galleryImages)
+            ? (Array.isArray(reqFiles.galleryImages) ? reqFiles.galleryImages : [reqFiles.galleryImages])
+            : [];
+
+        for (let fIdx = 0; fIdx < galleryUploads.length; fIdx++) {
+            const targetSlot = galleryFileSlots[fIdx];
+            if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < 5) {
+                const url = await uploadToCloudinary(galleryUploads[fIdx].buffer, 'master-catalog');
+                slots[targetSlot] = url;
+            }
+        }
+
+        for (let i = 0; i < 5; i++) {
+            if (slots[i]) {
+                finalGalleryImages.push(slots[i]);
+                finalGalleryLabels.push(galleryLabels[i] || "");
+            }
+        }
+    } else {
+        // Fallback for legacy calls without gallerySlotUrls
+        let legacyGallery = [];
+        if (productData.existingGalleryImages) {
+            try {
+                legacyGallery = JSON.parse(productData.existingGalleryImages);
+            } catch (err) {
+                legacyGallery = [];
+            }
+        }
+        if (reqFiles && reqFiles.galleryImages) {
+            const galleryUploads = Array.isArray(reqFiles.galleryImages) ? reqFiles.galleryImages : [reqFiles.galleryImages];
+            for (let file of galleryUploads) {
+                const url = await uploadToCloudinary(file.buffer, 'master-catalog');
+                legacyGallery.push(url);
+            }
+        }
+        finalGalleryImages = legacyGallery;
+        finalGalleryLabels = galleryLabels;
+    }
+
+    return { galleryImages: finalGalleryImages, galleryLabels: finalGalleryLabels };
+}
+
 export const addMasterProduct = async (req, res) => {
     try {
         const productData = req.body;
@@ -310,27 +399,16 @@ export const addMasterProduct = async (req, res) => {
             productData.brand = "App";
         }
         
-        // Handle images if uploaded directly
-        if (req.files) {
-            if (req.files.mainImage) {
-                productData.mainImage = await uploadToCloudinary(req.files.mainImage[0].buffer, 'master-catalog');
-            }
-            if (req.files.galleryImages) {
-                productData.galleryImages = [];
-                for (let file of req.files.galleryImages) {
-                    const url = await uploadToCloudinary(file.buffer, 'master-catalog');
-                    productData.galleryImages.push(url);
-                }
-            }
+        // Handle images
+        if (req.files && req.files.mainImage) {
+            productData.mainImage = await uploadToCloudinary(req.files.mainImage[0].buffer, 'master-catalog');
+        } else if (productData.mainImageUrl) {
+            productData.mainImage = productData.mainImageUrl;
         }
-        
-        if (productData.galleryLabels && typeof productData.galleryLabels === 'string') {
-            try {
-                productData.galleryLabels = JSON.parse(productData.galleryLabels);
-            } catch (e) {
-                productData.galleryLabels = productData.galleryLabels.split(',').map(s => s.trim());
-            }
-        }
+
+        const { galleryImages, galleryLabels } = await resolveMasterGalleryPayload(productData, req.files);
+        productData.galleryImages = galleryImages;
+        productData.galleryLabels = galleryLabels;
 
         if (productData.variants && typeof productData.variants === 'string') {
             productData.variants = JSON.parse(productData.variants);
@@ -370,24 +448,6 @@ export const updateMasterProduct = async (req, res) => {
         const { id } = req.params;
         const productData = req.body;
 
-        // Parse list of existing gallery image URLs that were preserved/kept in UI
-        let galleryImages = [];
-        if (productData.existingGalleryImages) {
-            try {
-                galleryImages = JSON.parse(productData.existingGalleryImages);
-            } catch (err) {
-                galleryImages = [];
-            }
-        }
-
-        if (productData.galleryLabels && typeof productData.galleryLabels === 'string') {
-            try {
-                productData.galleryLabels = JSON.parse(productData.galleryLabels);
-            } catch (e) {
-                productData.galleryLabels = productData.galleryLabels.split(',').map(s => s.trim());
-            }
-        }
-
         // Handle cover image
         if (req.files && req.files.mainImage) {
             productData.mainImage = await uploadToCloudinary(req.files.mainImage[0].buffer, 'master-catalog');
@@ -395,14 +455,10 @@ export const updateMasterProduct = async (req, res) => {
             productData.mainImage = productData.mainImageUrl;
         }
 
-        // Handle gallery images uploads and merge them
-        if (req.files && req.files.galleryImages) {
-            for (let file of req.files.galleryImages) {
-                const url = await uploadToCloudinary(file.buffer, 'master-catalog');
-                galleryImages.push(url);
-            }
-        }
+        // Handle slot-aware gallery image preservation & uploads
+        const { galleryImages, galleryLabels } = await resolveMasterGalleryPayload(productData, req.files);
         productData.galleryImages = galleryImages;
+        productData.galleryLabels = galleryLabels;
 
         if (productData.variants && typeof productData.variants === 'string') {
             productData.variants = JSON.parse(productData.variants);

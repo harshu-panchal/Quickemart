@@ -17,8 +17,8 @@ function normalizeUrl(value) {
   return normalized;
 }
 
-function categoryCacheKey({ tree = false, type = "all" } = {}) {
-  return buildKey("catalog", "categories", `${tree ? "tree" : "flat"}:${type || "all"}`);
+function categoryCacheKey({ tree = false, type = "all", homepageOnly = false } = {}) {
+  return buildKey("catalog", "categories", `${tree ? "tree" : "flat"}:${type || "all"}:${homepageOnly ? "homepage" : "all"}`);
 }
 
 function normalizeParentId(parentId) {
@@ -55,12 +55,14 @@ export const getCategories = async (req, res) => {
     const { flat, tree, type } = req.query;
 
     if (tree === "true") {
+      // The category tree is only ever consumed by customer-facing homepage/category
+      // surfaces (never admin management), so it always respects the homepage-visibility flag.
       const cacheKey = categoryCacheKey({ tree: true, type: "header" });
       const categories = await getOrSet(
         cacheKey,
         async () => {
           const selectFields = "name slug image iconId type parentId headerColor headerFontColor headerIconColor";
-          return Category.find({ type: "header" })
+          return Category.find({ type: "header", showInHomepageGrids: { $ne: false } })
             .select(selectFields)
             .populate({
               path: "children",
@@ -122,7 +124,13 @@ export const getCategories = async (req, res) => {
     if (type === "header" || type === "category" || type === "subcategory") {
       query.type = type;
     }
-    const cacheKey = categoryCacheKey({ tree: false, type: query.type || "all" });
+    // Homepage grid consumers (e.g. the customer home page) opt in via `homepageOnly=true`
+    // so admin category pickers/management pages keep seeing every category, hidden or not.
+    const homepageOnly = req.query.homepageOnly === "true";
+    if (homepageOnly) {
+      query.showInHomepageGrids = { $ne: false };
+    }
+    const cacheKey = categoryCacheKey({ tree: false, type: query.type || "all", homepageOnly });
     const categories = await getOrSet(
       cacheKey,
       async () => Category.find(query).sort({ name: 1, _id: 1 }).lean(),
@@ -145,7 +153,7 @@ export const getCategories = async (req, res) => {
 export const createCategory = async (req, res) => {
   try {
     const categoryData = {};
-    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue"];
+    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue", "showInHomepageGrids"];
     
     // Strict Whitelisting and Sanitization
     for (const key of allowedKeys) {
@@ -226,7 +234,7 @@ export const updateCategory = async (req, res) => {
     }
 
     const categoryData = {};
-    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue"];
+    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue", "showInHomepageGrids"];
     
     for (const key of allowedKeys) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {

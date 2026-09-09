@@ -1134,13 +1134,40 @@ export const updateProduct = async (req, res) => {
       delete productData.sellerId;
     }
 
-    // Handle existing gallery image URLs if sent from form
-    let existingGallery = [];
-    if (productData.existingGalleryImages) {
+    // Parse gallery labels if provided
+    let galleryLabels = [];
+    if (productData.galleryLabels) {
+      if (typeof productData.galleryLabels === "string") {
+        try {
+          galleryLabels = JSON.parse(productData.galleryLabels);
+        } catch (e) {
+          galleryLabels = productData.galleryLabels.split(",").map((s) => s.trim());
+        }
+      } else if (Array.isArray(productData.galleryLabels)) {
+        galleryLabels = productData.galleryLabels;
+      }
+    }
+
+    // Handle slot-aware gallery image preservation & uploads
+    let gallerySlotUrls = null;
+    if (productData.gallerySlotUrls) {
       try {
-        existingGallery = JSON.parse(productData.existingGalleryImages);
-      } catch (err) {
-        existingGallery = [];
+        gallerySlotUrls = typeof productData.gallerySlotUrls === "string"
+          ? JSON.parse(productData.gallerySlotUrls)
+          : productData.gallerySlotUrls;
+      } catch (e) {
+        gallerySlotUrls = null;
+      }
+    }
+
+    let galleryFileSlots = [];
+    if (productData.galleryFileSlots) {
+      try {
+        galleryFileSlots = typeof productData.galleryFileSlots === "string"
+          ? JSON.parse(productData.galleryFileSlots)
+          : productData.galleryFileSlots;
+      } catch (e) {
+        galleryFileSlots = [];
       }
     }
 
@@ -1150,23 +1177,77 @@ export const updateProduct = async (req, res) => {
 
     // Handle multipart files (mainImage and galleryImages)
     const files = req.files || [];
-    if (files.length > 0) {
-      const galleryUrls = [...existingGallery];
-      for (const file of files) {
-        try {
-          if (file.fieldname === "mainImage") {
-            const url = await uploadToCloudinary(file.buffer, "products", {
-              mimeType: file.mimetype,
+    const mainImageFile = files.find((f) => f.fieldname === "mainImage");
+    if (mainImageFile) {
+      try {
+        const url = await uploadToCloudinary(mainImageFile.buffer, "products", {
+          mimeType: mainImageFile.mimetype,
+          resourceType: "image",
+        });
+        productData.mainImage = url;
+      } catch (err) {
+        logger.error("Cloudinary upload failed during update", {
+          scope: "updateProduct",
+          error: err,
+        });
+      }
+    }
+
+    const galleryFiles = files.filter((f) => f.fieldname === "galleryImages");
+
+    if (Array.isArray(gallerySlotUrls)) {
+      const slots = Array(5).fill("");
+      for (let i = 0; i < 5; i++) {
+        if (gallerySlotUrls[i] && typeof gallerySlotUrls[i] === "string") {
+          slots[i] = gallerySlotUrls[i];
+        }
+      }
+
+      for (let fIdx = 0; fIdx < galleryFiles.length; fIdx++) {
+        const targetSlot = galleryFileSlots[fIdx];
+        if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < 5) {
+          try {
+            const url = await uploadToCloudinary(galleryFiles[fIdx].buffer, "products", {
+              mimeType: galleryFiles[fIdx].mimetype,
               resourceType: "image",
             });
-            productData.mainImage = url;
-          } else if (file.fieldname === "galleryImages") {
-            const url = await uploadToCloudinary(file.buffer, "products", {
-              mimeType: file.mimetype,
-              resourceType: "image",
+            slots[targetSlot] = url;
+          } catch (err) {
+            logger.error("Cloudinary upload failed during update", {
+              scope: "updateProduct",
+              error: err,
             });
-            galleryUrls.push(url);
           }
+        }
+      }
+
+      const finalGalleryImages = [];
+      const finalGalleryLabels = [];
+      for (let i = 0; i < 5; i++) {
+        if (slots[i]) {
+          finalGalleryImages.push(slots[i]);
+          finalGalleryLabels.push(galleryLabels[i] || "");
+        }
+      }
+      productData.galleryImages = finalGalleryImages;
+      productData.galleryLabels = finalGalleryLabels;
+    } else {
+      let existingGallery = [];
+      if (productData.existingGalleryImages) {
+        try {
+          existingGallery = JSON.parse(productData.existingGalleryImages);
+        } catch (err) {
+          existingGallery = [];
+        }
+      }
+      const galleryUrls = [...existingGallery];
+      for (const file of galleryFiles) {
+        try {
+          const url = await uploadToCloudinary(file.buffer, "products", {
+            mimeType: file.mimetype,
+            resourceType: "image",
+          });
+          galleryUrls.push(url);
         } catch (err) {
           logger.error("Cloudinary upload failed during update", {
             scope: "updateProduct",
@@ -1176,9 +1257,12 @@ export const updateProduct = async (req, res) => {
       }
       if (galleryUrls.length > 0) {
         productData.galleryImages = galleryUrls;
+      } else if (existingGallery.length > 0) {
+        productData.galleryImages = existingGallery;
       }
-    } else if (existingGallery.length > 0) {
-      productData.galleryImages = existingGallery;
+      if (galleryLabels.length > 0) {
+        productData.galleryLabels = galleryLabels;
+      }
     }
 
     // Parse JSON fields
@@ -1190,13 +1274,6 @@ export const updateProduct = async (req, res) => {
           scope: "updateProduct",
           error: e,
         });
-      }
-    }
-    if (typeof productData.galleryLabels === "string") {
-      try {
-        productData.galleryLabels = JSON.parse(productData.galleryLabels);
-      } catch (e) {
-        // Fallback
       }
     }
     if (typeof productData.tags === "string" && productData.tags.startsWith("[")) {

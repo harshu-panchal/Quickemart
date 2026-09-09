@@ -80,6 +80,7 @@ const HeaderCategories = () => {
     headerColor: "#FF1E1E",
     headerFontColor: "#111111",
     headerIconColor: "#111111",
+    showInHomepageGrids: true,
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -261,6 +262,7 @@ const HeaderCategories = () => {
       headerColor: "#FF1E1E",
       headerFontColor: "#111111",
       headerIconColor: "#111111",
+      showInHomepageGrids: true,
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -282,6 +284,7 @@ const HeaderCategories = () => {
       headerColor: item.headerColor || "#FF1E1E",
       headerFontColor: item.headerFontColor || "#FFFFFF",
       headerIconColor: item.headerIconColor || "#111111",
+      showInHomepageGrids: item.showInHomepageGrids !== false,
     });
     setPreviewUrl(item.image || null);
     setIsAddModalOpen(true);
@@ -718,6 +721,28 @@ const HeaderCategories = () => {
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+                  <div>
+                    <label
+                      htmlFor="showInHomepageGrids"
+                      className="text-sm font-medium text-gray-700 cursor-pointer">
+                      Show in Homepage Section Grids
+                    </label>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Turn off to hide this header from the customer homepage without deleting it.
+                    </p>
+                  </div>
+                  <input
+                    id="showInHomepageGrids"
+                    type="checkbox"
+                    checked={formData.showInHomepageGrids !== false}
+                    onChange={(e) =>
+                      setFormData({ ...formData, showInHomepageGrids: e.target.checked })
+                    }
+                    className="w-5 h-5 rounded border-gray-300 text-brand-600 focus:ring-brand-500 shrink-0 cursor-pointer"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

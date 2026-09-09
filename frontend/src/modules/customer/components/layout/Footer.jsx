@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Facebook, Twitter, Instagram, Youtube, Mail, MapPin, Phone } from 'lucide-react';
 import Logo from '@/assets/Logo.png';
 import { useSettings } from '@core/context/SettingsContext';
@@ -9,6 +10,7 @@ const Footer = () => {
     const logoUrl = settings?.logoUrl || Logo;
     const primaryColor = settings?.primaryColor || 'var(--primary)';
     const [servicedCities, setServicedCities] = useState([]);
+    const [allCategories, setAllCategories] = useState([]);
 
     useEffect(() => {
         customerApi.getServicedCities()
@@ -20,6 +22,17 @@ const Footer = () => {
             })
             .catch((err) => {
                 console.error("Failed to load serviced cities:", err);
+            });
+
+        customerApi.getCategories({ tree: true })
+            .then((res) => {
+                const tree = res.data?.results || res.data?.result || [];
+                if (Array.isArray(tree)) {
+                    setAllCategories(tree.filter((cat) => cat && cat._id && cat.name));
+                }
+            })
+            .catch((err) => {
+                console.error("Failed to load categories:", err);
             });
     }, []);
 
@@ -76,13 +89,23 @@ const Footer = () => {
                         <h3 className="text-white font-bold text-lg mb-4 md:text-xl md:font-black md:uppercase md:tracking-widest md:mb-8 flex items-center gap-2">
                             <span className="h-1 w-4 hidden md:block" style={{ backgroundColor: primaryColor }}></span> Categories
                         </h3>
-                        <ul className="space-y-2 md:space-y-4">
-                            <li><a href="#" className="hover:text-brand-300 transition-colors md:text-base md:font-semibold flex items-center group text-white"><span className="hidden md:block w-0 h-px bg-white group-hover:w-4 group-hover:mr-2 transition-all"></span>Fruits & Vegetables</a></li>
-                            <li><a href="#" className="hover:text-brand-300 transition-colors md:text-base md:font-semibold flex items-center group text-white"><span className="hidden md:block w-0 h-px bg-white group-hover:w-4 group-hover:mr-2 transition-all"></span>Dairy Products</a></li>
-                            <li><a href="#" className="hover:text-brand-300 transition-colors md:text-base md:font-semibold flex items-center group text-white"><span className="hidden md:block w-0 h-px bg-white group-hover:w-4 group-hover:mr-2 transition-all"></span>Meat & Fish</a></li>
-                            <li><a href="#" className="hover:text-brand-300 transition-colors md:text-base md:font-semibold flex items-center group text-white"><span className="hidden md:block w-0 h-px bg-white group-hover:w-4 group-hover:mr-2 transition-all"></span>Bakery & Snacks</a></li>
-                            <li><a href="#" className="hover:text-brand-300 transition-colors md:text-base md:font-semibold flex items-center group text-white"><span className="hidden md:block w-0 h-px bg-white group-hover:w-4 group-hover:mr-2 transition-all"></span>Beverages</a></li>
-                        </ul>
+                        {allCategories.length > 0 ? (
+                            <ul className="space-y-2 md:space-y-4 max-h-56 md:max-h-72 overflow-y-auto pr-2 no-scrollbar">
+                                {allCategories.map((cat) => (
+                                    <li key={cat._id}>
+                                        <Link
+                                            to={`/category/${cat._id}`}
+                                            className="hover:text-brand-300 transition-colors md:text-base md:font-semibold flex items-center group text-white"
+                                        >
+                                            <span className="hidden md:block w-0 h-px bg-white group-hover:w-4 group-hover:mr-2 transition-all"></span>
+                                            {cat.name}
+                                        </Link>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-white/50">No categories available</p>
+                        )}
                     </div>
 
                     {/* Contact Info */}

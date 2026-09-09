@@ -14,14 +14,17 @@ import {
   MapPin,
   CheckCircle,
   Clock,
+  LogOut,
 } from "lucide-react";
 import { sellerApi } from "../services/sellerApi";
+import { useAuth } from "@core/context/AuthContext";
 import { toast } from "sonner";
 import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 import MapPicker from "../../../shared/components/MapPicker";
 
 const SellerProfile = () => {
+  const { logout } = useAuth();
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -730,6 +733,14 @@ const SellerProfile = () => {
               </div>
             </div>
           </Card>
+
+          <Button
+            onClick={logout}
+            variant="outline"
+            className="w-full border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 py-4 font-bold rounded-2xl flex items-center justify-center gap-2 shadow-sm"
+          >
+            <LogOut size={18} /> Logout Account
+          </Button>
         </div>
       </div>
 

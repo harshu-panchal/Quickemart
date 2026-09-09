@@ -263,7 +263,7 @@ const Home = () => {
         productParams.lng = currentLocation.longitude;
       }
       const [catRes, prodRes, expRes, sectionsRes] = await Promise.all([
-        customerApi.getCategories(),
+        customerApi.getCategories({ homepageOnly: true }),
         hasValidLocation ? customerApi.getProducts(productParams) : Promise.resolve({ data: { success: true, result: { items: [] } } }),
         customerApi.getExperienceSections({ pageType: "home" }).catch(() => null),
         hasValidLocation ? customerApi.getOfferSections({ lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => ({ data: {} })) : Promise.resolve({ data: { results: [] } }),
@@ -483,6 +483,8 @@ const Home = () => {
         </div>
       ) : (
         <>
+          <OfferSections sections={offerSections} noServiceData={noServiceData} />
+
           <motion.div ref={heroRef} className="block md:hidden will-change-transform" style={isMobile ? { opacity: 1 } : { opacity, y, scale, pointerEvents }}>
             <div className="relative w-full overflow-hidden">
               {heroConfig.banners?.items?.length ? (
@@ -502,7 +504,6 @@ const Home = () => {
           <PromoMarquee />
           <QuickCategorySlider categories={effectiveQuickCategories} onCategoryClick={(id) => navigate(`/category/${id}`)} />
           <LowestPriceSection products={lowestPriceProducts} isLoading={lowestPriceLoading} onSeeAll={() => navigate("/category/all")} />
-          <OfferSections sections={offerSections} noServiceData={noServiceData} />
 
           {sectionsForRenderer.length > 0 && (
             <div className="container mx-auto px-4 md:px-8 lg:px-[50px] py-10 md:py-16">

@@ -355,8 +355,29 @@ const ProductManagement = () => {
             data.append('gstTax', formData.gstTax !== undefined ? formData.gstTax : 0);
             data.append('variants', JSON.stringify(formData.variants || []));
 
-            // Support image preservation/deletion
-            const existingGallery = (formData.galleryImages || []).filter(img => typeof img === 'string' && img.startsWith('http'));
+            // Support image preservation/deletion with explicit slot mapping
+            const slotUrls = [0, 1, 2, 3, 4].map(idx => {
+                const img = formData.galleryImages?.[idx];
+                return (typeof img === 'string' && img.startsWith('http')) ? img : '';
+            });
+            data.append('gallerySlotUrls', JSON.stringify(slotUrls));
+
+            const fileSlots = [];
+            if (formData.galleryFiles && formData.galleryFiles.length > 0) {
+                formData.galleryFiles.forEach((file, idx) => {
+                    if (file) {
+                        data.append('galleryImages', file);
+                        fileSlots.push(idx);
+                    }
+                });
+            }
+            data.append('galleryFileSlots', JSON.stringify(fileSlots));
+
+            const labels = [0, 1, 2, 3, 4].map(idx => formData.galleryLabels?.[idx] || '');
+            data.append('galleryLabels', JSON.stringify(labels));
+
+            // Legacy backward compatibility
+            const existingGallery = slotUrls.filter(Boolean);
             data.append('existingGalleryImages', JSON.stringify(existingGallery));
 
             if (formData.mainImage && typeof formData.mainImage === 'string' && formData.mainImage.startsWith('http')) {
@@ -366,14 +387,8 @@ const ProductManagement = () => {
             if (formData.mainImageFile) {
                 data.append('mainImage', formData.mainImageFile);
             }
-            if (formData.galleryFiles && formData.galleryFiles.length > 0) {
-                formData.galleryFiles.forEach((file) => data.append('galleryImages', file));
-            }
 
             data.append('sku', formData.sku);
-            if (formData.galleryLabels && formData.galleryLabels.length > 0) {
-                data.append('galleryLabels', JSON.stringify(formData.galleryLabels));
-            }
 
             // If creating a new product OR in catalog view mode, create/update Master Product
             if (!editingItem || viewMode === 'catalog') {
@@ -509,20 +524,11 @@ const ProductManagement = () => {
             nextImages[slotIdx] = reader.result;
             nextFiles[slotIdx] = file;
 
-            let mainImage = formData.mainImage;
-            let mainImageFile = formData.mainImageFile;
-            if (!mainImage || slotIdx === 0) {
-                mainImage = reader.result;
-                mainImageFile = file;
-            }
-
-            setFormData({
-                ...formData,
-                mainImage,
-                mainImageFile,
+            setFormData(prev => ({
+                ...prev,
                 galleryImages: nextImages,
                 galleryFiles: nextFiles
-            });
+            }));
         };
         reader.readAsDataURL(file);
     };
@@ -637,16 +643,18 @@ const ProductManagement = () => {
     const openModal = (item = null) => {
         if (item) {
             const autoSku = item.sku || `QM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-            const existingImages = [];
-            if (item.mainImage) existingImages.push(item.mainImage);
+            const existingImages = ["", "", "", "", ""];
+            const existingLabels = ["", "", "", "", ""];
             if (Array.isArray(item.galleryImages)) {
-                item.galleryImages.forEach(img => {
-                    if (img && !existingImages.includes(img)) existingImages.push(img);
-                });
+                for (let i = 0; i < 5; i++) {
+                    existingImages[i] = item.galleryImages[i] || "";
+                }
             }
-            const existingLabels = item.galleryLabels || [];
-            while (existingImages.length < 5) existingImages.push("");
-            while (existingLabels.length < 5) existingLabels.push("");
+            if (Array.isArray(item.galleryLabels)) {
+                for (let i = 0; i < 5; i++) {
+                    existingLabels[i] = item.galleryLabels[i] || "";
+                }
+            }
 
             const chain = findCategoryChain(item.headerId, item.categoryId, item.subcategoryId, categories);
             const initialGst = (item.gstTax !== undefined && item.gstTax !== null && Number(item.gstTax) > 0)
@@ -673,8 +681,9 @@ const ProductManagement = () => {
                 weight: item.weight || '',
                 brand: item.brand || '',
                 mainImage: item.mainImage || null,
-                galleryImages: existingImages.slice(0, 5),
-                galleryLabels: existingLabels.slice(0, 5),
+                mainImageFile: null,
+                galleryImages: existingImages,
+                galleryLabels: existingLabels,
                 galleryFiles: [null, null, null, null, null],
                 variants: (item.variants && item.variants.length > 0) ? item.variants.map((v, vIdx) => ({
                     ...v,
@@ -699,6 +708,7 @@ const ProductManagement = () => {
                 header: '', categoryId: '', subcategoryId: '', status: 'active',
                 isFeatured: false, tags: '', weight: '', brand: '',
                 mainImage: null,
+                mainImageFile: null,
                 galleryImages: ["", "", "", "", ""],
                 galleryLabels: ["", "", "", "", ""],
                 galleryFiles: [null, null, null, null, null],

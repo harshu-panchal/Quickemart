@@ -6,6 +6,7 @@ import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
+import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 
 /* ===============================
    Helpers
@@ -341,6 +342,67 @@ export const reorderExperienceSections = async (req, res) => {
 };
 
 /* ===============================
+   Filter category/subcategory grid sections down to entries that
+   actually have at least one active product, so the homepage never
+   advertises an empty category.
+================================ */
+const filterSectionsWithProducts = async (sections) => {
+  const categoryIdSet = new Set();
+  const subcategoryIdSet = new Set();
+
+  sections.forEach((s) => {
+    if (s.displayType === "categories") {
+      (s.config?.categories?.categoryIds || []).forEach((id) => categoryIdSet.add(String(id)));
+    } else if (s.displayType === "subcategories") {
+      (s.config?.subcategories?.subcategoryIds || []).forEach((id) => subcategoryIdSet.add(String(id)));
+    }
+  });
+
+  const visibilityFilter = getApprovedOrLegacyFilter();
+  const [categoryIdsWithProducts, subcategoryIdsWithProducts] = await Promise.all([
+    categoryIdSet.size
+      ? Product.distinct("categoryId", {
+          categoryId: { $in: Array.from(categoryIdSet) },
+          status: "active",
+          ...visibilityFilter,
+        })
+      : [],
+    subcategoryIdSet.size
+      ? Product.distinct("subcategoryId", {
+          subcategoryId: { $in: Array.from(subcategoryIdSet) },
+          status: "active",
+          ...visibilityFilter,
+        })
+      : [],
+  ]);
+
+  const categorySetWithProducts = new Set(categoryIdsWithProducts.map(String));
+  const subcategorySetWithProducts = new Set(subcategoryIdsWithProducts.map(String));
+
+  return sections
+    .map((s) => {
+      if (s.displayType === "categories") {
+        const categoryIds = (s.config?.categories?.categoryIds || []).filter((id) =>
+          categorySetWithProducts.has(String(id)),
+        );
+        return { ...s, config: { ...s.config, categories: { ...s.config.categories, categoryIds } } };
+      }
+      if (s.displayType === "subcategories") {
+        const subcategoryIds = (s.config?.subcategories?.subcategoryIds || []).filter((id) =>
+          subcategorySetWithProducts.has(String(id)),
+        );
+        return { ...s, config: { ...s.config, subcategories: { ...s.config.subcategories, subcategoryIds } } };
+      }
+      return s;
+    })
+    .filter((s) => {
+      if (s.displayType === "categories") return (s.config?.categories?.categoryIds || []).length > 0;
+      if (s.displayType === "subcategories") return (s.config?.subcategories?.subcategoryIds || []).length > 0;
+      return true;
+    });
+};
+
+/* ===============================
    PUBLIC: Get sections for page
 ================================ */
 export const getPublicExperienceSections = async (req, res) => {
@@ -366,10 +428,12 @@ export const getPublicExperienceSections = async (req, res) => {
     );
     const sections = await getOrSet(
       cacheKey,
-      async () =>
-        ExperienceSection.find(query)
+      async () => {
+        const rawSections = await ExperienceSection.find(query)
           .sort({ order: 1, createdAt: 1, _id: 1 })
-          .lean(),
+          .lean();
+        return filterSectionsWithProducts(rawSections);
+      },
       getTTL("homepage"),
     );
 
