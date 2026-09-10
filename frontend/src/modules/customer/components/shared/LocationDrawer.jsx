@@ -134,7 +134,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
     const apply = (coords) => {
       const newLoc = {
         name: address.address,
-        time: "12-15 mins",
+        time: "10-30 mins",
         ...(coords ? { latitude: coords.lat, longitude: coords.lng } : {}),
       };
 
@@ -203,7 +203,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
         updateLocation(
           {
             name: result.formatted_address || prediction.description,
-            time: "12-15 mins",
+            time: "10-30 mins",
             city: city || currentLocation?.city,
             state: state || currentLocation?.state,
             pincode: pincode || currentLocation?.pincode,

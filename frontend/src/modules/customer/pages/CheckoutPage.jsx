@@ -470,7 +470,7 @@ const CheckoutPage = () => {
         updateLocation(
           {
             name: rawText,
-            time: currentLocation?.time || "12-15 mins",
+            time: currentLocation?.time || "10-30 mins",
             city: currentLocation?.city,
             state: currentLocation?.state,
             pincode: currentLocation?.pincode,
@@ -523,7 +523,7 @@ const CheckoutPage = () => {
         updateLocation(
           {
             name: resp.data?.result?.formattedAddress || query,
-            time: currentLocation?.time || "12-15 mins",
+            time: currentLocation?.time || "10-30 mins",
             city: currentLocation?.city,
             state: currentLocation?.state,
             pincode: currentLocation?.pincode,
@@ -1041,7 +1041,7 @@ const CheckoutPage = () => {
                   <Clock size={24} className="text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800 text-lg">Delivery in 12-15 mins</h3>
+                  <h3 className="font-black text-slate-800 text-lg">Delivery in 10-30 mins</h3>
                   <p className="text-sm text-slate-500">Shipment of {cartCount} items</p>
                 </div>
               </div>

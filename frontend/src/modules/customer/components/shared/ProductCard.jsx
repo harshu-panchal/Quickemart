@@ -352,7 +352,7 @@ const ProductCard = React.memo(
                 "font-semibold",
                 compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
               )}>
-              {product.deliveryTime || "8-12 mins"}
+              {product.deliveryTime || "10-30 mins"}
             </span>
           </div>
 

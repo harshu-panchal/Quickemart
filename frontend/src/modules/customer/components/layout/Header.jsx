@@ -91,7 +91,7 @@ const Header = () => {
                         <div className="flex flex-col leading-tight">
                             <span className="text-[10px] font-black text-white/80 uppercase tracking-widest flex items-center gap-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-                                {currentLocation?.time || '12-15 MINS'}
+                                {(!currentLocation?.time || /12-15|12 to 15|8-15/i.test(currentLocation.time)) ? '10-30 MINS' : currentLocation.time.toUpperCase()}
                             </span>
                             <div className="flex items-center gap-1 font-black text-white text-base">
                                 <span className="max-w-[150px] truncate">{currentLocation?.name || 'Set Location'}</span> <span className="text-[10px] opacity-70">▼</span>
@@ -127,7 +127,7 @@ const Header = () => {
                         >
                             <div className="flex flex-col items-start leading-tight group">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-[var(--primary)] transition-colors">
-                                    {currentLocation?.time || '12-15 MINS'}
+                                    {(!currentLocation?.time || /12-15|12 to 15|8-15/i.test(currentLocation.time)) ? '10-30 MINS' : currentLocation.time.toUpperCase()}
                                 </span>
                                 <div className="flex items-center gap-1 font-extrabold text-slate-700 text-xs group-hover:text-[var(--primary)] transition-colors">
                                     <span className="max-w-[140px] truncate">{currentLocation?.name || 'Set Location'}</span> <MapPin size={13} className="fill-current" />

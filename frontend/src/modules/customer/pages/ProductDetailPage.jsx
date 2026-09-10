@@ -346,7 +346,7 @@ const ProductDetailPage = () => {
                                         <ShieldCheck size={14} /> Quality Guaranteed
                                     </span>
                                     <span className="text-sm font-bold text-slate-400 flex items-center justify-center sm:justify-start gap-1">
-                                        <Clock size={14} /> Delivered in 10-15 mins
+                                        <Clock size={14} /> Delivered in 10-30 mins
                                     </span>
                                 </div>
                             </div>

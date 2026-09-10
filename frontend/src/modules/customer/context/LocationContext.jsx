@@ -34,26 +34,35 @@ export const LocationProvider = ({ children }) => {
     newLoc,
     { persist = true, updateSavedHome = false } = {},
   ) => {
-    setCurrentLocation(newLoc);
+    let sanitizedLoc = newLoc;
+    if (newLoc) {
+      let timeVal = newLoc.time || "10-30 mins";
+      if (/12-15|12 to 15|8-15/i.test(timeVal)) {
+        timeVal = "10-30 mins";
+      }
+      sanitizedLoc = { ...newLoc, time: timeVal };
+    }
 
-    if (updateSavedHome) {
+    setCurrentLocation(sanitizedLoc);
+
+    if (updateSavedHome && sanitizedLoc) {
       setSavedAddresses((prev) =>
         prev.map((addr) =>
-          addr.label === "Home" ? { ...addr, address: newLoc.name } : addr,
+          addr.label === "Home" ? { ...addr, address: sanitizedLoc.name } : addr,
         ),
       );
     }
 
-    if (persist) {
+    if (persist && sanitizedLoc) {
       const payload = {
-        address: newLoc.name,
-        city: newLoc.city,
-        state: newLoc.state,
-        pincode: newLoc.pincode,
-        latitude: newLoc.latitude,
-        longitude: newLoc.longitude,
+        address: sanitizedLoc.name,
+        city: sanitizedLoc.city,
+        state: sanitizedLoc.state,
+        pincode: sanitizedLoc.pincode,
+        latitude: sanitizedLoc.latitude,
+        longitude: sanitizedLoc.longitude,
         // Internal app properties
-        time: newLoc.time,
+        time: sanitizedLoc.time,
       };
       setJSON(STORAGE_KEY, payload, { ttlMs: LOCATION_TTL_MS });
     }
@@ -93,7 +102,7 @@ export const LocationProvider = ({ children }) => {
 
       const fallbackFromCoords = (latitude, longitude) => ({
         name: `Lat ${Number(latitude).toFixed(5)}, Lng ${Number(longitude).toFixed(5)}`,
-        time: "12-15 mins",
+        time: "10-30 mins",
         city: currentLocation?.city || "Indore",
         state: currentLocation?.state || "Madhya Pradesh",
         pincode: currentLocation?.pincode || "452018",
@@ -178,7 +187,7 @@ export const LocationProvider = ({ children }) => {
 
             liveLocation = {
               name: friendlyName,
-              time: "12-15 mins",
+              time: "10-30 mins",
               city: locality || liveLocation.city,
               state: state || liveLocation.state,
               pincode: pincode || liveLocation.pincode,
@@ -286,17 +295,21 @@ export const LocationProvider = ({ children }) => {
     const parsed = getJSON(STORAGE_KEY, null);
     const addressName = parsed?.address || parsed?.name;
     if (parsed && addressName) {
+      let restoredTime = parsed.time;
+      if (!restoredTime || /12-15|12 to 15|8-15/i.test(restoredTime)) {
+        restoredTime = "10-30 mins";
+      }
       updateLocation(
         {
           name: addressName,
-          time: parsed.time || "12-15 mins",
+          time: restoredTime,
           city: parsed.city,
           state: parsed.state,
           pincode: parsed.pincode,
           latitude: parsed.latitude,
           longitude: parsed.longitude,
         },
-        { persist: false, updateSavedHome: false },
+        { persist: true, updateSavedHome: false },
       );
     } else {
       // If no location is stored (or TTL expired), keep it null

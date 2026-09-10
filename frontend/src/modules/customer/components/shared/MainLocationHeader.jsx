@@ -368,7 +368,7 @@ const MainLocationHeader = ({
                 <div className="flex items-center gap-1 opacity-80 text-[11px] font-black uppercase tracking-wider">
                   <AccessTimeIcon sx={{ fontSize: 13, color: headerFontColor }} />
                   <span style={{ color: headerFontColor }}>
-                    {currentLocation?.time || "12-15 MINS"}
+                    {(!currentLocation?.time || /12-15|12 to 15|8-15/i.test(currentLocation.time)) ? "10-30 MINS" : currentLocation.time.toUpperCase()}
                   </span>
                 </div>
                 <button
@@ -486,7 +486,7 @@ const MainLocationHeader = ({
                 <div className="flex flex-col justify-center leading-tight">
                   <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider" style={{ color: headerFontColor }}>
                     <AccessTimeIcon sx={{ fontSize: 12 }} />
-                    <span>{currentLocation?.time || "12-15 MINS"}</span>
+                    <span>{(!currentLocation?.time || /12-15|12 to 15|8-15/i.test(currentLocation.time)) ? "10-30 MINS" : currentLocation.time.toUpperCase()}</span>
                   </div>
                   <button
                     type="button"
