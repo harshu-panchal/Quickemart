@@ -123,6 +123,29 @@ const ProductDetailSheet = () => {
         ];
     }, [selectedProduct]);
 
+    // Auto-advance the product image carousel (right-to-left float) while the
+    // product detail view is open, looping back to the first image after the last.
+    // Re-arms on every activeImageIndex change so a manual swipe/thumbnail click
+    // resets the countdown instead of fighting the user's own navigation.
+    useEffect(() => {
+        if (!isOpen || allImages.length <= 1) return undefined;
+        const timer = setTimeout(() => {
+            setActiveImageIndex((prev) => (prev + 1) % allImages.length);
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, [isOpen, activeImageIndex, allImages.length]);
+
+    // Keep the mobile swipe-carousel's scroll position in sync whenever
+    // activeImageIndex changes programmatically (auto-advance, thumbnail clicks).
+    useEffect(() => {
+        const node = scrollRef.current;
+        if (!node) return;
+        const targetLeft = activeImageIndex * node.offsetWidth;
+        if (Math.abs(node.scrollLeft - targetLeft) > 4) {
+            node.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        }
+    }, [activeImageIndex]);
+
     // Update variant when product changes
     useEffect(() => {
         setNewReview({ rating: 5, comment: '' });
@@ -431,10 +454,10 @@ const ProductDetailSheet = () => {
                                             <AnimatePresence mode="wait">
                                                 <motion.div
                                                     key={activeImageIndex}
-                                                    initial={{ scale: 0.93, opacity: 0 }}
-                                                    animate={{ scale: 1, opacity: 1 }}
-                                                    exit={{ scale: 0.93, opacity: 0 }}
-                                                    transition={{ duration: 0.15 }}
+                                                    initial={{ x: 60, opacity: 0 }}
+                                                    animate={{ x: 0, opacity: 1 }}
+                                                    exit={{ x: -60, opacity: 0 }}
+                                                    transition={{ duration: 0.5, ease: 'easeInOut' }}
                                                     className="w-full h-full absolute inset-0 m-auto p-6 lg:p-8"
                                                 >
                                                     <ProductImageZoom
