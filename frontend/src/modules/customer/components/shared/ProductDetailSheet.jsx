@@ -13,6 +13,7 @@ import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { customerApi } from '../../services/customerApi';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import ProductImageZoom from './ProductImageZoom';
 
 const AccordionItem = ({ title, children, id, icon, expandedSections, toggleSection }) => {
     const isOpen = expandedSections.includes(id);
@@ -428,16 +429,20 @@ const ProductDetailSheet = () => {
                                         {/* Main image viewer */}
                                         <div className="flex-1 flex items-center justify-center p-6 lg:p-8 relative min-h-[350px]">
                                             <AnimatePresence mode="wait">
-                                                <motion.img
+                                                <motion.div
                                                     key={activeImageIndex}
                                                     initial={{ scale: 0.93, opacity: 0 }}
                                                     animate={{ scale: 1, opacity: 1 }}
                                                     exit={{ scale: 0.93, opacity: 0 }}
                                                     transition={{ duration: 0.15 }}
-                                                    src={applyCloudinaryTransform(allImages[activeImageIndex] || allImages[0], "f_auto,q_auto:best,w_1200,dpr_auto")}
-                                                    alt={`${selectedProduct.name} ${activeImageIndex + 1}`}
-                                                    className="w-full h-full object-contain mix-blend-multiply drop-shadow-2xl hover:scale-[1.03] transition-transform duration-500 absolute inset-0 m-auto p-12"
-                                                />
+                                                    className="w-full h-full absolute inset-0 m-auto p-6 lg:p-8"
+                                                >
+                                                    <ProductImageZoom
+                                                        src={allImages[activeImageIndex] || allImages[0]}
+                                                        alt={`${selectedProduct.name} ${activeImageIndex + 1}`}
+                                                        zoomScale={2.5}
+                                                    />
+                                                </motion.div>
                                             </AnimatePresence>
                                         </div>
                                     </div>
@@ -871,14 +876,12 @@ const ProductDetailSheet = () => {
                                     }}
                                 >
                                     {allImages.map((img, i) => (
-                                        <div key={i} className="flex-shrink-0 w-full h-full snap-center flex items-center justify-center px-0 sm:px-4">
-                                            <motion.img
-                                                initial={{ scale: 0.8, opacity: 0 }}
-                                                animate={{ scale: 1, opacity: 1 }}
-                                                transition={{ duration: 0.4 }}
-                                                src={applyCloudinaryTransform(img, "f_auto,q_auto:best,w_1200,dpr_auto")}
+                                        <div key={i} className="flex-shrink-0 w-full h-full snap-center flex items-center justify-center px-2 sm:px-4">
+                                            <ProductImageZoom
+                                                src={img}
                                                 alt={`${selectedProduct.name} ${i + 1}`}
-                                                className="w-full h-full object-contain mix-blend-multiply drop-shadow-xl"
+                                                zoomScale={2.2}
+                                                imageClassName="drop-shadow-xl"
                                             />
                                         </div>
                                     ))}
