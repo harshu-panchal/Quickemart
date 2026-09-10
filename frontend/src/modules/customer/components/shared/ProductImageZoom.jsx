@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { cn } from '@/lib/utils';
@@ -24,22 +23,25 @@ export const ProductImageModal = ({
     const [activeIndex, setActiveIndex] = useState(initialIndex);
     const [scale, setScale] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
+    const [isDraggingActive, setIsDraggingActive] = useState(false);
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
 
-    const isDragging = useRef(false);
-    const dragStart = useRef({ x: 0, y: 0 });
-    const lastTapTime = useRef(0);
-    const initialTouchDist = useRef(0);
-    const initialTouchScale = useRef(1);
-    const imageContainerRef = useRef(null);
-
-    // Sync initial index when modal opens
-    useEffect(() => {
+    if (isOpen !== prevIsOpen) {
+        setPrevIsOpen(isOpen);
         if (isOpen) {
             setActiveIndex(initialIndex);
             setScale(1);
             setPan({ x: 0, y: 0 });
         }
-    }, [isOpen, initialIndex]);
+    }
+
+    const isDragging = useRef(false);
+    const dragStart = useRef({ x: 0, y: 0 });
+    const lastTapTime = useRef(0);
+    const lastTouchDoubleTapTime = useRef(0);
+    const initialTouchDist = useRef(0);
+    const initialTouchScale = useRef(1);
+    const imageContainerRef = useRef(null);
 
     // Handle ESC key to close
     useEffect(() => {
@@ -58,24 +60,27 @@ export const ProductImageModal = ({
     }, []);
 
     const toggleDoubleTapZoom = useCallback((clientX, clientY) => {
-        if (scale > 1.2) {
-            resetZoom();
-        } else {
-            setScale(2.5);
-            // Center zoom on click location if container is available
-            if (imageContainerRef.current) {
-                const rect = imageContainerRef.current.getBoundingClientRect();
-                const offsetX = (rect.width / 2 - (clientX - rect.left)) * 1.2;
-                const offsetY = (rect.height / 2 - (clientY - rect.top)) * 1.2;
-                setPan({ x: offsetX, y: offsetY });
+        setScale((prevScale) => {
+            if (prevScale > 1.2) {
+                setPan({ x: 0, y: 0 });
+                return 1;
+            } else {
+                if (imageContainerRef.current) {
+                    const rect = imageContainerRef.current.getBoundingClientRect();
+                    const offsetX = (rect.width / 2 - (clientX - rect.left)) * 1.2;
+                    const offsetY = (rect.height / 2 - (clientY - rect.top)) * 1.2;
+                    setPan({ x: offsetX, y: offsetY });
+                }
+                return 2.5;
             }
-        }
-    }, [scale, resetZoom]);
+        });
+    }, []);
 
     // Desktop Mouse Drag Panning
     const handleMouseDown = (e) => {
         if (scale <= 1) return;
         isDragging.current = true;
+        setIsDraggingActive(true);
         dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     };
 
@@ -89,10 +94,12 @@ export const ProductImageModal = ({
 
     const handleMouseUp = () => {
         isDragging.current = false;
+        setIsDraggingActive(false);
     };
 
-    // Desktop Double Click
+    // Desktop Double Click (Ignored if triggered by touch double-tap)
     const handleDoubleClick = (e) => {
+        if (Date.now() - lastTouchDoubleTapTime.current < 600) return;
         toggleDoubleTapZoom(e.clientX, e.clientY);
     };
 
@@ -118,14 +125,19 @@ export const ProductImageModal = ({
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
 
-            // Double-tap check (within 300ms)
-            if (now - lastTapTime.current < 300) {
+            // Double-tap check (between 40ms and 300ms)
+            if (now - lastTapTime.current < 300 && now - lastTapTime.current > 40) {
+                lastTouchDoubleTapTime.current = now;
+                lastTapTime.current = 0; // Prevent 3rd tap from immediately triggering again
                 toggleDoubleTapZoom(touch.clientX, touch.clientY);
-            } else if (scale > 1) {
-                isDragging.current = true;
-                dragStart.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
+            } else {
+                if (scale > 1) {
+                    isDragging.current = true;
+                    setIsDraggingActive(true);
+                    dragStart.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
+                }
+                lastTapTime.current = now;
             }
-            lastTapTime.current = now;
         }
     };
 
@@ -151,8 +163,10 @@ export const ProductImageModal = ({
 
     const handleTouchEnd = () => {
         isDragging.current = false;
+        setIsDraggingActive(false);
         initialTouchDist.current = 0;
     };
+
 
     if (!isOpen) return null;
 
@@ -160,13 +174,9 @@ export const ProductImageModal = ({
     const displaySrc = applyCloudinaryTransform(currentImg, 'f_auto,q_auto:best,w_1600,dpr_auto');
 
     return (
-        <AnimatePresence>
+        <div className="contents">
             {isOpen && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                <div
                     className="fixed inset-0 z-[300] bg-[#F8F9FA] flex flex-col justify-between overflow-hidden select-none"
                 >
                     {/* Header Bar: Counter + Close Button */}
@@ -176,14 +186,13 @@ export const ProductImageModal = ({
                         </div>
 
                         {/* Top-Right Circular Close Button (X) */}
-                        <motion.button
-                            whileHover={{ scale: 1.08 }}
-                            whileTap={{ scale: 0.92 }}
+                        <button
+                            type="button"
                             onClick={onClose}
                             className="w-11 h-11 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-xl hover:bg-black transition-all cursor-pointer"
                         >
                             <X size={22} strokeWidth={2.5} />
-                        </motion.button>
+                        </button>
                     </div>
 
                     {/* Main Image Viewport Area */}
@@ -206,10 +215,11 @@ export const ProductImageModal = ({
                             draggable={false}
                             style={{
                                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-                                transition: isDragging.current ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                                transition: isDraggingActive ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                             }}
                             className="max-w-full max-h-[68vh] object-contain drop-shadow-md mix-blend-multiply pointer-events-auto"
                         />
+
 
                         {/* Zoom Floating Action Bar (Controls) */}
                         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-full px-3 py-1 shadow-md flex items-center gap-2 pointer-events-auto">
@@ -247,16 +257,15 @@ export const ProductImageModal = ({
                         <div className="relative z-30 pb-6 pt-3 px-4 flex justify-center items-center bg-gradient-to-t from-white via-white/80 to-transparent">
                             <div className="flex items-center gap-2.5 overflow-x-auto max-w-full px-2 py-1 no-scrollbar">
                                 {images.map((img, idx) => (
-                                    <motion.button
+                                    <button
                                         key={idx}
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
+                                        type="button"
                                         onClick={() => {
                                             setActiveIndex(idx);
                                             resetZoom();
                                         }}
                                         className={cn(
-                                            'w-14 h-14 md:w-16 md:h-16 rounded-2xl overflow-hidden flex-shrink-0 border-2 transition-all p-1 bg-white shadow-sm cursor-pointer',
+                                            'w-14 h-14 md:w-16 md:h-16 rounded-2xl overflow-hidden flex-shrink-0 border-2 transition-all p-1 bg-white shadow-sm cursor-pointer hover:scale-105 active:scale-95',
                                             idx === activeIndex
                                                 ? 'border-emerald-600 ring-2 ring-emerald-600/30 shadow-md scale-105'
                                                 : 'border-slate-200/80 opacity-60 hover:opacity-100'
@@ -267,14 +276,14 @@ export const ProductImageModal = ({
                                             alt=""
                                             className="w-full h-full object-contain mix-blend-multiply"
                                         />
-                                    </motion.button>
+                                    </button>
                                 ))}
                             </div>
                         </div>
                     )}
-                </motion.div>
+                </div>
             )}
-        </AnimatePresence>
+        </div>
     );
 };
 
