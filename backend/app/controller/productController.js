@@ -384,7 +384,7 @@ export const getProducts = async (req, res) => {
           .select(
             "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
           )
-          // No .populate() — names resolved via cache-backed entityNameCache
+          .populate("masterProductId", "slug name")
           .sort(sortQuery)
           .skip(skip)
           .limit(limit)
@@ -393,18 +393,21 @@ export const getProducts = async (req, res) => {
       ]);
 
       // Query Master Catalog products that have no seller offers listed in this area/query
+      // (Only for customer visibility search, skip when a specific seller is queried)
       let masterProducts = [];
-      try {
-        const masterQuery = { status: { $ne: 'deleted' } };
-        if (query.$or) {
-          masterQuery.$or = query.$or;
-        } else {
-          if (query.headerId) masterQuery.headerId = query.headerId;
-          if (query.categoryId) masterQuery.categoryId = query.categoryId;
-          if (query.subcategoryId) masterQuery.subcategoryId = query.subcategoryId;
-        }
-        if (query.name) masterQuery.name = query.name;
-        if (query.$text) masterQuery.$text = query.$text;
+      const hasSpecificSellerQuery = !!(query.sellerId || (requestedSellerIds && requestedSellerIds.length > 0));
+      if (!hasSpecificSellerQuery) {
+        try {
+          const masterQuery = { status: { $ne: 'deleted' } };
+          if (query.$or) {
+            masterQuery.$or = query.$or;
+          } else {
+            if (query.headerId) masterQuery.headerId = query.headerId;
+            if (query.categoryId) masterQuery.categoryId = query.categoryId;
+            if (query.subcategoryId) masterQuery.subcategoryId = query.subcategoryId;
+          }
+          if (query.name) masterQuery.name = query.name;
+          if (query.$text) masterQuery.$text = query.$text;
 
         const existingMasterIds = new Set(
           rawProducts.map((p) => (p.masterProductId ? String(p.masterProductId) : null)).filter(Boolean)
@@ -448,6 +451,7 @@ export const getProducts = async (req, res) => {
           }));
       } catch (err) {
         logger.error("Failed to query master products for customer view", { error: err });
+      }
       }
 
       const combinedRaw = [...rawProducts, ...masterProducts];

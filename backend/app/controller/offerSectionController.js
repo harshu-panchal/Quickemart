@@ -1,10 +1,12 @@
 import OfferSection from "../models/offerSection.js";
+import Product from "../models/product.js";
+import MasterProduct from "../models/masterProduct.js";
 import handleResponse from "../utils/helper.js";
 import {
   parseCustomerCoordinates,
   getNearbySellerIdsForCustomer,
 } from "../services/customerVisibilityService.js";
-import { buildKey, getOrSet, getTTL } from "../services/cacheService.js";
+import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 
 export const getPublicOfferSections = async (req, res) => {
@@ -41,13 +43,72 @@ export const getPublicOfferSections = async (req, res) => {
           .populate("sellerIds", "shopName name logo")
           .populate({
             path: "productIds",
-            select: "name slug price salePrice mainImage stock unit sellerId status approvalStatus",
+            select: "name slug price salePrice mainImage stock unit sellerId status approvalStatus masterProductId",
             match: {
               status: "active",
               ...getApprovedOrLegacyFilter(),
             },
           })
           .lean();
+
+        // Batch resolve all productSlugs across all sections for efficiency
+        const allProductSlugs = Array.from(
+          new Set(
+            sections.flatMap((s) => s.productSlugs || []).map((slug) => String(slug || "").trim().toLowerCase()).filter(Boolean)
+          )
+        );
+
+        let masterIdToSlugMap = new Map();
+        let slugToMasterIdMap = new Map();
+
+        if (allProductSlugs.length > 0) {
+          const matchedMasterProducts = await MasterProduct.find({
+            slug: { $in: allProductSlugs },
+            status: { $ne: "deleted" },
+          }).lean();
+
+          matchedMasterProducts.forEach((mp) => {
+            const slugKey = String(mp.slug || "").trim().toLowerCase();
+            const idKey = String(mp._id);
+            masterIdToSlugMap.set(idKey, slugKey);
+            slugToMasterIdMap.set(slugKey, idKey);
+          });
+        }
+
+        const masterIdsList = Array.from(masterIdToSlugMap.keys());
+
+        let slugToSellerProductsMap = new Map();
+
+        if (allProductSlugs.length > 0) {
+          const matchedSellerProducts = await Product.find({
+            $or: [
+              { slug: { $in: allProductSlugs } },
+              ...(masterIdsList.length > 0 ? [{ masterProductId: { $in: masterIdsList } }] : []),
+            ],
+            sellerId: { $in: nearbySellerIds },
+            status: "active",
+            ...getApprovedOrLegacyFilter(),
+          })
+            .select("name slug price salePrice mainImage stock unit sellerId status approvalStatus masterProductId")
+            .lean();
+
+          matchedSellerProducts.forEach((prod) => {
+            const directSlug = String(prod.slug || "").trim().toLowerCase();
+            const masterIdStr = prod.masterProductId ? String(prod.masterProductId) : null;
+            const masterSlug = masterIdStr ? masterIdToSlugMap.get(masterIdStr) : null;
+
+            const targetSlugs = new Set();
+            if (directSlug) targetSlugs.add(directSlug);
+            if (masterSlug) targetSlugs.add(masterSlug);
+
+            targetSlugs.forEach((slugKey) => {
+              if (!slugToSellerProductsMap.has(slugKey)) {
+                slugToSellerProductsMap.set(slugKey, []);
+              }
+              slugToSellerProductsMap.get(slugKey).push(prod);
+            });
+          });
+        }
 
         return sections.map((section) => {
           const sellerIds = Array.isArray(section.sellerIds)
@@ -57,17 +118,41 @@ export const getPublicOfferSections = async (req, res) => {
               })
             : [];
 
-          const productIds = Array.isArray(section.productIds)
+          const directProducts = Array.isArray(section.productIds)
             ? section.productIds.filter((product) => {
                 const sid = String(product?.sellerId?._id || product?.sellerId || "");
                 return sid && nearbySellerSet.has(sid);
               })
             : [];
 
+          // Resolve slug-based seller listed active products for this section
+          const sectionSlugs = (section.productSlugs || [])
+            .map((s) => String(s || "").trim().toLowerCase())
+            .filter(Boolean);
+
+          const slugSellerProducts = [];
+          sectionSlugs.forEach((slugKey) => {
+            if (slugToSellerProductsMap.has(slugKey)) {
+              slugSellerProducts.push(...slugToSellerProductsMap.get(slugKey));
+            }
+          });
+
+          // Deduplicate direct seller products and slug-resolved seller products by _id
+          const seenProductIds = new Set();
+          const combinedProducts = [];
+
+          [...directProducts, ...slugSellerProducts].forEach((prod) => {
+            const idStr = String(prod?._id || "");
+            if (idStr && !seenProductIds.has(idStr)) {
+              seenProductIds.add(idStr);
+              combinedProducts.push(prod);
+            }
+          });
+
           return {
             ...section,
             sellerIds,
-            productIds,
+            productIds: combinedProducts,
           };
         });
       },
@@ -108,6 +193,7 @@ export const createOfferSection = async (req, res) => {
       categoryIds = [],
       sellerIds = [],
       productIds = [],
+      productSlugs = [],
       order,
       status,
     } = req.body;
@@ -128,10 +214,14 @@ export const createOfferSection = async (req, res) => {
       categoryIds: catIds,
       sellerIds: Array.isArray(sellerIds) ? sellerIds.filter(Boolean) : [],
       productIds: Array.isArray(productIds) ? productIds : [],
+      productSlugs: Array.isArray(productSlugs)
+        ? productSlugs.map((s) => String(s || "").trim().toLowerCase()).filter(Boolean)
+        : [],
       order: typeof order === "number" ? order : count,
       status: status || "active",
     });
 
+    await invalidate("cache:offersections:public:*");
     return handleResponse(res, 201, "Offer section created", section);
   } catch (error) {
     return handleResponse(res, 400, error.message);
@@ -155,10 +245,15 @@ export const updateOfferSection = async (req, res) => {
     if (Array.isArray(payload.sellerIds))
       section.sellerIds = payload.sellerIds.filter(Boolean);
     if (Array.isArray(payload.productIds)) section.productIds = payload.productIds;
+    if (Array.isArray(payload.productSlugs))
+      section.productSlugs = payload.productSlugs
+        .map((s) => String(s || "").trim().toLowerCase())
+        .filter(Boolean);
     if (payload.order !== undefined) section.order = payload.order;
     if (payload.status !== undefined) section.status = payload.status;
 
     await section.save();
+    await invalidate("cache:offersections:public:*");
     return handleResponse(res, 200, "Offer section updated", section);
   } catch (error) {
     return handleResponse(res, 400, error.message);
@@ -170,6 +265,7 @@ export const deleteOfferSection = async (req, res) => {
     const { id } = req.params;
     const deleted = await OfferSection.findByIdAndDelete(id);
     if (!deleted) return handleResponse(res, 404, "Offer section not found");
+    await invalidate("cache:offersections:public:*");
     return handleResponse(res, 200, "Offer section deleted");
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -191,6 +287,7 @@ export const reorderOfferSections = async (req, res) => {
         },
       }));
     if (bulkOps.length) await OfferSection.bulkWrite(bulkOps);
+    await invalidate("cache:offersections:public:*");
     return handleResponse(res, 200, "Sections reordered");
   } catch (error) {
     return handleResponse(res, 500, error.message);

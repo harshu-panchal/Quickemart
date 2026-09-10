@@ -21,14 +21,19 @@ const OfferSections = ({ sections, noServiceData }) => {
           const sectionProducts = (section.productIds || [])
             .filter((p) => typeof p === "object" && p !== null)
             .map((p) => ({
-              id: p._id,
-              _id: p._id,
+              ...p,
+              id: p._id || p.id,
+              _id: p._id || p.id,
               name: p.name,
               image: p.mainImage || p.image || "",
               price: p.salePrice ?? p.price,
               originalPrice: p.price ?? p.salePrice,
-              weight: p.weight,
-              deliveryTime: p.deliveryTime,
+              stock: p.stock ?? 0,
+              variants: p.variants || [],
+              isOutOfStock: p.isOutOfStock || false,
+              isStoreOpen: p.isStoreOpen,
+              weight: p.weight || "1 unit",
+              deliveryTime: p.deliveryTime || "10-30 mins",
             }));
 
           const sectionSellers = (section.sellerIds || [])

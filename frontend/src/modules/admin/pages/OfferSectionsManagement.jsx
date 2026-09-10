@@ -34,6 +34,7 @@ const OfferSectionsManagement = () => {
     categoryIds: [],
     sellerIds: [],
     productIds: [],
+    productSlugs: [],
     order: 0,
     status: "active",
   });
@@ -134,6 +135,7 @@ const OfferSectionsManagement = () => {
       categoryIds: [],
       sellerIds: [],
       productIds: [],
+      productSlugs: [],
       order: sections.length,
       status: "active",
     });
@@ -160,6 +162,7 @@ const OfferSectionsManagement = () => {
       categoryIds: catIds,
       sellerIds: selIds,
       productIds: section.productIds || [],
+      productSlugs: section.productSlugs || [],
       order: section.order ?? 0,
       status: section.status || "active",
     });
@@ -183,7 +186,8 @@ const OfferSectionsManagement = () => {
       sideImageKey: formData.sideImageKey,
       categoryIds: formData.categoryIds,
       sellerIds: formData.sellerIds || [],
-      productIds: formData.productIds,
+      productIds: formData.productIds || [],
+      productSlugs: formData.productSlugs || [],
       order: Number(formData.order) || 0,
       status: formData.status,
     };
@@ -471,42 +475,53 @@ const OfferSectionsManagement = () => {
           </div>
 
           {(formData.categoryIds.length > 0 || formData.sellerIds.length > 0) && (
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Products (from selected categories & sellers)
-              </label>
-              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1 border border-slate-100 rounded-xl p-3 bg-slate-50/50">
-                {productsFiltered.length === 0 ? (
-                  <span className="text-[11px] text-slate-400">
-                    No products match. Add categories and/or sellers.
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Feature by Product Slug (Universal - Auto-Resolves for Nearby Sellers)
+                  </label>
+                  <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded-full">
+                    Recommended
                   </span>
-                ) : (
-                  productsFiltered.map((p) => {
-                    const selected = formData.productIds.includes(p._id);
-                    return (
-                      <button
-                        key={p._id}
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            productIds: selected
-                              ? prev.productIds.filter((id) => id !== p._id)
-                              : [...prev.productIds, p._id],
-                          }))
-                        }
-                        className={cn(
-                          "px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-all",
-                          selected
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                        )}
-                      >
-                        {p.name}
-                      </button>
-                    );
-                  })
-                )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1 border border-slate-100 rounded-xl p-3 bg-slate-50/50">
+                  {productsFiltered.length === 0 ? (
+                    <span className="text-[11px] text-slate-400">
+                      No products match. Add categories and/or sellers.
+                    </span>
+                  ) : (
+                    productsFiltered.map((p) => {
+                      const masterSlug = typeof p.masterProductId === "object" && p.masterProductId?.slug ? p.masterProductId.slug : null;
+                      const pSlug = String(masterSlug || p.slug || "").trim().toLowerCase();
+                      const selectedSlug = pSlug && (formData.productSlugs.includes(pSlug) || (p.slug && formData.productSlugs.includes(String(p.slug).trim().toLowerCase())));
+                      return (
+                        <button
+                          key={`slug-${p._id}`}
+                          type="button"
+                          onClick={() => {
+                            if (!pSlug) return;
+                            setFormData((prev) => ({
+                              ...prev,
+                              productSlugs: selectedSlug
+                                ? prev.productSlugs.filter((s) => s !== pSlug && s !== String(p.slug || "").trim().toLowerCase())
+                                : [...prev.productSlugs, pSlug],
+                            }));
+                          }}
+                          className={cn(
+                            "px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-all flex items-center gap-1.5",
+                            selectedSlug
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          )}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {p.name}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           )}
