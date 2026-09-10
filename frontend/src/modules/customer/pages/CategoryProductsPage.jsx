@@ -174,15 +174,40 @@ const CategoryProductsPage = () => {
                     >
                         <ChevronLeft size={24} className="text-gray-900" />
                     </button>
-                    <h1 className="text-[18px] font-bold text-gray-800 tracking-tight">
-                        {category?.name || catId}
-                    </h1>
+                    {isLoading ? (
+                        <div className="h-5 w-32 rounded-full bg-gray-200 animate-pulse" />
+                    ) : (
+                        <h1 className="text-[18px] font-bold text-gray-800 tracking-tight">
+                            {category?.name || catId}
+                        </h1>
+                    )}
                 </div>
 
             </header>
 
             <div className="flex flex-1 relative items-start">
-                {(safeProducts.length === 0 && !isLoading) ? (
+                {isLoading ? (
+                    <>
+                        {/* Skeleton Sidebar */}
+                        <aside className="w-[70px] border-r border-gray-50 flex flex-col gap-4 py-4 sticky top-[60px] h-[calc(100vh-60px)] flex-shrink-0">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <div key={i} className="flex flex-col items-center gap-2 px-1">
+                                    <div className="w-14 h-14 rounded-2xl bg-gray-200 animate-pulse" />
+                                    <div className="w-10 h-2 rounded-full bg-gray-200 animate-pulse" />
+                                </div>
+                            ))}
+                        </aside>
+
+                        {/* Skeleton Content */}
+                        <main className="flex-1 p-2 pb-24">
+                            <div className="grid grid-cols-2 gap-x-2 gap-y-3">
+                                {Array.from({ length: 6 }).map((_, i) => (
+                                    <div key={i} className="rounded-2xl bg-gray-200 animate-pulse h-44 w-full" />
+                                ))}
+                            </div>
+                        </main>
+                    </>
+                ) : (safeProducts.length === 0 && !isLoading) ? (
                     !hasValidLocation ? (
                         <div className="w-full flex-1 py-20 px-8 flex flex-col items-center justify-center text-center">
                             <h3 className="text-2xl font-[1000] text-slate-800 tracking-tighter mb-4 uppercase">
