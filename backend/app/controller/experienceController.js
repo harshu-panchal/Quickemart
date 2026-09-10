@@ -609,3 +609,29 @@ export const upsertHeroConfig = async (req, res) => {
     return handleResponse(res, 500, error.message);
   }
 };
+
+export const deleteHeroConfig = async (req, res) => {
+  try {
+    const { pageType, headerId } = req.query;
+
+    if (!pageType) {
+      return handleResponse(res, 400, "pageType is required");
+    }
+
+    if (pageType === "header" && !headerId) {
+      return handleResponse(res, 400, "headerId is required for header pageType");
+    }
+
+    const filter = {
+      pageType,
+      headerId: pageType === "header" ? headerId : null,
+    };
+
+    await HeroConfig.deleteOne(filter);
+    await invalidate("cache:experience:hero:*");
+
+    return handleResponse(res, 200, "Hero config deleted successfully");
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};

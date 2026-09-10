@@ -4,6 +4,7 @@ import {
   HiOutlinePhoto,
   HiOutlinePlus,
   HiOutlineXMark,
+  HiOutlineTrash,
 } from "react-icons/hi2";
 import { adminApi } from "../services/adminApi";
 import Card from "@shared/components/ui/Card";
@@ -32,6 +33,10 @@ export default function HeroCategoriesPerPage() {
   const [formBanners, setFormBanners] = useState([emptyBannerItem()]);
   const [formCategoryIds, setFormCategoryIds] = useState([]);
   const [saving, setSaving] = useState(false);
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingRow, setDeletingRow] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +207,41 @@ export default function HeroCategoriesPerPage() {
     }
   };
 
+  const openDeleteConfirm = (row) => {
+    setDeletingRow(row);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingRow) return;
+    setDeleting(true);
+    try {
+      await adminApi.deleteHeroConfig({
+        pageType: deletingRow.pageType,
+        headerId: deletingRow.headerId || undefined,
+      });
+      showToast("Hero config deleted successfully", "success");
+      setPageData((prev) =>
+        prev.map((p) =>
+          p.id === deletingRow.id
+            ? {
+                ...p,
+                bannerCount: 0,
+                categoryCount: 0,
+              }
+            : p
+        )
+      );
+      setDeleteModalOpen(false);
+      setDeletingRow(null);
+    } catch (e) {
+      console.error(e);
+      showToast(e.response?.data?.message || "Failed to delete hero config", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-4xl">
       <div className="mb-6">
@@ -269,14 +309,26 @@ export default function HeroCategoriesPerPage() {
                       )}
                     </td>
                     <td className="py-4">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(row)}
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline"
-                      >
-                        <HiOutlinePencilSquare className="w-3.5 h-3.5" />
-                        Edit
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(row)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline"
+                        >
+                          <HiOutlinePencilSquare className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        {(row.bannerCount > 0 || row.categoryCount > 0) && (
+                          <button
+                            type="button"
+                            onClick={() => openDeleteConfirm(row)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-500 hover:text-rose-700 hover:underline"
+                          >
+                            <HiOutlineTrash className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -491,6 +543,43 @@ export default function HeroCategoriesPerPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => !deleting && setDeleteModalOpen(false)}
+        title="Delete Hero Config"
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={deleting}
+              className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="px-4 py-2 rounded-xl text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        }
+      >
+        <div className="py-2">
+          <p className="text-sm font-semibold text-slate-700">
+            Are you sure you want to delete the hero config for <strong className="text-slate-900">{deletingRow?.label}</strong>?
+          </p>
+          <p className="text-xs text-slate-500 mt-2">
+            This will clear all hero banners and category settings configured for this page.
+          </p>
+        </div>
       </Modal>
     </div>
   );

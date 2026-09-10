@@ -440,7 +440,8 @@ const ProductDetailSheet = () => {
                                                     <ProductImageZoom
                                                         src={allImages[activeImageIndex] || allImages[0]}
                                                         alt={`${selectedProduct.name} ${activeImageIndex + 1}`}
-                                                        zoomScale={2.5}
+                                                        allImages={allImages}
+                                                        activeImageIndex={activeImageIndex}
                                                     />
                                                 </motion.div>
                                             </AnimatePresence>
@@ -880,7 +881,8 @@ const ProductDetailSheet = () => {
                                             <ProductImageZoom
                                                 src={img}
                                                 alt={`${selectedProduct.name} ${i + 1}`}
-                                                zoomScale={2.2}
+                                                allImages={allImages}
+                                                activeImageIndex={i}
                                                 imageClassName="drop-shadow-xl"
                                             />
                                         </div>

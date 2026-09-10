@@ -11,6 +11,7 @@ import {
   getPublicHeroConfig,
   getAdminHeroConfig,
   upsertHeroConfig,
+  deleteHeroConfig,
 } from "../controller/experienceController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
@@ -52,6 +53,12 @@ router.put(
   verifyToken,
   allowRoles("admin"),
   upsertHeroConfig
+);
+router.delete(
+  "/admin/experience/hero",
+  verifyToken,
+  allowRoles("admin"),
+  deleteHeroConfig
 );
 
 router.put(

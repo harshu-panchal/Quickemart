@@ -33,6 +33,8 @@ export const adminContentApi = {
         axiosInstance.get('/admin/experience/hero', { params }),
     setHeroConfig: (data) =>
         axiosInstance.put('/admin/experience/hero', data),
+    deleteHeroConfig: (params) =>
+        axiosInstance.delete('/admin/experience/hero', { params }),
 
     // Offers Management
     getOffers: (params) => axiosInstance.get('/admin-offers', { params }),
