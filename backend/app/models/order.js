@@ -19,6 +19,13 @@ const orderSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // Set only for gift orders where the payer differs from the order owner
+    // (`customer`). Null for every normal, self-placed order.
+    placedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Seller",

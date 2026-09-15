@@ -13,6 +13,7 @@ import {
     validateSchema,
     verifyOtpSchema,
 } from "../validation/customerAuthValidation.js";
+import { normalizePhoneNumber } from "../utils/phone.js";
 
 const generateToken = (customer) =>
     jwt.sign(
@@ -122,6 +123,47 @@ export const updateCustomerProfile = async (req, res) => {
         await customer.save();
 
         return handleResponse(res, 200, "Profile updated successfully", customer);
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
+    }
+};
+
+/* ===============================
+   LOOKUP CUSTOMER BY PHONE (for "order for someone else")
+   Returns only minimal, non-sensitive fields — never phone/wallet/orders.
+================================ */
+export const lookupCustomerByPhone = async (req, res) => {
+    try {
+        const rawPhone = req.query?.phone;
+        if (!rawPhone || !String(rawPhone).trim()) {
+            return handleResponse(res, 400, "phone is required");
+        }
+
+        const phone = normalizePhoneNumber(rawPhone);
+        const requesterId = String(req.user?.id || "");
+
+        const candidate = await Customer.findOne({
+            phone,
+            role: "user",
+            isActive: true,
+            isVerified: true,
+        })
+            .select("_id name")
+            .lean();
+
+        if (!candidate || String(candidate._id) === requesterId) {
+            return handleResponse(res, 200, "No matching account found", {
+                found: false,
+            });
+        }
+
+        return handleResponse(res, 200, "Account found", {
+            found: true,
+            customer: {
+                _id: candidate._id,
+                name: candidate.name || "Quickemart user",
+            },
+        });
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }

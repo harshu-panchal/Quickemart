@@ -98,6 +98,9 @@ export const createOrderWithFinancialSnapshot = async (req, res) => {
       // coupon engine fills the discount in via `couponCode`/`couponId`
       // instead.
       couponCode: validated.couponCode || null,
+      // Gift orders: forwarded only when present; re-validated server-side
+      // in placeOrderAtomic before it's trusted for anything.
+      recipientCustomerId: validated.recipientCustomerId || null,
     };
     const idempotencyKey = String(req.headers["idempotency-key"] || "").trim() || null;
 

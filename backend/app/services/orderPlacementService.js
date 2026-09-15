@@ -383,6 +383,33 @@ export async function placeOrderAtomic({
       }
     }
 
+    // Gift orders: `customerId` (above) always stays the payer — cart,
+    // wallet, and coupon eligibility are untouched. `ownerId` is who the
+    // order actually belongs to (order.customer). They're identical for
+    // every normal, self-placed order.
+    let ownerId = customerId;
+    let recipientUser = null;
+    const rawRecipientId = normalizedPayload.recipientCustomerId
+      ? String(normalizedPayload.recipientCustomerId).trim()
+      : null;
+    if (rawRecipientId && rawRecipientId !== String(customerId)) {
+      if (!mongoose.Types.ObjectId.isValid(rawRecipientId)) {
+        throw new Error("Invalid recipient");
+      }
+      recipientUser = await User.findOne({
+        _id: rawRecipientId,
+        role: "user",
+        isActive: true,
+        isVerified: true,
+      })
+        .select("_id name")
+        .session(session);
+      if (!recipientUser) {
+        throw new Error("Recipient account not found or not eligible");
+      }
+      ownerId = String(recipientUser._id);
+    }
+
     const {
       orderItemsInput,
       source: resolvedSource,
@@ -422,7 +449,7 @@ export async function placeOrderAtomic({
     const checkoutReservation = computeStockReservationWindow(paymentMode);
     const checkoutGroup = new CheckoutGroup({
       checkoutGroupId,
-      customer: customerId,
+      customer: ownerId,
       paymentMode,
       paymentStatus: buildCheckoutGroupPaymentStatus(paymentMode),
       status: buildCheckoutGroupStatus(paymentMode),
@@ -494,7 +521,8 @@ export async function placeOrderAtomic({
 
       const order = new Order({
         orderId,
-        customer: customerId,
+        customer: ownerId,
+        placedBy: ownerId !== customerId ? customerId : null,
         seller: entry.sellerId,
         items: mapOrderItemsForPersistence(entry.items),
         address: normalizedAddress,
@@ -730,12 +758,20 @@ export async function placeOrderAtomic({
       }
     }
 
+    const isGiftOrder = ownerId !== customerId;
     for (const order of orders) {
       emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PLACED, {
         orderId: order.orderId,
         checkoutGroupId,
-        customerId,
-        userId: customerId,
+        customerId: ownerId,
+        userId: ownerId,
+        ...(isGiftOrder
+          ? {
+              placedByUserId: customerId,
+              placedByName: user?.name || "Someone",
+              recipientName: recipientUser?.name || "them",
+            }
+          : {}),
       });
       if (order.seller && shouldStartSellerWorkflow) {
         emitNotificationEvent(NOTIFICATION_EVENTS.NEW_ORDER, {

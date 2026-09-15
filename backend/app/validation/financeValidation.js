@@ -39,6 +39,10 @@ export const checkoutPreviewSchema = Joi.object({
   timeSlot: Joi.string().allow("", null),
   couponId: Joi.string().allow("", null).optional(),
   couponCode: Joi.string().trim().allow("", null).optional(),
+  // Gift orders: when set, the order is owned by this (existing, verified)
+  // customer instead of the placer. Re-validated server-side in
+  // placeOrderAtomic — never trusted from the client alone.
+  recipientCustomerId: Joi.string().allow("", null).optional(),
 }).unknown(true);
 
 export const createFinanceOrderSchema = checkoutPreviewSchema.keys({

@@ -71,7 +71,7 @@ function extensionFromMime(mimeType) {
 // supply a mimeType (several existing callers never did — Cloudinary used
 // to auto-detect from the buffer). Also used to double-check the declared
 // content-type isn't just mismatched with reality.
-function sniffMimeType(buffer) {
+export function sniffMimeType(buffer) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 4) return null;
     if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
     if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return "image/png";

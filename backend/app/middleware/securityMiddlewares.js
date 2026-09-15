@@ -49,6 +49,19 @@ export const otpRouteRateLimiter = createRateLimiter({
   message: "Too many OTP requests. Please wait before retrying.",
 });
 
+const CUSTOMER_LOOKUP_RATE_LIMIT_WINDOW_MS = () =>
+  parseInt(process.env.CUSTOMER_LOOKUP_RATE_LIMIT_WINDOW_MS || "60000", 10);
+const CUSTOMER_LOOKUP_RATE_LIMIT_MAX = () =>
+  parseInt(process.env.CUSTOMER_LOOKUP_RATE_LIMIT_MAX || "10", 10);
+
+export const customerLookupRateLimiter = createRateLimiter({
+  namespace: "customer_lookup",
+  windowMs: CUSTOMER_LOOKUP_RATE_LIMIT_WINDOW_MS(),
+  max: CUSTOMER_LOOKUP_RATE_LIMIT_MAX(),
+  keyGenerator: byUserOrIp,
+  message: "Too many lookup requests. Please wait before retrying.",
+});
+
 export const paymentRouteRateLimiter = createRateLimiter({
   namespace: "payment",
   windowMs: PAYMENT_RATE_LIMIT_WINDOW_MS(),

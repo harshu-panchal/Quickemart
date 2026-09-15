@@ -1,5 +1,5 @@
 import React from "react";
-import { Check, Contact2 } from "lucide-react";
+import { Check, Contact2, UserCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,12 @@ const CheckoutAddressSection = React.memo(function CheckoutAddressSection({
   displayName,
   displayPhone,
   displayAddress,
+  // "Also place under their account" (optional, additive)
+  recipientAccount,
+  linkToRecipientAccount,
+  onToggleLinkToRecipientAccount,
+  isLookingUpRecipient,
+  onLookupRecipientAccount,
 }) {
   return (
     <motion.div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
@@ -74,6 +80,12 @@ const CheckoutAddressSection = React.memo(function CheckoutAddressSection({
                 {savedRecipient.landmark && `, ${savedRecipient.landmark}`}
                 {savedRecipient.pincode && ` - ${savedRecipient.pincode}`}
               </p>
+              {linkToRecipientAccount && recipientAccount && (
+                <p className="flex items-center gap-1 text-[11px] font-bold text-primary mt-1.5">
+                  <UserCheck size={12} />
+                  Placing under {recipientAccount.name}'s account
+                </p>
+              )}
             </div>
           </div>
           <button
@@ -157,6 +169,39 @@ const CheckoutAddressSection = React.memo(function CheckoutAddressSection({
                     />
                   </div>
                 </div>
+
+                {/* Optional: attribute this order to the receiver's own account */}
+                {onLookupRecipientAccount && (
+                  <div className="mt-3">
+                    {!recipientAccount ? (
+                      <button
+                        type="button"
+                        onClick={onLookupRecipientAccount}
+                        disabled={isLookingUpRecipient || recipientData.phone.length !== 10}
+                        className="text-xs font-bold text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isLookingUpRecipient
+                          ? "Checking for a Quickemart account..."
+                          : "Check if they have a Quickemart account"}
+                      </button>
+                    ) : (
+                      <label className="flex items-start gap-2.5 p-3 bg-brand-50 border border-brand-100 rounded-xl cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!linkToRecipientAccount}
+                          onChange={(e) => onToggleLinkToRecipientAccount(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-xs text-slate-700 leading-snug">
+                          <span className="flex items-center gap-1 font-bold text-slate-800 mb-0.5">
+                            <UserCheck size={14} className="text-primary" />
+                            Also place this order under {recipientAccount.name}'s account
+                          </span>
+                          They'll see it in their own order history and tracking.
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Button

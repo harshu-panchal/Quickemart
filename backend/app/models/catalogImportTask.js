@@ -32,6 +32,14 @@ const catalogImportTaskSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    imagesTotal: {
+      type: Number,
+      default: 0,
+    },
+    imagesProcessed: {
+      type: Number,
+      default: 0,
+    },
     errors: [
       {
         row: Number,

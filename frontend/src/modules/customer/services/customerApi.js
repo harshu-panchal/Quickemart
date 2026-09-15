@@ -10,6 +10,8 @@ export const customerApi = {
   updateProfile: (data) => axiosInstance.put("/customer/profile", data),
   getWalletTransactions: (params) =>
     getWithDedupe("/customer/transactions", params),
+  lookupCustomerByPhone: (phone) =>
+    axiosInstance.get("/customer/lookup-by-phone", { params: { phone } }),
   getCategories: (params) =>
     getWithDedupe("/categories", params, { ttl: 60 * 1000 }), // 1 min for categories
   getProducts: (params) => getWithDedupe("/products", params),
@@ -73,6 +75,7 @@ export const customerApi = {
   placeOrder: (data) =>
     axiosInstance.post("/orders/place", data, { timeout: 120000 }),
   getMyOrders: () => getWithDedupe("/orders/my-orders"),
+  getSentOrders: () => getWithDedupe("/orders/sent"),
   /**
    * Order details must reflect live workflow, but we still dedupe in-flight requests to avoid
    * network spam when multiple effects/events trigger refresh simultaneously.

@@ -40,7 +40,7 @@ import { useSettings } from "@core/context/SettingsContext";
 import SlideToPay from "../components/shared/SlideToPay";
 import { Autocomplete, useLoadScript } from "@react-google-maps/api";
 import { getCachedGeocode, setCachedGeocode } from "@/core/utils/geocodeCache";
-import { getJSON, setJSON, STORAGE_KEYS } from "@core/utils/storage";
+import { getJSON, setJSON, remove as removeStorage, STORAGE_KEYS } from "@core/utils/storage";
 import { createSocketTokenReader } from "@core/utils/authStorage";
 import {
   getOrderSocket,
@@ -215,6 +215,12 @@ const CheckoutPage = () => {
     phone: "",
   });
   const [savedRecipient, setSavedRecipient] = useState(null);
+  // "Also place under their account" — populated once a phone lookup finds
+  // a real, verified Quickemart account. Null/false means the order stays
+  // in the placer's own account (today's default, unchanged behavior).
+  const [recipientAccount, setRecipientAccount] = useState(null);
+  const [linkToRecipientAccount, setLinkToRecipientAccount] = useState(false);
+  const [isLookingUpRecipient, setIsLookingUpRecipient] = useState(false);
   const [recommendedProducts, setRecommendedProducts] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [manualCode, setManualCode] = useState("");
@@ -359,6 +365,40 @@ const CheckoutPage = () => {
     setShowRecipientForm(false);
     setJSON(RECIPIENT_STORAGE_KEY, recipientData);
     showToast("Recipient details saved!", "success");
+  };
+
+  // Optional: check if the receiver's phone number belongs to a real,
+  // verified Quickemart account, so the order can be attributed to them.
+  // Purely additive — if this is never called (or finds nothing), checkout
+  // behaves exactly as it always has.
+  const handleLookupRecipientAccount = async () => {
+    if (!recipientData.phone || recipientData.phone.length !== 10) {
+      showToast("Enter a valid 10-digit phone number first", "error");
+      return;
+    }
+    setIsLookingUpRecipient(true);
+    setRecipientAccount(null);
+    setLinkToRecipientAccount(false);
+    try {
+      const res = await customerApi.lookupCustomerByPhone(recipientData.phone);
+      if (res.data?.success && res.data.result?.found) {
+        setRecipientAccount(res.data.result.customer);
+        setLinkToRecipientAccount(true);
+      } else {
+        showToast("No Quickemart account found for this number — we'll still deliver there.", "info");
+      }
+    } catch (error) {
+      console.error("Recipient lookup failed", error);
+    } finally {
+      setIsLookingUpRecipient(false);
+    }
+  };
+
+  const handleRemoveRecipient = () => {
+    setSavedRecipient(null);
+    setRecipientAccount(null);
+    setLinkToRecipientAccount(false);
+    removeStorage(RECIPIENT_STORAGE_KEY);
   };
 
   const handleMoveToWishlist = (item) => {
@@ -820,6 +860,9 @@ const CheckoutPage = () => {
           price: item.price,
           image: item.image,
         })),
+        ...(linkToRecipientAccount && recipientAccount?._id
+          ? { recipientCustomerId: recipientAccount._id }
+          : {}),
       };
 
       const response = await customerApi.createOrder(orderData);
@@ -1094,12 +1137,23 @@ const CheckoutPage = () => {
               showRecipientForm={showRecipientForm}
               onToggleRecipientForm={() => setShowRecipientForm((v) => !v)}
               recipientData={recipientData}
-              onRecipientDataChange={setRecipientData}
+              onRecipientDataChange={(next) => {
+                if (recipientAccount && next.phone !== recipientData.phone) {
+                  setRecipientAccount(null);
+                  setLinkToRecipientAccount(false);
+                }
+                setRecipientData(next);
+              }}
               onSaveRecipient={handleSaveRecipient}
-              onRemoveRecipient={() => setSavedRecipient(null)}
+              onRemoveRecipient={handleRemoveRecipient}
               displayName={displayName}
               displayPhone={displayPhone}
               displayAddress={displayAddress}
+              recipientAccount={recipientAccount}
+              linkToRecipientAccount={linkToRecipientAccount}
+              onToggleLinkToRecipientAccount={setLinkToRecipientAccount}
+              isLookingUpRecipient={isLookingUpRecipient}
+              onLookupRecipientAccount={handleLookupRecipientAccount}
             />
 
             {hasClosedStoreItems && (

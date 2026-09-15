@@ -5,18 +5,95 @@ import CatalogImportTask from "../models/catalogImportTask.js";
 import xlsx from "xlsx";
 import ExcelJS from "exceljs";
 import axios from "axios";
+import fs from "fs/promises";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
-import { downloadExternalImage } from "../utils/localStorage.js";
+import { sniffMimeType } from "../utils/localStorage.js";
+import { buildZipManifest, extractZipEntryBuffer } from "../utils/zipManifest.js";
+import { buildQuickemartFilename } from "../utils/quickemartFilename.js";
 import { slugify } from "../utils/slugify.js"; // assumes standard slugify exists
 import { invalidate, buildKey } from "../services/cacheService.js";
 
-// Downloads an image from an external URL (Excel row) and persists it to
-// local storage. Throws with a descriptive message on failure so callers
-// can attach a row-specific error instead of silently swallowing it.
-const uploadImageFromUrl = async (imageUrl) => {
-    if (!imageUrl) return null;
-    return downloadExternalImage(imageUrl, 'master-catalog');
-};
+// Admin Bulk Listing accepts only these formats for ZIP-sourced images,
+// validated by actual content (magic bytes via sniffMimeType), never by
+// filename extension alone.
+const ALLOWED_BULK_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const EXTERNAL_URL_PATTERN = /^https?:\/\//i;
+
+// Validates a ZIP-extracted image buffer by its actual bytes and, if valid,
+// stores it through the app's existing server-side storage path
+// (uploadToCloudinary -> saveFileBufferToDisk -> public/uploads/...).
+// Never touches external hosts, never touches an existing product's image.
+async function validateAndStoreZipImage(buffer, filename) {
+    const mimeType = sniffMimeType(buffer);
+    if (!mimeType) {
+        throw new Error(`Invalid image file "${filename}"`);
+    }
+    if (!ALLOWED_BULK_IMAGE_MIME_TYPES.includes(mimeType)) {
+        throw new Error(
+            `Unsupported image format for "${filename}". Allowed formats: JPG, JPEG, PNG, WEBP.`,
+        );
+    }
+    return uploadToCloudinary(buffer, "master-catalog", { mimeType });
+}
+
+// Resolves one Excel image-column value against the ZIP manifest. Returns
+// { filename: null, entry: null } for a blank/optional cell. Throws a
+// { col, message } row error for an external URL, a filename missing from
+// the ZIP, or an ambiguous (duplicate-basename) filename. Matching is exact
+// and case-sensitive — no fuzzy matching, no extension rewriting.
+function resolveRowImageFilename(rawValue, columnLabel, zipManifestMap) {
+    if (rawValue === null || rawValue === undefined) return { filename: null, entry: null };
+    const filename = String(rawValue).trim();
+    if (!filename) return { filename: null, entry: null };
+
+    if (EXTERNAL_URL_PATTERN.test(filename)) {
+        throw {
+            col: columnLabel,
+            message:
+                "External image URLs are not supported in bulk ZIP mode. Enter the image filename from the uploaded ZIP.",
+        };
+    }
+
+    const manifestEntry = zipManifestMap.get(filename);
+    if (!manifestEntry) {
+        throw { col: columnLabel, message: `Image "${filename}" not found in uploaded ZIP.` };
+    }
+    if (manifestEntry.ambiguous) {
+        throw { col: columnLabel, message: `Duplicate image filename in ZIP: ${filename}` };
+    }
+
+    return { filename, entry: manifestEntry.entry };
+}
+
+// Reads the first present key from a row across several accepted header
+// name variants (the Excel template's canonical header, plus a few aliases
+// some admins have historically used for the optional image columns).
+function getRowVal(row, keys) {
+    for (const key of keys) {
+        if (row[key] !== undefined) return row[key];
+    }
+    return null;
+}
+
+// Counts non-blank image-column references across already-parsed rows, for
+// the task's imagesTotal progress figure. Cheap/synchronous — no I/O.
+function countImageReferences(rows) {
+    let count = 0;
+    for (const { row } of rows) {
+        const values = [
+            row["Primary Image URL"],
+            getRowVal(row, ["Front Image URL", "Front Image", "frontImage", "FrontImageUrl"]),
+            getRowVal(row, ["Back Image URL", "Back Image", "backImage", "BackImageUrl"]),
+            getRowVal(row, ["Details Image URL", "Details Image", "detailsImage", "DetailsImageUrl"]),
+            getRowVal(row, ["Right Side Image URL", "Right Side Image", "rightSideImage", "RightSideImageUrl"]),
+            getRowVal(row, ["Left Side Image URL", "Left Side Image", "leftSideImage", "LeftSideImageUrl"]),
+        ];
+        for (const v of values) {
+            if (v !== null && v !== undefined && String(v).trim() !== "") count += 1;
+        }
+    }
+    return count;
+}
 
 const generateUniqueCategorySlug = async (baseName) => {
     let baseSlug = slugify(baseName);
@@ -607,25 +684,29 @@ export const getImportTemplate = async (req, res) => {
             };
         });
 
-        // Add a sample row to guide the user
+        // Add a sample row to guide the user. Image columns now show the
+        // suggested quickemart-<hash>-<purpose>.<extension> filename
+        // convention instead of an external URL — the ZIP bulk-import flow
+        // matches these exactly against files inside the uploaded ZIP.
+        const sampleProductName = "Gold Milk 500ml";
         const sampleRow = {
             headerCategory: "Grocery & Staples",
             mainCategory: "Dairy & Eggs",
             subCategory: "Milk",
             brand: "Amul",
-            productName: "Gold Milk 500ml",
+            productName: sampleProductName,
             variantName: "500ml",
             unit: "ml",
             packSize: "500",
             description: "Fresh Pasteurised Milk",
             specifications: "Fat: 4.5% | SNF: 8.5%",
             searchTags: "milk, amul, dairy, fresh milk",
-            primaryImage: "https://example.com/amul-milk.jpg",
-            frontImage: "https://example.com/amul-milk-front.jpg",
-            backImage: "https://example.com/amul-milk-back.jpg",
-            detailsImage: "https://example.com/amul-milk-details.jpg",
-            rightSideImage: "https://example.com/amul-milk-right.jpg",
-            leftSideImage: "https://example.com/amul-milk-left.jpg",
+            primaryImage: buildQuickemartFilename({ rowNum: 2, productName: sampleProductName, purpose: "primary", extension: "webp" }),
+            frontImage: buildQuickemartFilename({ rowNum: 2, productName: sampleProductName, purpose: "front", extension: "jpg" }),
+            backImage: buildQuickemartFilename({ rowNum: 2, productName: sampleProductName, purpose: "back", extension: "png" }),
+            detailsImage: buildQuickemartFilename({ rowNum: 2, productName: sampleProductName, purpose: "details", extension: "webp" }),
+            rightSideImage: buildQuickemartFilename({ rowNum: 2, productName: sampleProductName, purpose: "right", extension: "webp" }),
+            leftSideImage: buildQuickemartFilename({ rowNum: 2, productName: sampleProductName, purpose: "left", extension: "webp" }),
             gstTax: 5,
             status: "Active"
         };
@@ -727,15 +808,34 @@ const DB_INSERT_BATCH_SIZE = 50;
 
 export const bulkImportMasterProducts = async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: "Excel file is required" });
+        const excelFile = req.files?.excelFile?.[0];
+        const imagesZipFile = req.files?.imagesZip?.[0];
+
+        // Both files are mandatory — no task is created and no processing of
+        // any kind starts unless both are present.
+        if (!excelFile || !imagesZipFile) {
+            // Best-effort cleanup of whichever temp file DID get written by
+            // multer before validation failed.
+            await Promise.allSettled([
+                excelFile ? fs.unlink(excelFile.path) : Promise.resolve(),
+                imagesZipFile ? fs.unlink(imagesZipFile.path) : Promise.resolve(),
+            ]);
+            return res.status(400).json({
+                success: false,
+                message: "Both the Excel file and the Images ZIP are required for Bulk Listing import.",
+            });
         }
 
-        const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+        const excelPath = excelFile.path;
+        const zipPath = imagesZipFile.path;
+
+        const excelBuffer = await fs.readFile(excelPath);
+        const workbook = xlsx.read(excelBuffer, { type: "buffer" });
         const sheetName = workbook.SheetNames[0];
         const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
         if (!data || data.length === 0) {
+            await Promise.allSettled([fs.unlink(excelPath), fs.unlink(zipPath)]);
             return res.status(400).json({ success: false, message: "Excel file is empty" });
         }
 
@@ -752,9 +852,10 @@ export const bulkImportMasterProducts = async (req, res) => {
 
         // Create background import task
         const task = new CatalogImportTask({
-            excelBuffer: req.file.buffer,
+            excelBuffer,
             status: "PENDING",
-            total: validRows.length
+            total: validRows.length,
+            imagesTotal: countImageReferences(validRows),
         });
         await task.save();
 
@@ -765,15 +866,34 @@ export const bulkImportMasterProducts = async (req, res) => {
             taskId: task._id
         });
 
-        // Background processing execution
+        // Background processing execution. Temp files (excelPath, zipPath) and
+        // the ZIP file handle are only ever released in the `finally` below —
+        // never on the request/response path — since this whole block is what
+        // actually reads them.
         setImmediate(async () => {
+            let zipfile = null;
             try {
                 task.status = "PROCESSING";
                 await task.save();
 
+                let manifestResult;
+                try {
+                    manifestResult = await buildZipManifest(zipPath);
+                } catch (zipErr) {
+                    task.status = "FAILED";
+                    task.errors.push({ row: 0, col: "Images ZIP", message: zipErr.message });
+                    await task.save();
+                    return;
+                }
+                zipfile = manifestResult.zipfile;
+                const zipManifestMap = manifestResult.manifest;
+
                 // ---- PHASE 1: sequential column validation + category resolution ----
                 // Run strictly sequentially (no concurrency) so that two rows introducing
                 // the same brand-new category never race each other into creating duplicates.
+                // Image-filename resolution against the ZIP manifest also happens here —
+                // pure in-memory lookups, so bad references fail the row before any
+                // category/product work happens for it.
                 const categoryCache = new Map(); // lowercased category name -> Category doc
                 const resolveCategory = async (name, type, parentId, slugSuffix) => {
                     const key = name.toLowerCase();
@@ -816,7 +936,17 @@ export const bulkImportMasterProducts = async (req, res) => {
                             subCat = await resolveCategory(subName, 'subcategory', mainCat._id, '-sub');
                         }
 
-                        preparedRows.push({ rowNum, row, headerCat, mainCat, subCat });
+                        const primaryImageRef = resolveRowImageFilename(row['Primary Image URL'], 'Primary Image URL', zipManifestMap);
+                        const frontImageRef = resolveRowImageFilename(getRowVal(row, ['Front Image URL', 'Front Image', 'frontImage', 'FrontImageUrl']), 'Front Image URL', zipManifestMap);
+                        const backImageRef = resolveRowImageFilename(getRowVal(row, ['Back Image URL', 'Back Image', 'backImage', 'BackImageUrl']), 'Back Image URL', zipManifestMap);
+                        const detailsImageRef = resolveRowImageFilename(getRowVal(row, ['Details Image URL', 'Details Image', 'detailsImage', 'DetailsImageUrl']), 'Details Image URL', zipManifestMap);
+                        const rightImageRef = resolveRowImageFilename(getRowVal(row, ['Right Side Image URL', 'Right Side Image', 'rightSideImage', 'RightSideImageUrl']), 'Right Side Image URL', zipManifestMap);
+                        const leftImageRef = resolveRowImageFilename(getRowVal(row, ['Left Side Image URL', 'Left Side Image', 'leftSideImage', 'LeftSideImageUrl']), 'Left Side Image URL', zipManifestMap);
+
+                        preparedRows.push({
+                            rowNum, row, headerCat, mainCat, subCat,
+                            primaryImageRef, frontImageRef, backImageRef, detailsImageRef, rightImageRef, leftImageRef,
+                        });
                     } catch (err) {
                         task.failed++;
                         task.processed++;
@@ -829,7 +959,7 @@ export const bulkImportMasterProducts = async (req, res) => {
                 }
                 await task.save();
 
-                // ---- PHASE 2: concurrency-limited image upload + batched DB inserts ----
+                // ---- PHASE 2: concurrency-limited image extraction/upload + batched DB inserts ----
                 const seenSlugs = new Set();
                 let pendingDocs = [];
                 let pendingMeta = [];
@@ -872,14 +1002,7 @@ export const bulkImportMasterProducts = async (req, res) => {
                     await task.save();
                 };
 
-                const getRowVal = (row, keys) => {
-                    for (const key of keys) {
-                        if (row[key] !== undefined) return row[key];
-                    }
-                    return null;
-                };
-
-                const processRow = async ({ rowNum, row, headerCat, mainCat, subCat }) => {
+                const processRow = async ({ rowNum, row, headerCat, mainCat, subCat, primaryImageRef, frontImageRef, backImageRef, detailsImageRef, rightImageRef, leftImageRef }) => {
                     try {
                         const slug = slugify(String(row['Product Name']).trim() + '-' + String(row['Brand']).trim());
 
@@ -901,35 +1024,34 @@ export const bulkImportMasterProducts = async (req, res) => {
 
                                 let mainImage = null;
                                 try {
-                                    mainImage = await uploadImageFromUrl(row['Primary Image URL']);
-                                    if (!mainImage) {
-                                        throw new Error('Unable to download image from provided URL');
-                                    }
+                                    const buffer = await extractZipEntryBuffer(zipfile, primaryImageRef.entry);
+                                    mainImage = await validateAndStoreZipImage(buffer, primaryImageRef.filename);
+                                    task.imagesProcessed++;
                                 } catch (imgErr) {
-                                    throw { col: 'Primary Image URL', message: imgErr.message || 'Unable to download image from provided URL' };
+                                    throw { col: 'Primary Image URL', message: imgErr.message || `Failed to process image "${primaryImageRef.filename}"` };
                                 }
 
                                 let galleryImages = [];
                                 let galleryLabels = [];
-                                const addImage = async (url, label) => {
-                                    if (url) {
+                                const addImage = async (ref, label) => {
+                                    if (ref && ref.entry) {
                                         try {
-                                            const uploaded = await uploadImageFromUrl(String(url).trim());
-                                            if (uploaded) {
-                                                galleryImages.push(uploaded);
-                                                galleryLabels.push(label);
-                                            }
+                                            const buffer = await extractZipEntryBuffer(zipfile, ref.entry);
+                                            const uploaded = await validateAndStoreZipImage(buffer, ref.filename);
+                                            galleryImages.push(uploaded);
+                                            galleryLabels.push(label);
+                                            task.imagesProcessed++;
                                         } catch (imgErr) {
-                                            console.error(`Failed to upload ${label} image:`, imgErr);
+                                            console.error(`Failed to process ${label} image "${ref.filename}":`, imgErr.message || imgErr);
                                         }
                                     }
                                 };
 
-                                await addImage(getRowVal(row, ['Front Image URL', 'Front Image', 'frontImage', 'FrontImageUrl']), 'Front');
-                                await addImage(getRowVal(row, ['Back Image URL', 'Back Image', 'backImage', 'BackImageUrl']), 'Back');
-                                await addImage(getRowVal(row, ['Details Image URL', 'Details Image', 'detailsImage', 'DetailsImageUrl']), 'Product details image');
-                                await addImage(getRowVal(row, ['Right Side Image URL', 'Right Side Image', 'rightSideImage', 'RightSideImageUrl']), 'Right side');
-                                await addImage(getRowVal(row, ['Left Side Image URL', 'Left Side Image', 'leftSideImage', 'LeftSideImageUrl']), 'Left side');
+                                await addImage(frontImageRef, 'Front');
+                                await addImage(backImageRef, 'Back');
+                                await addImage(detailsImageRef, 'Product details image');
+                                await addImage(rightImageRef, 'Right side');
+                                await addImage(leftImageRef, 'Left side');
 
                                 let specifications = [];
                                 if (row['Specifications']) {
@@ -1015,6 +1137,17 @@ export const bulkImportMasterProducts = async (req, res) => {
                     message: taskErr.message || String(taskErr)
                 });
                 await task.save();
+            } finally {
+                // Runs exactly once, however the task ends (completed, failed
+                // validation, or an unexpected throw) — this is the only place
+                // the ZIP handle and both temp files are released.
+                if (zipfile) {
+                    try { zipfile.close(); } catch (_) { /* already closed */ }
+                }
+                await Promise.allSettled([
+                    fs.unlink(excelPath).catch(() => {}),
+                    fs.unlink(zipPath).catch(() => {}),
+                ]);
             }
         });
     } catch (error) {
@@ -1030,6 +1163,67 @@ export const getCatalogImportStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: "Import task not found" });
         }
         res.status(200).json({ success: true, task });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Column definitions shared by the manifest generator below — mirrors the
+// exact header names + accepted aliases used during the real import.
+const BULK_IMAGE_COLUMNS = [
+    { label: 'Primary Image URL', keys: ['Primary Image URL'], purpose: 'primary' },
+    { label: 'Front Image URL', keys: ['Front Image URL', 'Front Image', 'frontImage', 'FrontImageUrl'], purpose: 'front' },
+    { label: 'Back Image URL', keys: ['Back Image URL', 'Back Image', 'backImage', 'BackImageUrl'], purpose: 'back' },
+    { label: 'Details Image URL', keys: ['Details Image URL', 'Details Image', 'detailsImage', 'DetailsImageUrl'], purpose: 'details' },
+    { label: 'Right Side Image URL', keys: ['Right Side Image URL', 'Right Side Image', 'rightSideImage', 'RightSideImageUrl'], purpose: 'right' },
+    { label: 'Left Side Image URL', keys: ['Left Side Image URL', 'Left Side Image', 'leftSideImage', 'LeftSideImageUrl'], purpose: 'left' },
+];
+
+// "Download Image Filename List" — reads an already-filled Excel and
+// returns a plain-text manifest of the exact filenames the ZIP must
+// contain. Never touches image content; never creates fake placeholder
+// image files. A cell that already has a real (non-URL) filename is
+// preserved exactly; blank or URL-looking cells get a deterministic
+// suggested quickemart-<hash>-<purpose> filename instead.
+export const getImageManifest = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: "Excel file is required" });
+        }
+
+        const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+        const sheetName = workbook.SheetNames[0];
+        const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+        const lines = [];
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            const rowNum = i + 2;
+            if (rowNum === 2) continue; // locked sample row
+
+            const productName = row['Product Name'] ? String(row['Product Name']).trim() : '';
+            const hasNoProductDetails = !productName && !row['Header Category'] && !row['Main Category'] && !row['Brand'];
+            if (hasNoProductDetails) continue;
+
+            const rowFilenames = BULK_IMAGE_COLUMNS.map((col) => {
+                const existing = getRowVal(row, col.keys);
+                const trimmedExisting = existing !== null && existing !== undefined ? String(existing).trim() : '';
+                if (trimmedExisting && !EXTERNAL_URL_PATTERN.test(trimmedExisting)) {
+                    return trimmedExisting; // admin's own value — preserved exactly, never overwritten
+                }
+                return buildQuickemartFilename({ rowNum, productName, purpose: col.purpose, extension: 'webp' });
+            });
+
+            if (productName) {
+                lines.push(`# Row ${rowNum}: ${productName}`);
+            }
+            lines.push(...rowFilenames);
+        }
+
+        const manifestText = `${lines.join('\n')}\n`;
+        res.setHeader('Content-Disposition', 'attachment; filename=image-filename-list.txt');
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.status(200).send(manifestText);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

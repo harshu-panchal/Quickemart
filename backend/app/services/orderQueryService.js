@@ -478,14 +478,56 @@ export async function getCustomerOrders(customerId, pagination) {
       const [orders, total] = await Promise.all([
         Order.find({ customer: customerId })
           .select(
-            "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion returnStatus timeSlot createdAt",
+            "orderId checkoutGroupId customer placedBy seller items address payment pricing status workflowStatus workflowVersion returnStatus timeSlot createdAt",
           )
           .sort({ createdAt: -1, _id: -1 })
           .skip(skip)
           .limit(limit)
           .populate("items.product", "name mainImage price salePrice")
+          .populate("placedBy", "name")
           .lean(),
         Order.countDocuments({ customer: customerId }),
+      ]);
+
+      return {
+        items: orders,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      };
+    },
+    getTTL("orders"),
+  );
+}
+
+/**
+ * Orders a customer placed as a gift for someone else — mirrors
+ * `getCustomerOrders` but queries by `placedBy` instead of `customer`.
+ */
+export async function getOrdersPlacedByUser(userId, pagination) {
+  const { page, limit, skip } = pagination;
+  const cacheKey = buildKey(
+    "orders",
+    "placedBy",
+    `${userId}:p${page}:l${limit}`,
+  );
+
+  return getOrSet(
+    cacheKey,
+    async () => {
+      const [orders, total] = await Promise.all([
+        Order.find({ placedBy: userId })
+          .select(
+            "orderId checkoutGroupId customer placedBy seller items address payment pricing status workflowStatus workflowVersion returnStatus timeSlot createdAt",
+          )
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate("items.product", "name mainImage price salePrice")
+          .populate("customer", "name")
+          .lean(),
+        Order.countDocuments({ placedBy: userId }),
       ]);
 
       return {
@@ -598,11 +640,18 @@ export async function getOrderWithAccess(orderId, userId, role) {
       : order.seller?.toString();
 
   const customerIdStr = refToIdString(order.customer);
+  const placedByIdStr = refToIdString(order.placedBy);
 
   const isOwnerCustomer =
     (roleNorm === "customer" || roleNorm === "user") &&
     order.customer &&
     customerIdStr === uid;
+  // Gift orders: the person who placed & paid for it can also view/track it,
+  // even though the order is owned by the recipient (`order.customer`).
+  const isGiftPlacer =
+    (roleNorm === "customer" || roleNorm === "user") &&
+    order.placedBy &&
+    placedByIdStr === uid;
   const isOwnerSeller = role === "seller" && sellerIdStr === uid;
   const primaryRiderId = refToIdString(order.deliveryBoy);
   const returnRiderId = refToIdString(order.returnDeliveryBoy);
@@ -623,6 +672,7 @@ export async function getOrderWithAccess(orderId, userId, role) {
 
   if (
     !isOwnerCustomer &&
+    !isGiftPlacer &&
     !isOwnerSeller &&
     !isAssignedDeliveryBoy &&
     !isBroadcastedOrder &&

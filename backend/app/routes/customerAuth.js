@@ -6,12 +6,14 @@ import {
     getCustomerProfile,
     updateCustomerProfile,
     getCustomerTransactions,
+    lookupCustomerByPhone,
 } from "../controller/customerAuthController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import {
     authRouteRateLimiter,
     createContentLengthGuard,
     otpRouteRateLimiter,
+    customerLookupRateLimiter,
 } from "../middleware/securityMiddlewares.js";
 
 import { fetchServicedCities } from "../controller/servicedCitiesController.js";
@@ -35,5 +37,8 @@ router.put("/profile", verifyToken, updateCustomerProfile);
 
 // Wallet
 router.get("/transactions", verifyToken, getCustomerTransactions);
+
+// Order-for-someone-else recipient lookup
+router.get("/lookup-by-phone", verifyToken, customerLookupRateLimiter, lookupCustomerByPhone);
 
 export default router;
