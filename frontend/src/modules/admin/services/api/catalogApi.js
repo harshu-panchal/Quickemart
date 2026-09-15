@@ -33,6 +33,11 @@ export const adminCatalogApi = {
         }),
     getImportStatus: (taskId) =>
         axiosInstance.get(`/admin/catalog/import/status/${taskId}`),
+    getImageManifest: (formData) =>
+        axiosInstance.post('/admin/catalog/import/image-manifest', formData, {
+            responseType: 'blob',
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
     downloadImportTemplate: () => 
         axiosInstance.get('/admin/catalog/template', { responseType: 'blob' }),
     getMasterProducts: (params) =>

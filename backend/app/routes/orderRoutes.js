@@ -2,6 +2,7 @@ import express from "express";
 import {
   placeOrder,
   getMyOrders,
+  getSentOrders,
   getOrderDetails,
   cancelOrder,
   updateOrderStatus,
@@ -96,6 +97,7 @@ router.post(
   placeOrder,
 );
 router.get("/my-orders", verifyToken, getMyOrders);
+router.get("/sent", verifyToken, getSentOrders);
 router.get("/details/:orderId", verifyToken, getOrderDetails);
 router.put("/cancel/:orderId", verifyToken, cancelOrder);
 router.post("/:orderId/returns", verifyToken, requestReturn);

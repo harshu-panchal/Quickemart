@@ -35,6 +35,7 @@ import {
   fetchAvailableOrdersForDelivery,
   fetchSellerOrdersPage,
   getCustomerOrders,
+  getOrdersPlacedByUser,
   getOrderWithAccess,
   getSellerReturns as getSellerReturnsFromService,
 } from "../services/orderQueryService.js";
@@ -151,7 +152,7 @@ export const placeOrder = async (req, res) => {
       return handleResponse(res, 401, "Unauthorized");
     }
 
-    const { address, payment, timeSlot, items, paymentMode: paymentModeRaw } =
+    const { address, payment, timeSlot, items, paymentMode: paymentModeRaw, recipientCustomerId } =
       req.body || {};
 
     const payload = validateWithJoi(createFinanceOrderSchema, {
@@ -164,6 +165,7 @@ export const placeOrder = async (req, res) => {
         "COD",
       timeSlot: timeSlot || "now",
       tipAmount: Number(req.body?.tipAmount || 0),
+      recipientCustomerId: recipientCustomerId || null,
     });
 
     const idempotencyKey = String(req.headers?.["idempotency-key"] || "").trim() || null;
@@ -223,6 +225,22 @@ export const getMyOrders = async (req, res) => {
     });
     const result = await getCustomerOrders(req.user.id, pagination);
     return handleResponse(res, 200, "Orders fetched successfully", result);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+/* ===============================
+   GET ORDERS PLACED AS A GIFT FOR SOMEONE ELSE
+================================ */
+export const getSentOrders = async (req, res) => {
+  try {
+    const pagination = getPagination(req, {
+      defaultLimit: 20,
+      maxLimit: 100,
+    });
+    const result = await getOrdersPlacedByUser(req.user.id, pagination);
+    return handleResponse(res, 200, "Sent orders fetched successfully", result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

@@ -74,11 +74,34 @@ function buildSellerInventoryLink(productId) {
 function eventDefinition(eventType) {
   switch (eventType) {
     case NOTIFICATION_EVENTS.ORDER_PLACED:
+      // Gift orders (placedByUserId set and different from the owner) notify
+      // both parties with distinct copy. Normal self-placed orders are
+      // unaffected: the second definition resolves to zero recipients.
       return {
-        role: NOTIFICATION_ROLES.CUSTOMER,
-        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Order Placed",
-        body: () => "Your order has been placed successfully.",
+        multi: true,
+        definitions: [
+          {
+            role: NOTIFICATION_ROLES.CUSTOMER,
+            recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+            title: () => "Order Placed",
+            body: (payload) =>
+              payload.placedByUserId &&
+              String(payload.placedByUserId) !== String(payload.userId || payload.customerId)
+                ? `${payload.placedByName || "Someone"} placed an order for you!`
+                : "Your order has been placed successfully.",
+          },
+          {
+            role: NOTIFICATION_ROLES.CUSTOMER,
+            recipientIds: (payload) => {
+              const placedById = payload.placedByUserId;
+              const ownerId = payload.userId || payload.customerId;
+              if (!placedById || String(placedById) === String(ownerId)) return [];
+              return normalizeIdList(placedById);
+            },
+            title: () => "Order Placed",
+            body: (payload) => `Your order for ${payload.recipientName || "them"} was placed successfully.`,
+          },
+        ],
       };
     case NOTIFICATION_EVENTS.PAYMENT_SUCCESS:
       return {

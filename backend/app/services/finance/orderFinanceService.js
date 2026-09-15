@@ -802,23 +802,28 @@ export async function reverseOrderFinanceOnCancellation(
     }
 
     // NEW: Refund Wallet Amount Used
+    // Gift orders: the wallet was debited from whoever placed/paid for the
+    // order (`placedBy`), not the recipient (`customer`) — refund the same
+    // party. Normal orders have `placedBy` null, so this is identical to
+    // refunding `order.customer` as before.
+    const walletRefundOwnerId = order.placedBy || order.customer;
     const walletUsed = roundCurrency(order.pricing?.walletAmount || order.paymentBreakdown?.walletAmount || 0);
     if (walletUsed > 0) {
       await creditWallet({
         ownerType: OWNER_TYPE.CUSTOMER,
-        ownerId: order.customer,
+        ownerId: walletRefundOwnerId,
         amount: walletUsed,
         bucket: "available",
         session,
       });
 
-      const customerWallet = await getOrCreateWallet(OWNER_TYPE.CUSTOMER, order.customer, { session });
+      const customerWallet = await getOrCreateWallet(OWNER_TYPE.CUSTOMER, walletRefundOwnerId, { session });
       await createLedgerEntry(
         {
           orderId: order._id,
           walletId: customerWallet._id,
           actorType: OWNER_TYPE.CUSTOMER,
-          actorId: order.customer,
+          actorId: walletRefundOwnerId,
           type: LEDGER_TRANSACTION_TYPE.WALLET_REFUND,
           direction: LEDGER_DIRECTION.CREDIT,
           amount: walletUsed,
