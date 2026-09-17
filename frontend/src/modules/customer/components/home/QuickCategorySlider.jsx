@@ -117,9 +117,9 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
               <div
                 key={`${cat.id || cat._id}-${idx}`}
                 onClick={() => onCategoryClick(cat.id || cat._id)}
-                className="flex flex-col items-center gap-0.5 min-w-[88px] md:min-w-[120px] lg:min-w-[136px] cursor-pointer group/item transition-transform active:scale-95 flex-shrink-0">
+                className="flex flex-col items-center gap-0.5 min-w-[114px] md:min-w-[150px] lg:min-w-[168px] cursor-pointer group/item transition-transform active:scale-95 flex-shrink-0">
                 <div
-                  className="relative w-[88px] h-[100px] md:w-[120px] md:h-[134px] lg:w-[136px] lg:h-[148px] rounded-[20px] md:rounded-[24px] shadow-[0_8px_18px_rgba(15,23,42,0.10)] border flex items-start justify-center p-1.5 md:p-2 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_16px_30px_rgba(15,23,42,0.14)] overflow-hidden smooth-transform"
+                  className="relative w-[114px] h-[128px] md:w-[150px] md:h-[168px] lg:w-[168px] lg:h-[186px] rounded-[24px] md:rounded-[28px] shadow-[0_12px_26px_rgba(15,23,42,0.14)] border flex items-start justify-center p-1.5 md:p-2 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_20px_38px_rgba(15,23,42,0.18)] overflow-hidden smooth-transform"
                   style={{
                     backgroundImage: `linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.6) 24%, rgba(255,255,255,0.15) 100%), linear-gradient(135deg, ${palette.bgFrom}, ${palette.bgVia}, ${palette.bgTo})`,
                     borderColor: palette.frameColor,
@@ -129,13 +129,13 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
                     style={{ backgroundColor: palette.glowColor }}
                   />
                   <img
-                    src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_250")}
+                    src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_350")}
                     alt={cat.name}
                     loading="lazy"
-                    className="absolute left-1/2 top-1 md:top-1.5 z-10 h-[74px] w-[74px] md:h-[94px] md:w-[94px] lg:h-[104px] lg:w-[104px] -translate-x-1/2 object-contain drop-shadow-[0_5px_12px_rgba(0,0,0,0.10)] mix-blend-multiply group-hover/item:scale-110 transition-transform duration-500"
+                    className="absolute left-1/2 top-1 md:top-1 z-10 h-[102px] w-[102px] md:h-[128px] md:w-[128px] lg:h-[142px] lg:w-[142px] -translate-x-1/2 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.14)] mix-blend-multiply group-hover/item:scale-110 transition-transform duration-500"
                   />
-                  <div className="absolute inset-x-1.5 md:inset-x-2 bottom-1.5 z-20 text-center">
-                    <span className="block text-[10px] md:text-[11.5px] lg:text-[13px] font-extrabold text-[#1f2b20] leading-tight whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-[0_1px_0_rgba(255,255,255,0.75)] group-hover/item:text-primary transition-colors">
+                  <div className="absolute inset-x-1.5 md:inset-x-2 bottom-2 md:bottom-2.5 z-20 text-center">
+                    <span className="block text-[12px] md:text-[14px] lg:text-[15px] font-black text-[#1f2b20] leading-tight whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-[0_1px_0_rgba(255,255,255,0.85)] group-hover/item:text-primary transition-colors">
                       {cat.name}
                     </span>
                   </div>
