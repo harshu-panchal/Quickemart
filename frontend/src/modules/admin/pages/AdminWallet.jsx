@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import PageHeader from '@shared/components/ui/PageHeader';
@@ -321,7 +321,7 @@ const AdminWallet = () => {
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Money Requests");
 
                 const dateStr = new Date().toISOString().split("T")[0];
-                XLSX.writeFile(workbook, `Money_Requests_Report_${dateStr}.xlsx`);
+                await exportProtectedWorkbook(workbook, `Money_Requests_Report_${dateStr}.xlsx`);
 
                 toast.success(`Exported ${excelRows.length} money requests to Excel successfully!`);
                 setIsExportModalOpen(false);
@@ -374,7 +374,7 @@ const AdminWallet = () => {
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Wallet Transactions");
 
                 const dateStr = new Date().toISOString().split("T")[0];
-                XLSX.writeFile(workbook, `Wallet_Transactions_Report_${dateStr}.xlsx`);
+                await exportProtectedWorkbook(workbook, `Wallet_Transactions_Report_${dateStr}.xlsx`);
 
                 toast.success(`Exported ${excelRows.length} wallet transactions to Excel successfully!`);
                 setIsExportModalOpen(false);

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import PageHeader from '@shared/components/ui/PageHeader';
@@ -210,7 +210,7 @@ const CustomerManagement = () => {
 
                 const dateStr = new Date().toISOString().split('T')[0];
                 const fileName = `Customer_Database_Report_${dateStr}.xlsx`;
-                XLSX.writeFile(workbook, fileName);
+                await exportProtectedWorkbook(workbook, fileName);
 
                 toast.dismiss(toastId);
                 toast.success(`Exported ${excelRows.length} customers to Excel successfully!`);

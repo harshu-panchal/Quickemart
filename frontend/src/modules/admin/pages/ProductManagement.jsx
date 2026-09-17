@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import ExportDateModal from '@shared/components/ui/ExportDateModal';
 import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import {
     HiOutlinePlus,
     HiOutlineCube,
@@ -300,7 +300,7 @@ const ProductManagement = () => {
             protectWorksheetHeaders(worksheet);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-            XLSX.writeFile(workbook, fileName);
+            await exportProtectedWorkbook(workbook, fileName);
 
             toast.dismiss(toastId);
             toast.success(`Exported ${excelRows.length} products to Excel successfully!`);

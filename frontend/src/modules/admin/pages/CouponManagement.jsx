@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
@@ -262,7 +262,7 @@ const CouponManagement = () => {
             XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Campaigns");
 
             const dateStr = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(workbook, `Marketing_Campaigns_Report_${dateStr}.xlsx`);
+            await exportProtectedWorkbook(workbook, `Marketing_Campaigns_Report_${dateStr}.xlsx`);
             showToast(`Exported ${excelRows.length} marketing campaigns to Excel successfully!`, 'success');
             setIsExportModalOpen(false);
         } catch (error) {

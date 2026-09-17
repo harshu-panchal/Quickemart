@@ -1,7 +1,7 @@
 // Comprehensive Order Management System
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
@@ -330,7 +330,7 @@ const OrdersList = () => {
 
                 const dateStr = new Date().toISOString().split('T')[0];
                 const fileName = `Master_Orders_Report_${preset}_${dateStr}.xlsx`;
-                XLSX.writeFile(workbook, fileName);
+                await exportProtectedWorkbook(workbook, fileName);
 
                 showToast(`Exported ${excelRows.length} order items (${preset}) to Excel successfully!`, "success");
                 setIsExportModalOpen(false);

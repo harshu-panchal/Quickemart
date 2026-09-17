@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Pagination from '@shared/components/ui/Pagination';
@@ -165,7 +165,7 @@ const SupportTickets = () => {
             XLSX.utils.book_append_sheet(workbook, worksheet, "Help Tickets");
 
             const dateStr = new Date().toISOString().split("T")[0];
-            XLSX.writeFile(workbook, `Customer_Support_Tickets_${dateStr}.xlsx`);
+            await exportProtectedWorkbook(workbook, `Customer_Support_Tickets_${dateStr}.xlsx`);
 
             showToast(`Exported ${excelRows.length} tickets to Excel successfully!`, "success");
             setIsExportModalOpen(false);

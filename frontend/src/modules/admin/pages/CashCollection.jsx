@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { protectWorksheetHeaders } from '@shared/utils/excelExportUtils';
+import { protectWorksheetHeaders, exportProtectedWorkbook } from '@shared/utils/excelExportUtils';
 import Pagination from '@shared/components/ui/Pagination';
 import ExportDateModal from '@shared/components/ui/ExportDateModal';
 import { filterRecordsByDateRange } from '@shared/utils/dateFilterUtils';
@@ -254,7 +254,7 @@ const CashCollection = () => {
 
             const dateStr = new Date().toISOString().split('T')[0];
             const fileName = `Cash_Collection_Report_${dateStr}.xlsx`;
-            XLSX.writeFile(workbook, fileName);
+            await exportProtectedWorkbook(workbook, fileName);
 
             toast.dismiss(toastId);
             toast.success(`Exported ${excelRows.length} cash collection records to Excel successfully!`);

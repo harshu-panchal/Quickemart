@@ -37,11 +37,63 @@ const ProductCard = React.memo(
 
     const { openProduct } = useProductDetail();
     const [showHeartPopup, setShowHeartPopup] = React.useState(false);
-    
+
     const location = useLocation();
     const isWishlistPage = location.pathname === '/wishlist';
 
     const imageRef = React.useRef(null);
+
+    const allProductImages = React.useMemo(() => {
+      if (!product) return [];
+      const list = [];
+      const primary = product.image || product.mainImage;
+      if (primary) list.push(primary);
+
+      if (Array.isArray(product.galleryImages)) {
+        product.galleryImages.forEach((img) => {
+          if (img && typeof img === "string") list.push(img);
+          else if (img && typeof img === "object" && img?.url) list.push(img.url);
+        });
+      }
+      if (Array.isArray(product.images)) {
+        product.images.forEach((img) => {
+          if (img && typeof img === "string") list.push(img);
+          else if (img && typeof img === "object" && img?.url) list.push(img.url);
+        });
+      }
+      if (Array.isArray(product.gallery)) {
+        product.gallery.forEach((img) => {
+          if (img && typeof img === "string") list.push(img);
+          else if (img && typeof img === "object" && img?.url) list.push(img.url);
+        });
+      }
+      if (Array.isArray(product.variants)) {
+        product.variants.forEach((v) => {
+          if (v?.image && typeof v.image === "string") list.push(v.image);
+          if (Array.isArray(v?.images)) {
+            v.images.forEach((img) => {
+              if (img && typeof img === "string") list.push(img);
+            });
+          }
+        });
+      }
+
+      const cleanList = list.filter(
+        (img) => typeof img === "string" && img.trim().length > 0
+      );
+      const uniqueList = [...new Set(cleanList)];
+      return uniqueList.length > 0 ? uniqueList : primary ? [primary] : [];
+    }, [product]);
+
+    const [currentImgIndex, setCurrentImgIndex] = React.useState(0);
+
+    React.useEffect(() => {
+      if (allProductImages.length <= 1) return;
+      const timer = setInterval(() => {
+        setCurrentImgIndex((prev) => (prev + 1) % allProductImages.length);
+      }, 3000);
+      return () => clearInterval(timer);
+    }, [allProductImages.length]);
 
     const defaultVariant = React.useMemo(() => {
       const variants = Array.isArray(product?.variants) ? product.variants : [];
@@ -67,11 +119,11 @@ const ProductCard = React.memo(
 
       const picked = variants.find(matchesDisplayedPrice) || variants[0];
       const key = String(picked?.sku || picked?.name || "").trim();
-      
+
       const variantMrp = Number(picked?.price || 0);
       const variantSale = Number(picked?.salePrice || 0);
       const hasDiscount = variantSale > 0 && variantSale < variantMrp;
-      
+
       return {
         key,
         name: String(picked?.name || "").trim(),
@@ -179,7 +231,7 @@ const ProductCard = React.memo(
           variantSku: variantKey,
           variantName: defaultVariant?.name || "",
         });
-        
+
         if (isWishlistPage && isWishlisted) {
           toggleWishlistGlobal(product);
         }
@@ -290,17 +342,48 @@ const ProductCard = React.memo(
           </AnimatePresence>
 
           <div
+            ref={imageRef}
             className={cn(
-              "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square",
+              "relative block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square",
               compact || neutralBg ? "bg-white/70" : "bg-white/50"
             )}>
-            <img
-              ref={imageRef}
-              src={applyCloudinaryTransform(product.image)}
-              alt={product.name}
-              loading="lazy"
-              className="w-full h-full object-cover mix-blend-multiply"
-            />
+            {allProductImages.length > 1 ? (
+              <>
+                <AnimatePresence initial={false} mode="popLayout">
+                  <motion.img
+                    key={currentImgIndex}
+                    src={applyCloudinaryTransform(allProductImages[currentImgIndex])}
+                    alt={`${product.name} ${currentImgIndex + 1}`}
+                    loading="lazy"
+                    initial={{ x: "100%" }}
+                    animate={{ x: 0 }}
+                    exit={{ x: "-100%" }}
+                    transition={{ duration: 0.5, ease: [0.25, 1, 0.5, 1] }}
+                    className="w-full h-full object-cover mix-blend-multiply absolute inset-0"
+                  />
+                </AnimatePresence>
+                <div className="absolute bottom-1.5 left-0 right-0 z-10 flex justify-center items-center gap-1 pointer-events-none">
+                  {allProductImages.map((_, idx) => (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "h-1 rounded-full transition-all duration-300",
+                        idx === currentImgIndex
+                          ? "w-2.5 bg-primary/80"
+                          : "w-1 bg-black/20"
+                      )}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <img
+                src={applyCloudinaryTransform(allProductImages[0] || product.image)}
+                alt={product.name}
+                loading="lazy"
+                className="w-full h-full object-cover mix-blend-multiply"
+              />
+            )}
           </div>
         </div>
 
