@@ -117,9 +117,9 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
               <div
                 key={`${cat.id || cat._id}-${idx}`}
                 onClick={() => onCategoryClick(cat.id || cat._id)}
-                className="flex flex-col items-center gap-0.5 min-w-[74px] md:min-w-[104px] lg:min-w-[120px] cursor-pointer group/item transition-transform active:scale-95 flex-shrink-0">
+                className="flex flex-col items-center gap-0.5 min-w-[88px] md:min-w-[120px] lg:min-w-[136px] cursor-pointer group/item transition-transform active:scale-95 flex-shrink-0">
                 <div
-                  className="relative w-[74px] h-[84px] md:w-[104px] md:h-[116px] lg:w-[120px] lg:h-[132px] rounded-[18px] md:rounded-[22px] shadow-[0_8px_18px_rgba(15,23,42,0.10)] border flex items-start justify-center p-1.5 md:p-2 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_16px_30px_rgba(15,23,42,0.14)] overflow-hidden smooth-transform"
+                  className="relative w-[88px] h-[100px] md:w-[120px] md:h-[134px] lg:w-[136px] lg:h-[148px] rounded-[20px] md:rounded-[24px] shadow-[0_8px_18px_rgba(15,23,42,0.10)] border flex items-start justify-center p-1.5 md:p-2 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_16px_30px_rgba(15,23,42,0.14)] overflow-hidden smooth-transform"
                   style={{
                     backgroundImage: `linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.6) 24%, rgba(255,255,255,0.15) 100%), linear-gradient(135deg, ${palette.bgFrom}, ${palette.bgVia}, ${palette.bgTo})`,
                     borderColor: palette.frameColor,
@@ -129,13 +129,13 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
                     style={{ backgroundColor: palette.glowColor }}
                   />
                   <img
-                    src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_150")}
+                    src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_250")}
                     alt={cat.name}
                     loading="lazy"
-                    className="absolute left-1/2 top-2.5 md:top-3 z-10 h-[56px] w-[56px] md:h-[64px] md:w-[64px] -translate-x-1/2 object-contain drop-shadow-[0_5px_12px_rgba(0,0,0,0.10)] mix-blend-multiply group-hover/item:scale-110 transition-transform duration-500"
+                    className="absolute left-1/2 top-1 md:top-1.5 z-10 h-[74px] w-[74px] md:h-[94px] md:w-[94px] lg:h-[104px] lg:w-[104px] -translate-x-1/2 object-contain drop-shadow-[0_5px_12px_rgba(0,0,0,0.10)] mix-blend-multiply group-hover/item:scale-110 transition-transform duration-500"
                   />
                   <div className="absolute inset-x-1.5 md:inset-x-2 bottom-1.5 z-20 text-center">
-                    <span className="block text-[9px] md:text-[10px] lg:text-[11px] font-semibold text-[#1f2b20] leading-tight whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-[0_1px_0_rgba(255,255,255,0.65)] group-hover/item:text-primary transition-colors">
+                    <span className="block text-[10px] md:text-[11.5px] lg:text-[13px] font-extrabold text-[#1f2b20] leading-tight whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-[0_1px_0_rgba(255,255,255,0.75)] group-hover/item:text-primary transition-colors">
                       {cat.name}
                     </span>
                   </div>
