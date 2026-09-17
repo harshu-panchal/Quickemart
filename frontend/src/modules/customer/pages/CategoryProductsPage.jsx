@@ -200,7 +200,7 @@ const CategoryProductsPage = () => {
 
                         {/* Skeleton Content */}
                         <main className="flex-1 p-2 pb-24">
-                            <div className="grid grid-cols-2 gap-x-2 gap-y-3">
+                            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 gap-x-1.5 gap-y-2.5">
                                 {Array.from({ length: 6 }).map((_, i) => (
                                     <div key={i} className="rounded-2xl bg-gray-200 animate-pulse h-44 w-full" />
                                 ))}
@@ -279,7 +279,7 @@ const CategoryProductsPage = () => {
 
                         {/* Content */}
                         <main className="flex-1 p-2 pb-24 bg-white space-y-4 overflow-x-hidden">
-                            <div className="grid grid-cols-2 gap-x-2 gap-y-3">
+                            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 gap-x-1.5 gap-y-2.5">
                                 {filteredProducts.map((product) => (
                                     <ProductCard key={product.id} product={product} compact={true} />
                                 ))}

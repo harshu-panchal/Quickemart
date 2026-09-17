@@ -43,57 +43,7 @@ const ProductCard = React.memo(
 
     const imageRef = React.useRef(null);
 
-    const allProductImages = React.useMemo(() => {
-      if (!product) return [];
-      const list = [];
-      const primary = product.image || product.mainImage;
-      if (primary) list.push(primary);
 
-      if (Array.isArray(product.galleryImages)) {
-        product.galleryImages.forEach((img) => {
-          if (img && typeof img === "string") list.push(img);
-          else if (img && typeof img === "object" && img?.url) list.push(img.url);
-        });
-      }
-      if (Array.isArray(product.images)) {
-        product.images.forEach((img) => {
-          if (img && typeof img === "string") list.push(img);
-          else if (img && typeof img === "object" && img?.url) list.push(img.url);
-        });
-      }
-      if (Array.isArray(product.gallery)) {
-        product.gallery.forEach((img) => {
-          if (img && typeof img === "string") list.push(img);
-          else if (img && typeof img === "object" && img?.url) list.push(img.url);
-        });
-      }
-      if (Array.isArray(product.variants)) {
-        product.variants.forEach((v) => {
-          if (v?.image && typeof v.image === "string") list.push(v.image);
-          if (Array.isArray(v?.images)) {
-            v.images.forEach((img) => {
-              if (img && typeof img === "string") list.push(img);
-            });
-          }
-        });
-      }
-
-      const cleanList = list.filter(
-        (img) => typeof img === "string" && img.trim().length > 0
-      );
-      const uniqueList = [...new Set(cleanList)];
-      return uniqueList.length > 0 ? uniqueList : primary ? [primary] : [];
-    }, [product]);
-
-    const [currentImgIndex, setCurrentImgIndex] = React.useState(0);
-
-    React.useEffect(() => {
-      if (allProductImages.length <= 1) return;
-      const timer = setInterval(() => {
-        setCurrentImgIndex((prev) => (prev + 1) % allProductImages.length);
-      }, 3000);
-      return () => clearInterval(timer);
-    }, [allProductImages.length]);
 
     const defaultVariant = React.useMemo(() => {
       const variants = Array.isArray(product?.variants) ? product.variants : [];
@@ -297,8 +247,8 @@ const ProductCard = React.memo(
                 className={cn(
                   "absolute z-10 bg-primary text-primary-foreground font-[900] rounded-md shadow-sm uppercase tracking-wider flex items-center justify-center",
                   compact
-                    ? "top-2 left-2 px-1.5 py-0.5 text-[7px]"
-                    : "top-2 left-2 px-1 py-0.5 text-[7px] sm:top-3 sm:left-3 sm:px-2 sm:py-1 sm:text-[9px]",
+                    ? "top-1.5 left-1.5 px-1 py-0.5 text-[6.5px]"
+                    : "top-1.5 left-1.5 px-1 py-0.5 text-[6.5px] sm:top-2 sm:left-2 sm:px-1.5 sm:py-0.5 sm:text-[8px] md:top-2.5 md:left-2.5 md:px-2 md:py-1 md:text-[9px]",
                 )}>
                 {badge ||
                   product.discount ||
@@ -311,14 +261,14 @@ const ProductCard = React.memo(
             className={cn(
               "absolute z-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center cursor-pointer hover:bg-white transition-all active:scale-90",
               compact
-                ? "top-2 right-2 h-7 w-7"
-                : "top-2 right-2 h-6.5 w-6.5 sm:top-3 sm:right-3 sm:h-8 sm:w-8",
+                ? "top-1.5 right-1.5 h-6 w-6"
+                : "top-1.5 right-1.5 h-6 w-6 sm:top-2 sm:right-2 sm:h-7 sm:w-7 md:h-8 md:w-8",
             )}>
             <motion.div
               whileTap={{ scale: 0.8 }}
               animate={isWishlisted ? { scale: [1, 1.2, 1] } : {}}>
               <Heart
-                size={compact ? 12 : 14}
+                size={compact ? 10 : 11}
                 className={cn(
                   isWishlisted
                     ? "text-red-500 fill-current"
@@ -336,54 +286,23 @@ const ProductCard = React.memo(
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.8, ease: "easeOut" }}
                 className="absolute top-3 right-3 z-50 pointer-events-none text-red-500">
-                <Heart size={24} fill="currentColor" />
+                <Heart size={20} fill="currentColor" />
               </motion.div>
             )}
           </AnimatePresence>
 
           <div
-            ref={imageRef}
             className={cn(
-              "relative block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square",
+              "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square",
               compact || neutralBg ? "bg-white/70" : "bg-white/50"
             )}>
-            {allProductImages.length > 1 ? (
-              <>
-                <AnimatePresence initial={false} mode="popLayout">
-                  <motion.img
-                    key={currentImgIndex}
-                    src={applyCloudinaryTransform(allProductImages[currentImgIndex])}
-                    alt={`${product.name} ${currentImgIndex + 1}`}
-                    loading="lazy"
-                    initial={{ x: "100%" }}
-                    animate={{ x: 0 }}
-                    exit={{ x: "-100%" }}
-                    transition={{ duration: 0.5, ease: [0.25, 1, 0.5, 1] }}
-                    className="w-full h-full object-cover mix-blend-multiply absolute inset-0"
-                  />
-                </AnimatePresence>
-                <div className="absolute bottom-1.5 left-0 right-0 z-10 flex justify-center items-center gap-1 pointer-events-none">
-                  {allProductImages.map((_, idx) => (
-                    <div
-                      key={idx}
-                      className={cn(
-                        "h-1 rounded-full transition-all duration-300",
-                        idx === currentImgIndex
-                          ? "w-2.5 bg-primary/80"
-                          : "w-1 bg-black/20"
-                      )}
-                    />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <img
-                src={applyCloudinaryTransform(allProductImages[0] || product.image)}
-                alt={product.name}
-                loading="lazy"
-                className="w-full h-full object-cover mix-blend-multiply"
-              />
-            )}
+            <img
+              ref={imageRef}
+              src={applyCloudinaryTransform(product.image)}
+              alt={product.name}
+              loading="lazy"
+              className="w-full h-full object-cover mix-blend-multiply"
+            />
           </div>
         </div>
 
@@ -392,54 +311,54 @@ const ProductCard = React.memo(
           className={cn(
             "flex flex-col flex-1",
             compact
-              ? "p-2 pt-1 gap-0"
-              : "bg-white/40 p-1.5 pt-2 sm:p-3 sm:pt-4 gap-0.5",
+              ? "p-1.5 pt-1 gap-0"
+              : "bg-white/40 p-1.5 pt-1.5 sm:p-2.5 sm:pt-3 gap-0.5",
           )}>
           <div className="flex items-center gap-1 mb-0.5 sm:gap-1.5 sm:mb-1">
             <div
               className={cn(
-                "border-2 border-primary rounded-full flex items-center justify-center",
-                compact ? "h-2.5 w-2.5" : "h-2.5 w-2.5 sm:h-3.5 sm:w-3.5",
+                "border-[1.5px] border-primary rounded-full flex items-center justify-center",
+                compact ? "h-2 w-2" : "h-2 w-2 sm:h-3 sm:w-3",
               )}>
               <div
                 className={cn(
                   "bg-primary rounded-full",
-                  compact ? "h-0.5 w-0.5" : "h-1 w-1",
+                  compact ? "h-0.5 w-0.5" : "h-0.5 w-0.5 sm:h-1 sm:w-1",
                 )}
               />
             </div>
             <div
               className={cn(
-                "bg-brand-50 text-brand-600 font-bold rounded px-1.5 py-0 tracking-wide",
-                compact ? "text-[8px]" : "text-[8px] sm:text-[9px]",
+                "bg-brand-50 text-brand-600 font-bold rounded px-1 py-0 tracking-wide truncate max-w-[90%]",
+                compact ? "text-[7.5px]" : "text-[7.5px] sm:text-[8.5px] md:text-[9px]",
               )}>
               {product.weight || "1 unit"}
             </div>
           </div>
 
-          <div className={cn(compact ? "h-8" : "h-8 sm:h-9")}>
+          <div className={cn(compact ? "h-7 sm:h-8" : "h-7 sm:h-8 md:h-9")}>
             <h4
               className={cn(
                 "font-[600] text-[#1A1A1A] leading-tight line-clamp-2",
-                compact ? "text-[10.5px]" : "text-[12px] sm:text-[13px]",
+                compact ? "text-[9.5px] sm:text-[10.5px]" : "text-[10px] sm:text-[11.5px] md:text-[13px]",
               )}>
               {product.name}
             </h4>
           </div>
 
           {/* Delivery Time & Unit info */}
-          <div className="flex items-center gap-1 text-gray-500 mt-0.5 mb-1 sm:gap-1.5 sm:mt-1 sm:mb-2">
-            <Clock size={compact ? 9 : 10} className="text-primary/80" />
+          <div className="flex items-center gap-0.5 text-gray-500 mt-0.5 mb-1 sm:gap-1 sm:mt-1 sm:mb-1.5">
+            <Clock size={compact ? 8 : 9} className="text-primary/80 flex-shrink-0" />
             <span
               className={cn(
-                "font-semibold",
-                compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
+                "font-semibold truncate",
+                compact ? "text-[7.5px]" : "text-[8px] sm:text-[9px] md:text-[10px]",
               )}>
               {product.deliveryTime || "10-30 mins"}
             </span>
           </div>
 
-          {/* Price Row / ADD Button Combination for compact */}
+          {/* Price Row / ADD Button Combination */}
           {(() => {
             const priceVal = Number(defaultVariant?.displayPrice || product.price || 0);
             const stockVal = Number(product.stock || 0);
@@ -451,12 +370,12 @@ const ProductCard = React.memo(
             const isItemOutOfStock = product.isOutOfStock || effectiveStock <= 0 || priceVal <= 0;
 
             return (
-              <div className="mt-auto flex items-center justify-between gap-1 min-h-[32px]">
-                <div className="flex flex-col">
+              <div className="mt-auto flex items-center justify-between gap-0.5 sm:gap-1 min-h-[28px] sm:min-h-[32px]">
+                <div className="flex flex-col min-w-0">
                   {isItemOutOfStock ? (
                     <span className={cn(
-                      "font-black text-rose-600 uppercase tracking-wide",
-                      compact ? "text-[10px]" : "text-[11px] sm:text-xs",
+                      "font-black text-rose-600 uppercase tracking-wide truncate",
+                      compact ? "text-[9px]" : "text-[9px] sm:text-[10px] md:text-xs",
                     )}>
                       OUT OF STOCK
                     </span>
@@ -464,16 +383,16 @@ const ProductCard = React.memo(
                     <>
                       <span
                         className={cn(
-                          "font-[1000] text-[#1A1A1A]",
-                          compact ? "text-[11px]" : "text-[13px] sm:text-sm",
+                          "font-[1000] text-[#1A1A1A] leading-tight truncate",
+                          compact ? "text-[10px] sm:text-[11px]" : "text-[10.5px] sm:text-[12px] md:text-sm",
                         )}>
                         ₹{defaultVariant?.displayPrice || product.price}
                       </span>
                       {defaultVariant?.displayOriginalPrice && (
                         <span
                           className={cn(
-                            "font-medium text-gray-400 line-through leading-none",
-                            compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
+                            "font-medium text-gray-400 line-through leading-none truncate",
+                            compact ? "text-[7.5px]" : "text-[7.5px] sm:text-[8.5px] md:text-[10px]",
                           )}>
                           ₹{defaultVariant.displayOriginalPrice}
                         </span>
@@ -484,29 +403,29 @@ const ProductCard = React.memo(
 
                 {/* ADD Button / Quantity Selector */}
                 {!isItemOutOfStock && (
-                  <div className="flex">
+                  <div className="flex flex-shrink-0">
                     {quantity > 0 ? (
                       <div
                         className={cn(
                           "flex items-center bg-white border-[1.5px] border-primary rounded-lg p-0.5 justify-between",
-                          compact ? "min-w-[60px]" : "min-w-[68px] sm:min-w-[90px] md:min-w-[100px]",
+                          compact ? "min-w-[50px]" : "min-w-[52px] sm:min-w-[65px] md:min-w-[90px]",
                         )}>
                         <button
                           onClick={handleDecrement}
-                          className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform sm:p-1 sm:px-1">
-                          <Minus size={compact ? 10 : 12} strokeWidth={3.5} />
+                          className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform">
+                          <Minus size={compact ? 9 : 10} strokeWidth={3.5} />
                         </button>
                         <span
                           className={cn(
                             "font-black text-primary",
-                            compact ? "text-[10px]" : "text-[11px] sm:text-[13px] md:text-sm",
+                            compact ? "text-[9px]" : "text-[9.5px] sm:text-[11px] md:text-sm",
                           )}>
                           {quantity}
                         </span>
                         <button
                           onClick={handleIncrement}
-                          className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform sm:p-1 sm:px-1">
-                          <Plus size={compact ? 10 : 12} strokeWidth={3.5} />
+                          className="p-0.5 px-0.5 text-primary active:scale-90 transition-transform">
+                          <Plus size={compact ? 9 : 10} strokeWidth={3.5} />
                         </button>
                       </div>
                     ) : (
@@ -515,8 +434,8 @@ const ProductCard = React.memo(
                         className={cn(
                           "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95",
                           compact
-                            ? "px-2.5 py-1 text-[10px]"
-                            : "px-3.5 py-1.5 text-[11px] sm:px-7 sm:py-2 sm:text-[13px] md:text-sm md:px-8 md:py-2.5",
+                            ? "px-2 py-0.5 text-[9px]"
+                            : "px-2 py-1 text-[9.5px] sm:px-4 sm:py-1.5 sm:text-[11px] md:px-6 md:py-2 md:text-sm",
                         )}>
                         ADD
                       </button>

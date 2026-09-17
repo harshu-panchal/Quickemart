@@ -22,11 +22,21 @@ const RootErrorBoundary = () => {
 
     // Intercept dynamic module loading/network connection errors
     if (
-        errorMessage.includes("Failed to fetch dynamically imported module") || 
+        errorMessage.includes("Failed to fetch dynamically imported module") ||
         errorMessage.includes("dynamically imported module")
     ) {
         errorMessage = "A network connection error occurred while loading this page. Please check your internet connection and try reloading the page.";
     }
+
+    // Determine the active app context from the current URL so "Back to Home"
+    // stays within that app instead of always going to the buyer/user home.
+    const getHomeRoute = () => {
+        const path = window.location.pathname;
+        if (path.startsWith('/seller')) return '/seller/auth';
+        if (path.startsWith('/admin')) return '/admin/auth';
+        if (path.startsWith('/delivery')) return '/delivery/auth';
+        return '/';
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-outfit">
@@ -48,7 +58,7 @@ const RootErrorBoundary = () => {
                     </button>
 
                     <button
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate(getHomeRoute())}
                         className="w-full bg-white border-2 border-gray-100 hover:border-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
                     >
                         <Home className="w-5 h-5" />

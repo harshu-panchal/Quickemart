@@ -123,17 +123,7 @@ const ProductDetailSheet = () => {
         ];
     }, [selectedProduct]);
 
-    // Auto-advance the product image carousel (right-to-left float) while the
-    // product detail view is open, looping back to the first image after the last.
-    // Re-arms on every activeImageIndex change so a manual swipe/thumbnail click
-    // resets the countdown instead of fighting the user's own navigation.
-    useEffect(() => {
-        if (!isOpen || allImages.length <= 1) return undefined;
-        const timer = setTimeout(() => {
-            setActiveImageIndex((prev) => (prev + 1) % allImages.length);
-        }, 3000);
-        return () => clearTimeout(timer);
-    }, [isOpen, activeImageIndex, allImages.length]);
+
 
     // Keep the mobile swipe-carousel's scroll position in sync whenever
     // activeImageIndex changes programmatically (auto-advance, thumbnail clicks).

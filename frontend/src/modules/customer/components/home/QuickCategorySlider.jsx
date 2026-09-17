@@ -1,5 +1,4 @@
-import React, { useRef } from "react";
-import { motion } from "framer-motion";
+import React, { useRef, useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { QUICK_CATEGORY_PALETTES } from "../../constants/homeConstants";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
@@ -7,13 +6,65 @@ import QuickCategoriesBg from "@/assets/Catagorysection_bg.png";
 
 const QuickCategorySlider = ({ categories, onCategoryClick }) => {
   const scrollRef = useRef(null);
+  const isInteractingRef = useRef(false);
+  const resumeTimeoutRef = useRef(null);
+  const animFrameRef = useRef(null);
 
   const scroll = (direction) => {
     if (scrollRef.current) {
-      const scrollAmount = direction === "left" ? -300 : 300;
+      const scrollAmount = direction === "left" ? -250 : 250;
       scrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };
+
+  const handleUserInteractionStart = () => {
+    isInteractingRef.current = true;
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+  };
+
+  const handleUserInteractionEnd = () => {
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    resumeTimeoutRef.current = setTimeout(() => {
+      isInteractingRef.current = false;
+    }, 2000);
+  };
+
+  // Duplicate items for infinite seamless scroll
+  const displayCategories = useMemo(() => {
+    if (!categories || categories.length === 0) return [];
+    if (categories.length < 8) {
+      return [...categories, ...categories, ...categories, ...categories];
+    }
+    return [...categories, ...categories];
+  }, [categories]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || displayCategories.length === 0) return;
+
+    // Slow and smooth auto-scroll speed (pixels per frame)
+    const speed = 0.5;
+
+    const animate = () => {
+      if (el && !isInteractingRef.current) {
+        el.scrollLeft += speed;
+
+        // Loop seamlessly when half of doubled content is scrolled
+        const halfWidth = el.scrollWidth / 2;
+        if (halfWidth > 0 && el.scrollLeft >= halfWidth) {
+          el.scrollLeft -= halfWidth;
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    };
+  }, [displayCategories]);
 
   if (!categories || categories.length === 0) return null;
 
@@ -37,7 +88,11 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
         {/* Left Scroll Button */}
         <div className="absolute left-4 lg:left-10 top-[58%] -translate-y-1/2 z-20 hidden md:flex">
           <button
-            onClick={() => scroll("left")}
+            onClick={() => {
+              handleUserInteractionStart();
+              scroll("left");
+              handleUserInteractionEnd();
+            }}
             className="h-10 w-10 bg-white/90 backdrop-blur-md shadow-xl rounded-full flex items-center justify-center border border-gray-100 cursor-pointer hover:bg-white text-primary transition-all active:scale-90">
             <ChevronLeft size={22} strokeWidth={3} />
           </button>
@@ -45,14 +100,24 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
 
         <div
           ref={scrollRef}
-          className="relative z-10 flex items-start gap-2 md:gap-3 lg:gap-4 overflow-x-auto no-scrollbar px-4 pb-2 pt-1 md:px-8 md:pb-4 snap-x scroll-smooth">
-          {categories.map((cat, idx) => {
+          onTouchStart={handleUserInteractionStart}
+          onTouchEnd={handleUserInteractionEnd}
+          onMouseDown={handleUserInteractionStart}
+          onMouseUp={handleUserInteractionEnd}
+          onWheel={() => {
+            handleUserInteractionStart();
+            handleUserInteractionEnd();
+          }}
+          onMouseEnter={handleUserInteractionStart}
+          onMouseLeave={handleUserInteractionEnd}
+          className="relative z-10 flex items-start gap-2 md:gap-3 lg:gap-4 overflow-x-auto no-scrollbar px-4 pb-2 pt-1 md:px-8 md:pb-4 select-none">
+          {displayCategories.map((cat, idx) => {
             const palette = QUICK_CATEGORY_PALETTES[idx % QUICK_CATEGORY_PALETTES.length];
             return (
               <div
-                key={cat.id}
-                onClick={() => onCategoryClick(cat.id)}
-                className="flex flex-col items-center gap-0.5 min-w-[74px] md:min-w-[104px] lg:min-w-[120px] cursor-pointer group/item snap-start transition-transform active:scale-95">
+                key={`${cat.id || cat._id}-${idx}`}
+                onClick={() => onCategoryClick(cat.id || cat._id)}
+                className="flex flex-col items-center gap-0.5 min-w-[74px] md:min-w-[104px] lg:min-w-[120px] cursor-pointer group/item transition-transform active:scale-95 flex-shrink-0">
                 <div
                   className="relative w-[74px] h-[84px] md:w-[104px] md:h-[116px] lg:w-[120px] lg:h-[132px] rounded-[18px] md:rounded-[22px] shadow-[0_8px_18px_rgba(15,23,42,0.10)] border flex items-start justify-center p-1.5 md:p-2 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_16px_30px_rgba(15,23,42,0.14)] overflow-hidden smooth-transform"
                   style={{
@@ -83,7 +148,11 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
         {/* Right Scroll Button */}
         <div className="absolute right-4 lg:right-10 top-[58%] -translate-y-1/2 z-20 hidden md:flex">
           <button
-            onClick={() => scroll("right")}
+            onClick={() => {
+              handleUserInteractionStart();
+              scroll("right");
+              handleUserInteractionEnd();
+            }}
             className="h-10 w-10 bg-white/90 backdrop-blur-md shadow-xl rounded-full flex items-center justify-center border border-gray-100 cursor-pointer hover:bg-white text-primary transition-all active:scale-90">
             <ChevronRight size={22} strokeWidth={3} />
           </button>

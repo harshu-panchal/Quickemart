@@ -33,7 +33,7 @@ const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
             )}
           </div>
 
-          <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-6 pb-4 md:pb-6">
+          <div className="relative z-10 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-6 pb-4 md:pb-6">
             {isLoading ? (
               Array.from({ length: 6 }).map((_, idx) => (
                 <div key={idx} className="animate-pulse">

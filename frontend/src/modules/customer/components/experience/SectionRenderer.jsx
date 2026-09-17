@@ -355,11 +355,7 @@ const SectionRenderer = ({ sections = [], productsById = {}, categoriesById = {}
                   "grid gap-1.5 sm:gap-2.5",
                   columns === 1
                     ? "grid-cols-1"
-                    : columns === 2
-                    ? "grid-cols-2"
-                    : columns === 3
-                    ? "grid-cols-3"
-                    : "grid-cols-2"
+                    : "grid-cols-3"
                 )}
               >
                 {items.map((product) => (
