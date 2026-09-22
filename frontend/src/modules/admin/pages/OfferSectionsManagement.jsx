@@ -30,7 +30,7 @@ const OfferSectionsManagement = () => {
   const [formData, setFormData] = useState({
     title: "",
     backgroundColor: "#FCD34D",
-    sideImageKey: "hair-care",
+    sideImageKey: "grocery",
     categoryIds: [],
     sellerIds: [],
     productIds: [],
@@ -131,7 +131,7 @@ const OfferSectionsManagement = () => {
     setFormData({
       title: "",
       backgroundColor: "#FCD34D",
-      sideImageKey: "hair-care",
+      sideImageKey: "grocery",
       categoryIds: [],
       sellerIds: [],
       productIds: [],
@@ -158,7 +158,7 @@ const OfferSectionsManagement = () => {
     setFormData({
       title: section.title || "",
       backgroundColor: section.backgroundColor || "#FCD34D",
-      sideImageKey: section.sideImageKey || "hair-care",
+      sideImageKey: section.sideImageKey || "grocery",
       categoryIds: catIds,
       sellerIds: selIds,
       productIds: section.productIds || [],

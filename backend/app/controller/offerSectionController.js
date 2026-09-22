@@ -210,7 +210,7 @@ export const createOfferSection = async (req, res) => {
     const section = await OfferSection.create({
       title: title.trim(),
       backgroundColor: backgroundColor || "#FCD34D",
-      sideImageKey: sideImageKey || "hair-care",
+      sideImageKey: sideImageKey || "grocery",
       categoryIds: catIds,
       sellerIds: Array.isArray(sellerIds) ? sellerIds.filter(Boolean) : [],
       productIds: Array.isArray(productIds) ? productIds : [],

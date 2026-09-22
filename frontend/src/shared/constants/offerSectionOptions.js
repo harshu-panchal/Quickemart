@@ -47,12 +47,6 @@ export const BACKGROUND_COLOR_OPTIONS = [
 
 export const SIDE_IMAGE_OPTIONS = [
   {
-    key: "hair-care",
-    label: "Hair Care",
-    imageUrl:
-      "https://images.unsplash.com/photo-1522338242762-594f63bcf581?w=200&h=200&fit=crop",
-  },
-  {
     key: "grocery",
     label: "Grocery",
     imageUrl:

@@ -15,14 +15,13 @@ const offerSectionSchema = new mongoose.Schema(
     sideImageKey: {
       type: String,
       enum: [
-        "hair-care",
         "grocery",
         "electronics",
         "beauty",
         "kitchen",
         "fashion",
       ],
-      default: "hair-care",
+      default: "grocery",
     },
     categoryIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Category" }],
     categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Category" }, // legacy single category
