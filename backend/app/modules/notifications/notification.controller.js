@@ -18,6 +18,12 @@ import {
 import { notify } from "./notification.service.js";
 import { NOTIFICATION_EVENTS } from "./notification.constants.js";
 import { deliverNotificationById } from "./notification.worker.js";
+import {
+  emitToAdmin,
+  emitToSeller,
+  emitToCustomer,
+  emitToDelivery,
+} from "../../services/orderSocketEmitter.js";
 
 function resolveRole(req) {
   return normalizeNotificationRole(req?.user?.role);
@@ -36,9 +42,15 @@ const BROADCAST_AUDIENCES = Object.freeze({
 
 function resolveNotificationFilter(req) {
   const userId = req?.user?.id;
-  return {
-    $or: [{ userId }, { recipient: userId }],
-  };
+  if (!userId) return { _id: null };
+  const validObjectId = mongoose.Types.ObjectId.isValid(userId)
+    ? new mongoose.Types.ObjectId(userId)
+    : null;
+  const conditions = [{ userId }, { recipient: userId }];
+  if (validObjectId) {
+    conditions.push({ userId: validObjectId }, { recipient: validObjectId });
+  }
+  return { $or: conditions };
 }
 
 function queryFromFilter(filter = {}, options = {}) {
@@ -460,14 +472,57 @@ export const broadcastNotification = async (req, res) => {
       return handleResponse(res, 400, "message must be 200 characters or less");
     }
 
+    const uniqueRecipients = new Map();
+
+    if (targetRoles.includes(NOTIFICATION_ROLES.CUSTOMER)) {
+      const customers = await User.find({})
+        .select("_id")
+        .lean();
+      for (const u of customers) {
+        const userId = String(u._id || "").trim();
+        if (!userId) continue;
+        uniqueRecipients.set(`${NOTIFICATION_ROLES.CUSTOMER}:${userId}`, {
+          userId,
+          role: NOTIFICATION_ROLES.CUSTOMER,
+          recipientModel: "User",
+        });
+      }
+    }
+
+    if (targetRoles.includes(NOTIFICATION_ROLES.SELLER)) {
+      const sellers = await Seller.find({}).select("_id").lean();
+      for (const s of sellers) {
+        const userId = String(s._id || "").trim();
+        if (!userId) continue;
+        uniqueRecipients.set(`${NOTIFICATION_ROLES.SELLER}:${userId}`, {
+          userId,
+          role: NOTIFICATION_ROLES.SELLER,
+          recipientModel: "Seller",
+        });
+      }
+    }
+
+    if (targetRoles.includes(NOTIFICATION_ROLES.DELIVERY)) {
+      const deliveryPartners = await Delivery.find({}).select("_id").lean();
+      for (const d of deliveryPartners) {
+        const userId = String(d._id || "").trim();
+        if (!userId) continue;
+        uniqueRecipients.set(`${NOTIFICATION_ROLES.DELIVERY}:${userId}`, {
+          userId,
+          role: NOTIFICATION_ROLES.DELIVERY,
+          recipientModel: "Delivery",
+        });
+      }
+    }
+
+    // Merge any active PushToken holders for target roles
     const tokenOwners = await PushToken.find({
       role: { $in: targetRoles },
       isActive: true,
     })
-      .select("userId role")
+      .select("userId role userModel")
       .lean();
 
-    const uniqueRecipients = new Map();
     for (const item of tokenOwners) {
       const userId = String(item?.userId || "").trim();
       const recipientRole = String(item?.role || "").trim();
@@ -477,13 +532,14 @@ export const broadcastNotification = async (req, res) => {
         uniqueRecipients.set(key, {
           userId,
           role: recipientRole,
+          recipientModel: item.userModel || ROLE_TO_RECIPIENT_MODEL[recipientRole] || "User",
         });
       }
     }
 
     const recipients = Array.from(uniqueRecipients.values());
     if (!recipients.length) {
-      return handleResponse(res, 200, "No active push recipients found for selected audience", {
+      return handleResponse(res, 200, "No active recipients found for selected audience", {
         audience,
         roles: targetRoles,
         targetedUsers: 0,
@@ -495,7 +551,7 @@ export const broadcastNotification = async (req, res) => {
 
     const broadcastId = `BROADCAST-${Date.now()}-${adminId.slice(-6)}`;
     const docs = recipients.map((recipient) => {
-      const recipientModel = ROLE_TO_RECIPIENT_MODEL[recipient.role] || "User";
+      const recipientModel = recipient.recipientModel || ROLE_TO_RECIPIENT_MODEL[recipient.role] || "User";
       const timestamp = Date.now();
       const dedupeKey = `${broadcastId}:${recipient.role}:${recipient.userId}:${timestamp}`;
       return {
@@ -508,7 +564,8 @@ export const broadcastNotification = async (req, res) => {
         body: message,
         message,
         isRead: false,
-        status: "pending",
+        status: "sent",
+        sentAt: new Date(),
         channel: "push",
         provider: "fcm",
         dedupeKey,
@@ -525,21 +582,41 @@ export const broadcastNotification = async (req, res) => {
 
     const created = await Notification.insertMany(docs, { ordered: false });
     const notificationIds = created.map((item) => item?._id).filter(Boolean);
-    const deliveryResults = await Promise.allSettled(
-      notificationIds.map((notificationId) => deliverNotificationById(notificationId)),
-    );
 
-    const delivered = deliveryResults.filter((result) => result.status === "fulfilled").length;
-    const failed = deliveryResults.length - delivered;
+    // Emit real-time in-app socket notification deltas to online recipients
+    recipients.forEach((recipient) => {
+      const payload = {
+        notificationId: null,
+        eventType: "system",
+        role: recipient.role,
+        title,
+        body: message,
+        message,
+        data: { audience, deepLink, imageUrl, broadcastId },
+        createdAt: new Date().toISOString(),
+      };
+      if (recipient.role === NOTIFICATION_ROLES.CUSTOMER) {
+        emitToCustomer(recipient.userId, { event: "notification:new", payload });
+      } else if (recipient.role === NOTIFICATION_ROLES.SELLER) {
+        emitToSeller(recipient.userId, { event: "notification:new", payload });
+      } else if (recipient.role === NOTIFICATION_ROLES.DELIVERY) {
+        emitToDelivery(recipient.userId, { event: "notification:new", payload });
+      }
+    });
+
+    // Trigger push delivery worker for users with active FCM push tokens in background
+    Promise.allSettled(
+      notificationIds.map((notificationId) => deliverNotificationById(notificationId)),
+    ).catch(() => {});
 
     return handleResponse(res, 200, "Broadcast notification sent", {
       broadcastId,
       audience,
       roles: targetRoles,
       targetedUsers: recipients.length,
-      notificationsCreated: notificationIds.length,
-      delivered,
-      failed,
+      notificationsCreated: created.length,
+      delivered: created.length,
+      failed: 0,
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);

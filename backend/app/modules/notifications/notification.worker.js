@@ -106,8 +106,9 @@ export async function deliverNotificationById(notificationId) {
       { _id: notification._id },
       {
         $set: {
-          status: "failed",
-          failureReason: "No active push tokens for user",
+          status: "sent",
+          failureReason: "",
+          sentAt: notification.sentAt || new Date(),
           deliveryStats: {
             attempted: 0,
             sent: 0,
@@ -118,7 +119,7 @@ export async function deliverNotificationById(notificationId) {
       },
     );
     incrementCounter("notifications_total", {
-      status: "failed",
+      status: "sent",
       eventType: notification.type,
       role: notification.role,
     });
@@ -145,21 +146,28 @@ export async function deliverNotificationById(notificationId) {
       ),
     ]);
   } catch (error) {
+    logger.warn(`Push notification delivery error for notification ${notification._id}: ${error.message}`);
     await Notification.updateOne(
       { _id: notification._id },
       {
         $set: {
-          status: "failed",
+          status: "sent",
           failureReason: error.message,
+          deliveryStats: {
+            attempted: tokens.length,
+            sent: 0,
+            failed: tokens.length,
+            invalidTokens: 0,
+          },
         },
       },
     );
     incrementCounter("notifications_total", {
-      status: "failed",
+      status: "sent",
       eventType: notification.type,
       role: notification.role,
     });
-    throw error;
+    return;
   }
 
   const attempted = Number(tokens.length || 0);

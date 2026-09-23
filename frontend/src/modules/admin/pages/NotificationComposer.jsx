@@ -135,9 +135,9 @@ const NotificationComposer = () => {
                 imageUrl: uploadedImageUrl || '',
             });
 
-            const result = broadcastRes?.data?.result || {};
-            const targetedUsers = Number(result?.targetedUsers || 0);
-            const delivered = Number(result?.delivered || 0);
+            const result = broadcastRes?.data?.result || broadcastRes?.data?.data || broadcastRes?.data || {};
+            const targetedUsers = Number(result?.targetedUsers || result?.notificationsCreated || 0);
+            const delivered = Number(result?.delivered ?? result?.notificationsCreated ?? targetedUsers);
             showToast(
                 `Campaign launched: ${delivered} delivered to ${targetedUsers} targeted users`,
                 'success'

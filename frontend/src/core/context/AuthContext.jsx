@@ -199,26 +199,6 @@ export const AuthProvider = ({ children }) => {
                     console.warn('[push] SW local notification failed:', err);
                 }
             }
-
-            // Surface in-app toast notification using Sonner
-            try {
-                const { toast } = await import('sonner');
-                const imageUrl = payload?.data?.imageUrl || payload?.data?.image || payload?.imageUrl || payload?.image || "";
-                toast.success(title, {
-                    description: body,
-                    duration: 8000,
-                    position: 'top-center',
-                    icon: imageUrl ? (
-                        <img 
-                            src={imageUrl} 
-                            alt="Notification Icon" 
-                            style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} 
-                        />
-                    ) : undefined
-                });
-            } catch (e) {
-                console.warn('[push] In-app toast failed:', e);
-            }
         };
 
         let offNotification = null;

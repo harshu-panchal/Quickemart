@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Bell, BellRing, Check } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { toast } from "sonner";
+import { getOrderSocket, onNotificationNew } from "@/core/services/orderSocket";
+import { createSocketTokenReader } from "@core/utils/authStorage";
+import { STORAGE_KEYS } from "@core/utils/storage";
 
 const NotificationsPage = () => {
     const navigate = useNavigate();
@@ -12,17 +15,28 @@ const NotificationsPage = () => {
 
     useEffect(() => {
         fetchNotifications();
+
+        const getToken = createSocketTokenReader(STORAGE_KEYS.AUTH_CUSTOMER);
+        getOrderSocket(getToken);
+        const unsubscribe = onNotificationNew(getToken, () => {
+            fetchNotifications();
+        });
+
+        return () => {
+            if (typeof unsubscribe === "function") unsubscribe();
+        };
     }, []);
 
     const fetchNotifications = async () => {
         try {
             setLoading(true);
             const response = await customerApi.getNotifications();
-            const fetchedNotifications = response.data?.data?.notifications || [];
+            const resData = response.data?.result || response.data?.data || response.data || {};
+            const fetchedNotifications = resData?.notifications || resData?.items || (Array.isArray(resData) ? resData : []);
             setNotifications(fetchedNotifications);
             
             // Auto mark as read if there are unread ones
-            if (fetchedNotifications.some(n => !n.isRead)) {
+            if (Array.isArray(fetchedNotifications) && fetchedNotifications.some(n => !n.isRead)) {
                 markAllAsRead();
             }
         } catch (error) {
