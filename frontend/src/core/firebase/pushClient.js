@@ -105,7 +105,11 @@ export async function showSystemNotification({ title, body, data } = {}) {
 
   // Prefer SW notifications so they land in the OS notification center consistently.
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const swPromise = navigator.serviceWorker.ready;
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("SW ready timeout")), 1500)
+    );
+    const reg = await Promise.race([swPromise, timeoutPromise]);
     if (reg?.showNotification) {
       await reg.showNotification(safeTitle, {
         body: safeBody,
