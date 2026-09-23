@@ -53,16 +53,19 @@ async function validateParentForType(type, parentId) {
 export const getCategories = async (req, res) => {
   try {
     const { flat, tree, type } = req.query;
+    const homepageOnly = req.query.homepageOnly === "true";
 
     if (tree === "true") {
-      // The category tree is only ever consumed by customer-facing homepage/category
-      // surfaces (never admin management), so it always respects the homepage-visibility flag.
-      const cacheKey = categoryCacheKey({ tree: true, type: "header" });
+      const cacheKey = categoryCacheKey({ tree: true, type: "header", homepageOnly });
       const categories = await getOrSet(
         cacheKey,
         async () => {
-          const selectFields = "name slug image iconId type parentId headerColor headerFontColor headerIconColor";
-          return Category.find({ type: "header", showInHomepageGrids: { $ne: false } })
+          const selectFields = "name slug image iconId type parentId headerColor headerFontColor headerIconColor showInHomepageGrids";
+          const query = { type: "header" };
+          if (homepageOnly) {
+            query.showInHomepageGrids = { $ne: false };
+          }
+          return Category.find(query)
             .select(selectFields)
             .populate({
               path: "children",
@@ -126,7 +129,6 @@ export const getCategories = async (req, res) => {
     }
     // Homepage grid consumers (e.g. the customer home page) opt in via `homepageOnly=true`
     // so admin category pickers/management pages keep seeing every category, hidden or not.
-    const homepageOnly = req.query.homepageOnly === "true";
     if (homepageOnly) {
       query.showInHomepageGrids = { $ne: false };
     }
