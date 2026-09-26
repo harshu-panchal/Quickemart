@@ -812,21 +812,39 @@ const CheckoutPage = () => {
       setRecommendedProducts([]);
       return;
     }
-    const categoryId = cart[0]?.categoryId?._id || cart[0]?.categoryId;
-    if (!categoryId || !currentLocation?.latitude || !currentLocation?.longitude) return;
+    if (!currentLocation?.latitude || !currentLocation?.longitude) return;
+
+    const categoryId =
+      cart[0]?.categoryId?._id ||
+      cart[0]?.categoryId ||
+      cart[0]?.headerId?._id ||
+      cart[0]?.headerId;
+
+    const params = {
+      limit: 10,
+      lat: currentLocation.latitude,
+      lng: currentLocation.longitude,
+    };
+    if (categoryId) {
+      params.categoryId = categoryId;
+    }
 
     const cartIds = new Set(cart.map((i) => i.id || i._id));
     customerApi
-      .getProducts({
-        categoryId,
-        limit: 10,
-        lat: currentLocation.latitude,
-        lng: currentLocation.longitude
-      })
+      .getProducts(params)
       .then((res) => {
         if (res.data?.success) {
           const items = (res.data.result?.items || [])
-            .map((p) => ({ ...p, id: p._id }))
+            .map((p) => ({
+              ...p,
+              id: p._id || p.id,
+              image:
+                p.image ||
+                p.mainImage ||
+                (Array.isArray(p.galleryImages) ? p.galleryImages[0] : null) ||
+                (Array.isArray(p.images) ? p.images[0] : null) ||
+                "",
+            }))
             .filter((p) => !cartIds.has(p.id));
           setRecommendedProducts(items.slice(0, 8));
         }

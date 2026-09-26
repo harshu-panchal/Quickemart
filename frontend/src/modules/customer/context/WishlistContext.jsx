@@ -38,7 +38,12 @@ export const WishlistProvider = ({ children }) => {
           return {
             ...product,
             id: product._id,
-            image: product.mainImage,
+            image:
+              product.image ||
+              product.mainImage ||
+              (Array.isArray(product.galleryImages) ? product.galleryImages[0] : null) ||
+              (Array.isArray(product.images) ? product.images[0] : null) ||
+              "",
           };
         });
         setWishlist(backendWishlist);
@@ -60,7 +65,12 @@ export const WishlistProvider = ({ children }) => {
         const backendWishlist = products.map((product) => ({
           ...product,
           id: product._id,
-          image: product.mainImage,
+          image:
+            product.image ||
+            product.mainImage ||
+            (Array.isArray(product.galleryImages) ? product.galleryImages[0] : null) ||
+            (Array.isArray(product.images) ? product.images[0] : null) ||
+            "",
         }));
         setWishlist(backendWishlist);
         setIsFullDataFetched(true);

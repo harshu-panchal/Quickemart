@@ -43,6 +43,16 @@ const ProductCard = React.memo(
 
     const imageRef = React.useRef(null);
 
+    const productImage = React.useMemo(() => {
+      return (
+        product?.image ||
+        product?.mainImage ||
+        (Array.isArray(product?.galleryImages) ? product.galleryImages[0] : null) ||
+        (Array.isArray(product?.images) ? product.images[0] : null) ||
+        ""
+      );
+    }, [product]);
+
 
 
     const defaultVariant = React.useMemo(() => {
@@ -173,11 +183,12 @@ const ProductCard = React.memo(
         if (imageRef.current) {
           animateAddToCart(
             imageRef.current.getBoundingClientRect(),
-            product.image,
+            productImage,
           );
         }
         await addToCart({
           ...product,
+          image: productImage,
           variantSku: variantKey,
           variantName: defaultVariant?.name || "",
         });
@@ -208,7 +219,7 @@ const ProductCard = React.memo(
         e.stopPropagation();
 
         if (quantity === 1) {
-          animateRemoveFromCart(product.image);
+          animateRemoveFromCart(productImage);
           removeFromCart(productId, variantKey);
         } else {
           updateQuantity(productId, -1, variantKey);
@@ -217,7 +228,7 @@ const ProductCard = React.memo(
       [
         quantity,
         animateRemoveFromCart,
-        product.image,
+        productImage,
         removeFromCart,
         productId,
         updateQuantity,
@@ -298,7 +309,7 @@ const ProductCard = React.memo(
             )}>
             <img
               ref={imageRef}
-              src={applyCloudinaryTransform(product.image)}
+              src={applyCloudinaryTransform(productImage)}
               alt={product.name}
               loading="lazy"
               className="w-full h-full object-cover mix-blend-multiply"
