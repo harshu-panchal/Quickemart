@@ -13,7 +13,9 @@ export const customerApi = {
   lookupCustomerByPhone: (phone) =>
     axiosInstance.get("/customer/lookup-by-phone", { params: { phone } }),
   getCategories: (params) =>
-    getWithDedupe("/categories", params, { ttl: 60 * 1000 }), // 1 min for categories
+    params?.tree
+      ? axiosInstance.get("/categories", { params })
+      : getWithDedupe("/categories", params, { ttl: 60 * 1000 }),
   getProducts: (params) => getWithDedupe("/products", params),
   getProductById: (id, params) => getWithDedupe(`/products/${id}`, params),
 

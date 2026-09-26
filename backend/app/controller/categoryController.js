@@ -52,19 +52,42 @@ async function validateParentForType(type, parentId) {
  ================================ */
 export const getCategories = async (req, res) => {
   try {
-    const { flat, tree, type } = req.query;
+    const { flat, tree, type, refresh } = req.query;
     const homepageOnly = req.query.homepageOnly === "true";
 
+    if (refresh === "true") {
+      await invalidate("cache:catalog:categories:*").catch(() => {});
+      await invalidate("cache:*:catalog:categories:*").catch(() => {});
+    }
+
     if (tree === "true") {
-      const cacheKey = categoryCacheKey({ tree: true, type: "header", homepageOnly });
+      const selectFields = "name slug image iconId type parentId status headerColor headerFontColor headerIconColor showInHomepageGrids";
+      const query = { type: "header" };
+      if (homepageOnly) {
+        query.showInHomepageGrids = { $ne: false };
+      }
+
+      // Customer Homepage opt-in uses Redis cache; Admin & Seller management queries fetch fresh DB results
+      if (!homepageOnly || refresh === "true") {
+        const categories = await Category.find(query)
+          .select(selectFields)
+          .populate({
+            path: "children",
+            select: selectFields,
+            populate: {
+              path: "children",
+              select: selectFields,
+            },
+          })
+          .sort({ name: 1, _id: 1 })
+          .lean();
+        return handleResponse(res, 200, "Category tree fetched", categories);
+      }
+
+      const cacheKey = categoryCacheKey({ tree: true, type: "header", homepageOnly: true });
       const categories = await getOrSet(
         cacheKey,
         async () => {
-          const selectFields = "name slug image iconId type parentId headerColor headerFontColor headerIconColor showInHomepageGrids";
-          const query = { type: "header" };
-          if (homepageOnly) {
-            query.showInHomepageGrids = { $ne: false };
-          }
           return Category.find(query)
             .select(selectFields)
             .populate({
@@ -131,6 +154,15 @@ export const getCategories = async (req, res) => {
     // so admin category pickers/management pages keep seeing every category, hidden or not.
     if (homepageOnly) {
       query.showInHomepageGrids = { $ne: false };
+    }
+    if (!homepageOnly || refresh === "true") {
+      const categories = await Category.find(query).sort({ name: 1, _id: 1 }).lean();
+      return handleResponse(
+        res,
+        200,
+        "Categories fetched successfully",
+        categories,
+      );
     }
     const cacheKey = categoryCacheKey({ tree: false, type: query.type || "all", homepageOnly });
     const categories = await getOrSet(
@@ -216,6 +248,7 @@ export const createCategory = async (req, res) => {
     invalidate("cache:catalog:categories:*").catch(err => {
       console.warn("[Category] Cache invalidation failed:", err.message);
     });
+    invalidate("cache:*:catalog:categories:*").catch(() => {});
 
     return handleResponse(res, 201, "Category created successfully", category);
   } catch (error) {
@@ -297,6 +330,7 @@ export const updateCategory = async (req, res) => {
     invalidate("cache:catalog:categories:*").catch(err => {
       console.warn("[Category] Cache invalidation failed:", err.message);
     });
+    invalidate("cache:*:catalog:categories:*").catch(() => {});
     invalidateCategoryName(id).catch(err => {
       console.warn("[Category] Name cache invalidation failed:", err.message);
     });
@@ -329,6 +363,7 @@ export const deleteCategory = async (req, res) => {
     invalidate("cache:catalog:categories:*").catch(err => {
       console.warn("[Category] Cache invalidation failed:", err.message);
     });
+    invalidate("cache:*:catalog:categories:*").catch(() => {});
     invalidateCategoryName(id).catch(err => {
       console.warn("[Category] Name cache invalidation failed:", err.message);
     });

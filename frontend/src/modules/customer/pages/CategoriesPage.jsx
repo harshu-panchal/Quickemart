@@ -29,19 +29,28 @@ const CategoriesPage = () => {
                 const formattedGroups = tree
                     .filter((header) => (header.name || '').trim().toLowerCase() !== 'all')
                     .map((header, idx) => {
-                        const categories = (header.children || []).map((cat, cIdx) => ({
+                        let categories = (header.children || []).map((cat, cIdx) => ({
                             id: cat._id,
                             name: cat.name,
                             image: cat.image || "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=270/layout-engine/2022-11/Slice-1_9.png",
                             color: COLORS[(idx + cIdx) % COLORS.length]
                         }));
 
+                        // Fallback: If header has no subcategories, show the header itself as a category card
+                        if (categories.length === 0) {
+                            categories = [{
+                                id: header._id,
+                                name: header.name,
+                                image: header.image || "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=270/layout-engine/2022-11/Slice-1_9.png",
+                                color: COLORS[idx % COLORS.length]
+                            }];
+                        }
+
                         return {
                             title: header.name,
                             categories,
                         };
-                    })
-                    .filter((group) => group.categories.length > 0);
+                    });
                 setGroups(formattedGroups);
             }
         } catch (error) {

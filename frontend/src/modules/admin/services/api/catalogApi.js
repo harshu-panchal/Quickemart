@@ -7,7 +7,7 @@ import axiosInstance from '@core/api/axios';
 export const adminCatalogApi = {
     // Category Management
     getCategories: (params) => axiosInstance.get('/admin/categories', { params }),
-    getCategoryTree: () => axiosInstance.get('/admin/categories?tree=true'),
+    getCategoryTree: () => axiosInstance.get('/admin/categories?tree=true&refresh=true'),
     createCategory: (formData) =>
         axiosInstance.post('/admin/categories', formData),
     updateCategory: (id, formData) =>
