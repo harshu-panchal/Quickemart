@@ -47,8 +47,10 @@ const ProductCard = React.memo(
       return (
         product?.image ||
         product?.mainImage ||
-        (Array.isArray(product?.galleryImages) ? product.galleryImages[0] : null) ||
-        (Array.isArray(product?.images) ? product.images[0] : null) ||
+        (typeof product?.masterProductId === 'object' ? product.masterProductId?.mainImage : null) ||
+        (Array.isArray(product?.galleryImages) && product.galleryImages[0] ? product.galleryImages[0] : null) ||
+        (typeof product?.masterProductId === 'object' && Array.isArray(product.masterProductId?.galleryImages) ? product.masterProductId.galleryImages[0] : null) ||
+        (Array.isArray(product?.images) && product.images[0] ? product.images[0] : null) ||
         ""
       );
     }, [product]);

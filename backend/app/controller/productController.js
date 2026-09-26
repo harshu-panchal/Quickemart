@@ -384,7 +384,7 @@ export const getProducts = async (req, res) => {
           .select(
             "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt masterProductId",
           )
-          .populate("masterProductId", "slug name")
+          .populate("masterProductId", "slug name mainImage galleryImages images")
           .sort(sortQuery)
           .skip(skip)
           .limit(limit)
@@ -521,8 +521,17 @@ export const getProducts = async (req, res) => {
           isAvailable = effectiveStock > 0;
         }
 
+        const resolvedMainImage =
+          p.mainImage ||
+          (typeof p.masterProductId === 'object' ? p.masterProductId?.mainImage : '') ||
+          (Array.isArray(p.galleryImages) && p.galleryImages.length ? p.galleryImages[0] : '') ||
+          (typeof p.masterProductId === 'object' && Array.isArray(p.masterProductId?.galleryImages) ? p.masterProductId?.galleryImages[0] : '') ||
+          '';
+
         const enriched = {
           ...p,
+          mainImage: resolvedMainImage,
+          image: resolvedMainImage,
           stock: effectiveStock,
           price: effectivePrice,
           salePrice: effectiveSalePrice,
