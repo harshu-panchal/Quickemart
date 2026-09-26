@@ -1085,25 +1085,6 @@ const ProductDetailSheet = () => {
                         <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
                             <div className="flex flex-col gap-3">
                                 <div className="flex items-center justify-between gap-4">
-                                    <div className="flex flex-col min-w-[80px]">
-                                        {((selectedVariant?.salePrice && selectedVariant.salePrice < selectedVariant.price) || 
-                                           (!selectedVariant && selectedProduct.originalPrice > selectedProduct.price)) && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-medium text-gray-400 line-through decoration-gray-400/50">
-                                                    ₹{selectedVariant?.price || selectedProduct.originalPrice}
-                                                </span>
-                                                <span className="bg-red-50 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded leading-none">
-                                                    {selectedVariant
-                                                        ? Math.round(((selectedVariant.price - selectedVariant.salePrice) / selectedVariant.price) * 100)
-                                                        : Math.round(((selectedProduct.originalPrice - selectedProduct.price) / selectedProduct.originalPrice) * 100)}% OFF
-                                                </span>
-                                            </div>
-                                        )}
-                                        <div className="text-2xl font-black text-[#1A1A1A] leading-none mt-1">
-                                            ₹{selectedVariant?.salePrice || selectedVariant?.price || selectedProduct.price}
-                                        </div>
-                                    </div>
-
                                     {(() => {
                                          const variantPrice = Number(selectedVariant?.price ?? selectedProduct.price ?? 0);
                                          const variantSalePrice = (selectedVariant?.salePrice !== undefined && selectedVariant?.salePrice !== null)
@@ -1127,34 +1108,57 @@ const ProductDetailSheet = () => {
                                              );
                                          }
 
-                                         return quantity > 0 ? (
-                                             <div className="flex items-center gap-2 bg-slate-50 rounded-2xl p-1.5 border border-slate-200/80 shadow-sm">
-                                                 <motion.button
-                                                     whileTap={{ scale: 0.9 }}
-                                                     onClick={handleDecrement}
-                                                     className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-white shadow-sm border border-slate-100 transition-all"
-                                                 >
-                                                     <Minus size={18} strokeWidth={3.5} />
-                                                 </motion.button>
-                                                 <span className="font-black text-xl text-slate-800 w-8 text-center tabular-nums">{quantity}</span>
-                                                 <motion.button
-                                                     whileTap={{ scale: 0.9 }}
-                                                     onClick={handleIncrement}
-                                                     className="w-10 h-10 bg-gradient-to-br from-primary to-[var(--brand-400)] rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-100/50 hover:shadow-brand-200 transition-all border border-white/20"
-                                                 >
-                                                     <Plus size={18} strokeWidth={3.5} />
-                                                 </motion.button>
-                                             </div>
-                                         ) : (
-                                             <motion.button
-                                                 whileHover={{ scale: 1.02 }}
-                                                 whileTap={{ scale: 0.95 }}
-                                                 onClick={handleAddToCart}
-                                                 className="flex-1 bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-[56px] rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-brand-100 transition-all border border-white/20 uppercase tracking-[0.05em] whitespace-nowrap px-4"
-                                             >
-                                                 <ShoppingBag size={18} strokeWidth={3} />
-                                                 ADD TO CART
-                                             </motion.button>
+                                         return (
+                                             <>
+                                                 <div className="flex flex-col min-w-[80px]">
+                                                     {((selectedVariant?.salePrice && selectedVariant.salePrice < selectedVariant.price) || 
+                                                        (!selectedVariant && selectedProduct.originalPrice > selectedProduct.price)) && (
+                                                         <div className="flex items-center gap-2">
+                                                             <span className="text-sm font-medium text-gray-400 line-through decoration-gray-400/50">
+                                                                 ₹{selectedVariant?.price || selectedProduct.originalPrice}
+                                                             </span>
+                                                             <span className="bg-red-50 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded leading-none">
+                                                                 {selectedVariant
+                                                                     ? Math.round(((selectedVariant.price - selectedVariant.salePrice) / selectedVariant.price) * 100)
+                                                                     : Math.round(((selectedProduct.originalPrice - selectedProduct.price) / selectedProduct.originalPrice) * 100)}% OFF
+                                                             </span>
+                                                         </div>
+                                                     )}
+                                                     <div className="text-2xl font-black text-[#1A1A1A] leading-none mt-1">
+                                                         ₹{selectedVariant?.salePrice || selectedVariant?.price || selectedProduct.price}
+                                                     </div>
+                                                 </div>
+
+                                                 {quantity > 0 ? (
+                                                     <div className="flex items-center gap-2 bg-slate-50 rounded-2xl p-1.5 border border-slate-200/80 shadow-sm">
+                                                         <motion.button
+                                                             whileTap={{ scale: 0.9 }}
+                                                             onClick={handleDecrement}
+                                                             className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-white shadow-sm border border-slate-100 transition-all"
+                                                         >
+                                                             <Minus size={18} strokeWidth={3.5} />
+                                                         </motion.button>
+                                                         <span className="font-black text-xl text-slate-800 w-8 text-center tabular-nums">{quantity}</span>
+                                                         <motion.button
+                                                             whileTap={{ scale: 0.9 }}
+                                                             onClick={handleIncrement}
+                                                             className="w-10 h-10 bg-gradient-to-br from-primary to-[var(--brand-400)] rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-100/50 hover:shadow-brand-200 transition-all border border-white/20"
+                                                         >
+                                                             <Plus size={18} strokeWidth={3.5} />
+                                                         </motion.button>
+                                                     </div>
+                                                 ) : (
+                                                     <motion.button
+                                                         whileHover={{ scale: 1.02 }}
+                                                         whileTap={{ scale: 0.95 }}
+                                                         onClick={handleAddToCart}
+                                                         className="flex-1 bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-[56px] rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-brand-100 transition-all border border-white/20 uppercase tracking-[0.05em] whitespace-nowrap px-4"
+                                                     >
+                                                         <ShoppingBag size={18} strokeWidth={3} />
+                                                         ADD TO CART
+                                                     </motion.button>
+                                                 )}
+                                             </>
                                          );
                                      })()}
                                 </div>
