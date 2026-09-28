@@ -18,6 +18,16 @@ import { useLocation as useAppLocation } from '../context/LocationContext';
 import { useSettings } from '@core/context/SettingsContext';
 import Lottie from 'lottie-react';
 
+const matchesCat = (item, target) => {
+    if (!item || !target) return false;
+    const targetStr = String(target).trim().toLowerCase();
+    const targetNorm = targetStr.replace(/-/g, ' ');
+    const idMatch = item._id?.toString() === String(target);
+    const slugMatch = item.slug?.toString().toLowerCase() === targetStr;
+    const nameMatch = item.name?.toString().toLowerCase().replace(/-/g, ' ') === targetNorm;
+    return idMatch || slugMatch || nameMatch;
+};
+
 const CategoryProductsPage = () => {
     const { categoryName: catId } = useParams();
     const navigate = useNavigate();
@@ -28,7 +38,7 @@ const CategoryProductsPage = () => {
     const { isOpen: isProductDetailOpen } = useProductDetail();
     const [selectedSubCategory, setSelectedSubCategory] = useState(initialSubcategoryId);
     const [category, setCategory] = useState(null);
-    const [subCategories, setSubCategories] = useState([{ id: 'all', name: 'All', icon: 'https://cdn-icons-png.flaticon.com/128/2321/2321831.png' }]);
+    const [subCategories, setSubCategories] = useState([{ id: 'all', name: 'All', icon: '' }]);
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [noServiceData, setNoServiceData] = useState(null);
@@ -62,9 +72,10 @@ const CategoryProductsPage = () => {
                 customerApi.getCategories({ tree: true }),
             ]);
 
+            let dbProds = [];
             if (prodRes.data.success) {
                 const rawResult = prodRes.data.result;
-                const dbProds = Array.isArray(prodRes.data.results)
+                dbProds = Array.isArray(prodRes.data.results)
                     ? prodRes.data.results
                     : Array.isArray(rawResult?.items)
                     ? rawResult.items
@@ -98,19 +109,19 @@ const CategoryProductsPage = () => {
                 // at whichever level it lives so the page and sidebar populate correctly.
                 resolve:
                 for (const header of tree) {
-                    if (header._id === catId) {
+                    if (matchesCat(header, catId)) {
                         currentCat = header;
                         sidebarChildren = header.children || [];
                         break;
                     }
                     for (const cat of header.children || []) {
-                        if (cat._id === catId) {
+                        if (matchesCat(cat, catId)) {
                             currentCat = cat;
                             sidebarChildren = cat.children || [];
                             break resolve;
                         }
                         for (const sub of cat.children || []) {
-                            if (sub._id === catId) {
+                            if (matchesCat(sub, catId)) {
                                 currentCat = sub;
                                 // Show sibling subcategories under the same parent category.
                                 sidebarChildren = cat.children || [];
@@ -120,14 +131,23 @@ const CategoryProductsPage = () => {
                     }
                 }
 
+                // Fallback: If currentCat was not found in tree by ID/slug, check products for category reference
+                if (!currentCat && dbProds.length > 0) {
+                    const firstProdCat = dbProds[0]?.categoryId || dbProds[0]?.subcategoryId?.categoryId;
+                    if (firstProdCat && typeof firstProdCat === 'object') {
+                        currentCat = firstProdCat;
+                    }
+                }
+
                 if (currentCat) {
                     setCategory(currentCat);
+                    const categoryImg = currentCat.image || currentCat.icon || (sidebarChildren.find(s => s.image)?.image) || '';
                     const subs = sidebarChildren.map(s => ({
                         id: s._id,
                         name: s.name,
-                        icon: s.image || 'https://cdn-icons-png.flaticon.com/128/2321/2321801.png'
+                        icon: s.image || s.icon || categoryImg
                     }));
-                    setSubCategories([{ id: 'all', name: 'All', icon: 'https://cdn-icons-png.flaticon.com/128/2321/2321831.png' }, ...subs]);
+                    setSubCategories([{ id: 'all', name: 'All', icon: categoryImg }, ...subs]);
                 }
             }
         } catch (error) {
@@ -262,10 +282,24 @@ const CategoryProductsPage = () => {
                                     )}
                                 >
                                     <div className={cn(
-                                        "w-14 h-14 rounded-2xl flex items-center justify-center p-1.5 transition-all duration-300",
+                                        "w-14 h-14 rounded-2xl flex items-center justify-center p-1.5 transition-all duration-300 overflow-hidden",
                                         selectedSubCategory === cat.id ? "scale-110" : "opacity-100"
                                     )}>
-                                        <img src={applyCloudinaryTransform(cat.icon)} alt={cat.name} loading="lazy" className="w-full h-full object-contain" />
+                                        {cat.icon ? (
+                                            <img 
+                                                src={applyCloudinaryTransform(cat.icon)} 
+                                                alt={cat.name} 
+                                                loading="lazy" 
+                                                className="w-full h-full object-contain"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 font-black text-xs">
+                                                {cat.name ? cat.name.substring(0, 2).toUpperCase() : 'ALL'}
+                                            </div>
+                                        )}
                                     </div>
                                     <span className={cn(
                                         "text-[10px] text-center font-bold font-sans leading-tight px-1",
