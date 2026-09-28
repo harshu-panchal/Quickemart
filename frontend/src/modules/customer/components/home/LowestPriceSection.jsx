@@ -1,8 +1,25 @@
-import React from "react";
-import { ChevronRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import ProductCard from "../shared/ProductCard";
 
 const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
+  const [visibleCount, setVisibleCount] = useState(12);
+
+  // Reset visibleCount whenever products list changes (e.g. category switch)
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [products]);
+
+  const handleSeeMore = () => {
+    if (products && visibleCount < products.length) {
+      setVisibleCount((prev) => prev + 12);
+    } else if (onSeeAll) {
+      onSeeAll();
+    }
+  };
+
+  const hasMoreLocal = products && visibleCount < products.length;
+
   return (
     <div className="-mt-[40px] mb-4 md:-mt-[40px] md:mb-8">
       <div className="relative overflow-hidden bg-linear-to-br from-primary/10 via-primary/5 to-transparent pt-7 pb-2 md:pt-16 md:pb-4 border-y border-primary/10 shadow-sm md:shadow-[inset_0_-10px_40px_rgba(0,0,0,0.02)]">
@@ -23,25 +40,17 @@ const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
                 </span>
               </div>
             </div>
-            {((products && products.length > 0) || isLoading) && (
-              <button
-                onClick={onSeeAll}
-                className="flex items-center gap-1 bg-white px-2.5 py-1 md:px-4 md:py-2 rounded-full text-primary font-bold text-[11px] md:text-sm cursor-pointer shadow-[0_4px_12px_rgba(0,0,0,0.05)] md:shadow-md border border-primary/10 transition-all whitespace-nowrap active:scale-95">
-                See all
-                <ChevronRight size={12} className="ml-0.5" strokeWidth={3} />
-              </button>
-            )}
           </div>
 
-          <div className="relative z-10 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-6 pb-4 md:pb-6">
+          <div className="relative z-10 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-6 pb-2 md:pb-4">
             {isLoading ? (
-              Array.from({ length: 6 }).map((_, idx) => (
+              Array.from({ length: 12 }).map((_, idx) => (
                 <div key={idx} className="animate-pulse">
                   <div className="bg-slate-200/80 rounded-2xl h-44 w-full border border-slate-100" />
                 </div>
               ))
             ) : products && products.length > 0 ? (
-              products.slice(0, 6).map((product) => (
+              products.slice(0, visibleCount).map((product) => (
                 <div key={product.id} className="smooth-transform">
                   <ProductCard
                     product={product}
@@ -56,6 +65,22 @@ const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
               </div>
             )}
           </div>
+
+          {/* See More Button below the 6 product cards */}
+          {products && products.length > 0 && !isLoading && (
+            <div className="flex justify-center mt-2 mb-4 md:mt-4 md:mb-6">
+              <button
+                onClick={handleSeeMore}
+                className="flex items-center gap-1.5 bg-white px-5 py-2 md:px-7 md:py-2.5 rounded-full text-primary font-black text-[12px] md:text-sm cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-lg border border-primary/20 transition-all hover:scale-105 active:scale-95 uppercase tracking-wide">
+                {hasMoreLocal ? "See More" : "See All Products"}
+                {hasMoreLocal ? (
+                  <ChevronDown size={14} strokeWidth={3} className="ml-0.5 animate-bounce" />
+                ) : (
+                  <ChevronRight size={14} strokeWidth={3} className="ml-0.5" />
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
