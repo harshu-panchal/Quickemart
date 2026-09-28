@@ -114,8 +114,16 @@ export async function showSystemNotification({ title, body, data } = {}) {
       await reg.showNotification(safeTitle, {
         body: safeBody,
         tag,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        vibrate: [200, 100, 200],
         requireInteraction: true,
         renotify: true,
+        silent: false,
+        actions: [
+          { action: "view", title: "View" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
         ...(image ? { image } : {}),
         data: {
           link,
@@ -134,8 +142,11 @@ export async function showSystemNotification({ title, body, data } = {}) {
     const n = new Notification(safeTitle, {
       body: safeBody,
       tag,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       requireInteraction: true,
       renotify: true,
+      silent: false,
       ...(image ? { image } : {}),
       data: {
         link,

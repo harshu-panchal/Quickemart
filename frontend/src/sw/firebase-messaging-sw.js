@@ -1,8 +1,13 @@
 /* eslint-disable no-restricted-globals */
 
 self.addEventListener("notificationclick", (event) => {
+  const action = event.action;
   const link = event?.notification?.data?.link || "/";
   event.notification.close();
+
+  // Dismiss action — just close, no navigation
+  if (action === "dismiss") return;
+
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
@@ -57,8 +62,16 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.apiKey
       options: {
         body,
         tag,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        vibrate: [200, 100, 200],
         requireInteraction: true,
         renotify: true,
+        silent: false,
+        actions: [
+          { action: "view", title: "View" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
         ...(image ? { image } : {}),
         data: {
           link,
