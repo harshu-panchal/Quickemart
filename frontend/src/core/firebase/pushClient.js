@@ -3,6 +3,16 @@ import { getFirebaseApp } from "./client";
 import axiosInstance from "@core/api/axios";
 import AppZetoBridge from "../../lib/appZetoBridge";
 import { rawGet, rawSet, rawRemove, KEY_PREFIXES, STORAGE_KEYS } from "@core/utils/storage";
+import {
+  isProductionFCMEnvironment,
+  getFCMEnvironment,
+  getClientOrigin,
+} from "./fcmEnvironment";
+
+function maskToken(token = "") {
+  const str = String(token || "");
+  return str.length > 13 ? `${str.substring(0, 10)}...` : str;
+}
 
 let foregroundListenerStarted = false;
 let foregroundUnsubscribe = null;
@@ -196,9 +206,9 @@ async function ensureServiceWorkerRegistration() {
 }
 
 export async function showSystemNotification({ title, body, data } = {}) {
-  // Never show OS-level notification banner from localhost origin
-  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-    console.log("[FCM] Suppressed OS-level notification on localhost to prevent duplicate origin banner");
+  // Never show OS-level notification banner from non-production origin
+  if (!isProductionFCMEnvironment()) {
+    console.log("[FCM] Suppressed OS-level notification in development environment");
     return;
   }
 
@@ -368,7 +378,7 @@ export async function ensureFcmTokenRegistered({
       if (!token) {
         throw new Error("Failed to obtain FCM token");
       }
-      console.log("[FCM] Got browser FCM token:", token.substring(0, 20) + "...");
+      console.log("[FCM] Got browser FCM token:", maskToken(token));
     }
 
     const ROLE_TO_STORAGE_KEY = {
@@ -386,29 +396,29 @@ export async function ensureFcmTokenRegistered({
     const headers = {};
     if (roleToken) {
       headers.Authorization = `Bearer ${roleToken}`;
-    } else {
-      console.warn(`[FCM] Warning: no auth token found in storage for role=${normRole}`);
     }
 
-    const isLocalhost = typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-    const isProdApi = import.meta.env.VITE_API_URL &&
-      !import.meta.env.VITE_API_URL.includes("localhost") &&
-      !import.meta.env.VITE_API_URL.includes("127.0.0.1");
+    const env = getFCMEnvironment();
+    const origin = getClientOrigin();
 
-    if (isLocalhost && isProdApi) {
-      console.log("[FCM] Running on localhost connected to production API — skipping live token registration to ensure notifications only go to live domain");
+    console.log(`[FCM] Environment: ${env}`);
+    console.log(`[FCM] Origin: ${origin || "unknown"}`);
+
+    if (!isProductionFCMEnvironment()) {
+      console.log("[FCM] Development origin detected. Skipping production FCM registration.");
       persistStoredFcmToken(normRole, token);
       return token;
     }
 
-    console.log(`[FCM] Calling /push/register — role=${normRole}, platform=${resolvedPlatform}, hasAuthToken=${!!roleToken}`);
+    console.log("[FCM] Environment: production");
+    console.log("[FCM] Registering production FCM token");
     try {
       await axiosInstance.post("/push/register", {
         token,
         platform: resolvedPlatform,
         device: device || navigator.userAgent,
-        origin: typeof window !== "undefined" ? window.location.origin : "",
+        origin,
+        environment: "production",
       }, {
         headers,
       });
@@ -589,6 +599,12 @@ export async function startForegroundPushListener() {
   return unsubscribe;
 }
 
+export {
+  isProductionFCMEnvironment,
+  getFCMEnvironment,
+  getClientOrigin,
+};
+
 export default {
   describePushSupport,
   clearStoredFcmToken,
@@ -599,4 +615,7 @@ export default {
   scheduleFcmRegistrationOnUserGesture,
   startForegroundPushListener,
   showSystemNotification,
+  isProductionFCMEnvironment,
+  getFCMEnvironment,
+  getClientOrigin,
 };

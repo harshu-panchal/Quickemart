@@ -55,15 +55,18 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.apiKey
     const body = notification.body || data.body || "";
     const link = data.link || "/";
     const tag = notification.tag || data.orderId || data.eventType || "quick-commerce";
-    const image = String(notification.image || data.image || data.imageUrl || "").trim();
+    const origin = (self.location && self.location.origin) || "https://quickemartcom.com";
+    const rawImage = String(notification.image || data.image || data.imageUrl || "").trim();
+    const finalImage = rawImage && rawImage.startsWith("http") ? rawImage : `${origin}/icon-192.png`;
 
     return {
       title,
       options: {
         body,
         tag,
-        icon: "/icon-192.png",
-        badge: "/icon-192.png",
+        icon: finalImage,
+        badge: `${origin}/icon-192.png`,
+        image: finalImage,
         vibrate: [200, 100, 200],
         requireInteraction: true,
         renotify: true,
@@ -72,12 +75,11 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.apiKey
           { action: "view", title: "View" },
           { action: "dismiss", title: "Dismiss" },
         ],
-        ...(image ? { image } : {}),
         data: {
           link,
           orderId: data.orderId || "",
           eventType: data.eventType || "",
-          image,
+          image: finalImage,
         },
       },
     };
@@ -92,13 +94,6 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.apiKey
   });
 
   messaging.onBackgroundMessage((payload) => {
-    // Suppress background notification if running on localhost / 127.0.0.1
-    // to strictly prevent duplicate notification origin banners
-    const hostname = self.location?.hostname || "";
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      console.log("[firebase-messaging-sw] Dropping background notification on localhost");
-      return;
-    }
     const { title, options } = buildNotificationOptions(payload);
     self.registration.showNotification(title, options);
   });

@@ -24,6 +24,7 @@ import {
   emitToCustomer,
   emitToDelivery,
 } from "../../services/orderSocketEmitter.js";
+import logger from "../../services/logger.js";
 
 function resolveRole(req) {
   return normalizeNotificationRole(req?.user?.role);
@@ -147,6 +148,7 @@ export const registerPushToken = async (req, res) => {
     const token = String(req.body?.token || "").trim();
     const platform = String(req.body?.platform || "web").trim().toLowerCase();
     const origin = String(req.body?.origin || req.headers.origin || "").trim();
+    const clientEnv = String(req.body?.environment || "").trim().toLowerCase();
 
     if (!userId || !role) {
       return handleResponse(res, 401, "Unauthorized");
@@ -156,6 +158,34 @@ export const registerPushToken = async (req, res) => {
     }
     if (!["web", "app"].includes(platform)) {
       return handleResponse(res, 400, "platform must be one of web, app");
+    }
+
+    const isLocalhost = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(origin) || clientEnv === "development";
+    const maskedToken = token.length > 13 ? `${token.substring(0, 10)}...` : token;
+
+    // Strict protection: do not register development/localhost tokens into production target list
+    if (isLocalhost) {
+      logger.info(
+        `[FCM] Development origin detected (${origin || "localhost"}). ` +
+        `Skipping production registration for ${role}:${userId} (token: ${maskedToken})`
+      );
+      const bearerToken = resolveBearerToken(req);
+      const userModelName = ROLE_TO_USER_MODEL[role];
+      let userDoc = null;
+      try {
+        userDoc = await fetchLoginUser(userModelName, userId);
+      } catch (_) {}
+
+      return res.status(200).json({
+        success: true,
+        message: "Development registration acknowledged (not stored in production target list)",
+        data: {
+          token: bearerToken,
+          user: userDoc ? normalizeLoginUser(userDoc) : { id: userId, role },
+          environment: "development",
+          stored: false,
+        },
+      });
     }
 
     const userModel = ROLE_TO_USER_MODEL[role];
@@ -169,6 +199,7 @@ export const registerPushToken = async (req, res) => {
           token,
           platform,
           origin,
+          environment: "production",
           isActive: true,
           lastUsedAt: new Date(),
           invalidatedAt: null,
@@ -182,25 +213,27 @@ export const registerPushToken = async (req, res) => {
       },
     ).lean();
 
-    // If registered from production domain, deactivate any old localhost tokens for this user
-    const isLocalhost = /localhost|127\.0\.0\.1/i.test(origin);
-    if (!isLocalhost && origin) {
-      await PushToken.updateMany(
-        {
-          userId,
-          role,
-          token: { $ne: token },
-          origin: /localhost|127\.0\.0\.1/i,
+    logger.info(`[FCM] Registered production token for ${role}:${userId} (token: ${maskedToken}, origin: ${origin})`);
+
+    // Deactivate any stale development/localhost tokens for this user
+    await PushToken.updateMany(
+      {
+        userId,
+        role,
+        token: { $ne: token },
+        $or: [
+          { origin: /localhost|127\.0\.0\.1|0\.0\.0\.0/i },
+          { environment: "development" },
+        ],
+      },
+      {
+        $set: {
+          isActive: false,
+          invalidReason: "SUPERSEDED_BY_DOMAIN_TOKEN",
+          invalidatedAt: new Date(),
         },
-        {
-          $set: {
-            isActive: false,
-            invalidReason: "SUPERSEDED_BY_DOMAIN_TOKEN",
-            invalidatedAt: new Date(),
-          },
-        }
-      ).catch(() => {});
-    }
+      }
+    ).catch(() => {});
 
     const bearerToken = resolveBearerToken(req);
     const userModelName = ROLE_TO_USER_MODEL[role];
@@ -533,11 +566,12 @@ export const broadcastNotification = async (req, res) => {
       }
     }
 
-    // Merge any active PushToken holders for target roles (exclude development localhost tokens)
+    // Merge any active PushToken holders for target roles (strictly production environment)
     const tokenOwners = await PushToken.find({
       role: { $in: targetRoles },
       isActive: true,
-      origin: { $not: /localhost|127\.0\.0\.1/i },
+      environment: { $ne: "development" },
+      origin: { $not: /localhost|127\.0\.0\.1|0\.0\.0\.0/i },
     })
       .select("userId role userModel")
       .lean();

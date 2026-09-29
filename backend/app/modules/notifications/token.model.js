@@ -39,6 +39,12 @@ const tokenSchema = new mongoose.Schema(
       default: "",
       index: true,
     },
+    environment: {
+      type: String,
+      enum: ["production", "development", "staging"],
+      default: "production",
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -63,7 +69,7 @@ const tokenSchema = new mongoose.Schema(
   },
 );
 
-tokenSchema.index({ userId: 1, role: 1, isActive: 1, lastUsedAt: -1 });
+tokenSchema.index({ userId: 1, role: 1, isActive: 1, environment: 1, lastUsedAt: -1 });
 tokenSchema.index({ userId: 1, role: 1, token: 1 }, { unique: true });
 
 export default mongoose.models.PushToken || mongoose.model("PushToken", tokenSchema);

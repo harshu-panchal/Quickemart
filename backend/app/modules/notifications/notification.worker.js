@@ -101,11 +101,24 @@ export async function deliverNotificationById(notificationId) {
     .sort({ lastUsedAt: -1 })
     .lean();
 
-  // If the user has a production domain token, exclude development localhost tokens
-  const hasDomainToken = allTokens.some((t) => t.origin && !/localhost|127\.0\.0\.1/i.test(t.origin));
-  const tokens = hasDomainToken
-    ? allTokens.filter((t) => !/localhost|127\.0\.0\.1/i.test(t.origin || ""))
-    : allTokens;
+  // Strict production filtering: Exclude development registrations and localhost/127.0.0.1 origins
+  const isDevOrigin = (origin) => /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(origin || "");
+  const eligibleTokens = allTokens.filter((t) => {
+    if (t.environment === "development") return false;
+    if (isDevOrigin(t.origin)) return false;
+    return true;
+  });
+
+  const devSkippedCount = allTokens.length - eligibleTokens.length;
+  if (notification.role === NOTIFICATION_ROLES.ADMIN || devSkippedCount > 0) {
+    logger.info(
+      `[FCM] ${notification.role === NOTIFICATION_ROLES.ADMIN ? "Admin" : "Target"} notification: ` +
+      `Eligible production registrations: ${eligibleTokens.length}, ` +
+      `Skipping development registrations: ${devSkippedCount}`
+    );
+  }
+
+  const tokens = eligibleTokens;
 
   if (!tokens.length) {
     await Notification.updateOne(
@@ -141,6 +154,8 @@ export async function deliverNotificationById(notificationId) {
           title: notification.title,
           body: notification.body || notification.message,
           message: notification.message,
+          image: notification.data?.imageUrl || notification.data?.image || "",
+          imageUrl: notification.data?.imageUrl || notification.data?.image || "",
           data: notification.data || {},
         },
       ),
@@ -181,6 +196,9 @@ export async function deliverNotificationById(notificationId) {
   const failed = Number(fcmResponse?.failureCount || 0);
   const responses = fcmResponse?.responses || [];
   const invalidTokens = await deactivateInvalidTokens(tokens, responses);
+  if (invalidTokens > 0) {
+    logger.info(`[FCM] Invalid tokens removed: ${invalidTokens}`);
+  }
   const status = sent > 0 ? "sent" : "failed";
   const update = {
     status,

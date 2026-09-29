@@ -98,12 +98,7 @@ const AdminAuth = () => {
             return;
         }
 
-        // Debug logging
-        console.log('=== FRONTEND LOGIN ATTEMPT ===');
-        console.log('Email:', formData.email);
-        console.log('Password:', formData.password);
-        console.log('Is Login:', isLogin);
-        console.log('==============================');
+        // Login attempt
 
         // Only validate password complexity for signup, not login
         if (!isLogin) {

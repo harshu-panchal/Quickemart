@@ -13,6 +13,7 @@ import {
     clearOnLogout,
     STORAGE_KEYS,
 } from '@core/utils/storage';
+import { isProductionFCMEnvironment } from '@core/firebase/fcmEnvironment';
 
 const AuthContext = createContext(undefined);
 
@@ -230,10 +231,8 @@ export const AuthProvider = ({ children }) => {
             }
 
             // Surface native lock-screen / system notification banner via Service Worker
-            // Never trigger from localhost so notifications strictly show the production domain
-            const isLocal = typeof window !== 'undefined' && 
-                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-            if (!isLocal && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            // Only trigger in production environment so development testing never fires duplicate OS popups
+            if (isProductionFCMEnvironment() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
                 try {
                     const { showSystemNotification } = await import('@core/firebase/pushClient');
                     await showSystemNotification({

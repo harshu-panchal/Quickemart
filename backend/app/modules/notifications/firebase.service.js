@@ -43,6 +43,8 @@ function isWebLink(value = "") {
   return /^https?:\/\//i.test(link);
 }
 
+const DEFAULT_NOTIFICATION_IMAGE = "https://quickemartcom.com/icon-192.png";
+
 function resolveImageUrl(payload = {}, data = {}) {
   const fromData = String(
     data.imageUrl ||
@@ -51,7 +53,10 @@ function resolveImageUrl(payload = {}, data = {}) {
       payload?.image ||
       "",
   ).trim();
-  return isWebLink(fromData) ? fromData : "";
+  if (isWebLink(fromData)) {
+    return fromData;
+  }
+  return DEFAULT_NOTIFICATION_IMAGE;
 }
 
 export async function sendFCM(tokens = [], payload = {}) {
@@ -129,8 +134,8 @@ export async function sendFCM(tokens = [], payload = {}) {
           title,
           body,
           tag,
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
+          icon: image || DEFAULT_NOTIFICATION_IMAGE,
+          badge: DEFAULT_NOTIFICATION_IMAGE,
           requireInteraction: true,
           ...(image ? { image } : {}),
           data: { link: resolvedLink || link, image },
