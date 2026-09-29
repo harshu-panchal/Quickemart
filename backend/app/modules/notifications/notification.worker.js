@@ -93,13 +93,19 @@ export async function deliverNotificationById(notificationId) {
     return;
   }
 
-  const tokens = await PushToken.find({
+  const allTokens = await PushToken.find({
     userId: notification.userId,
     role: notification.role,
     isActive: true,
   })
     .sort({ lastUsedAt: -1 })
     .lean();
+
+  // If the user has a production domain token, exclude development localhost tokens
+  const hasDomainToken = allTokens.some((t) => t.origin && !/localhost|127\.0\.0\.1/i.test(t.origin));
+  const tokens = hasDomainToken
+    ? allTokens.filter((t) => !/localhost|127\.0\.0\.1/i.test(t.origin || ""))
+    : allTokens;
 
   if (!tokens.length) {
     await Notification.updateOne(

@@ -34,6 +34,11 @@ const tokenSchema = new mongoose.Schema(
       enum: ["web", "app"],
       required: true,
     },
+    origin: {
+      type: String,
+      default: "",
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

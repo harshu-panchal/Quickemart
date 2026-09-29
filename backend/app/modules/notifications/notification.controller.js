@@ -146,6 +146,7 @@ export const registerPushToken = async (req, res) => {
     const role = resolveRole(req);
     const token = String(req.body?.token || "").trim();
     const platform = String(req.body?.platform || "web").trim().toLowerCase();
+    const origin = String(req.body?.origin || req.headers.origin || "").trim();
 
     if (!userId || !role) {
       return handleResponse(res, 401, "Unauthorized");
@@ -167,6 +168,7 @@ export const registerPushToken = async (req, res) => {
           userModel,
           token,
           platform,
+          origin,
           isActive: true,
           lastUsedAt: new Date(),
           invalidatedAt: null,
@@ -179,6 +181,26 @@ export const registerPushToken = async (req, res) => {
         setDefaultsOnInsert: true,
       },
     ).lean();
+
+    // If registered from production domain, deactivate any old localhost tokens for this user
+    const isLocalhost = /localhost|127\.0\.0\.1/i.test(origin);
+    if (!isLocalhost && origin) {
+      await PushToken.updateMany(
+        {
+          userId,
+          role,
+          token: { $ne: token },
+          origin: /localhost|127\.0\.0\.1/i,
+        },
+        {
+          $set: {
+            isActive: false,
+            invalidReason: "SUPERSEDED_BY_DOMAIN_TOKEN",
+            invalidatedAt: new Date(),
+          },
+        }
+      ).catch(() => {});
+    }
 
     const bearerToken = resolveBearerToken(req);
     const userModelName = ROLE_TO_USER_MODEL[role];
@@ -511,10 +533,11 @@ export const broadcastNotification = async (req, res) => {
       }
     }
 
-    // Merge any active PushToken holders for target roles
+    // Merge any active PushToken holders for target roles (exclude development localhost tokens)
     const tokenOwners = await PushToken.find({
       role: { $in: targetRoles },
       isActive: true,
+      origin: { $not: /localhost|127\.0\.0\.1/i },
     })
       .select("userId role userModel")
       .lean();

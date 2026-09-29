@@ -196,6 +196,12 @@ async function ensureServiceWorkerRegistration() {
 }
 
 export async function showSystemNotification({ title, body, data } = {}) {
+  // Never show OS-level notification banner from localhost origin
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    console.log("[FCM] Suppressed OS-level notification on localhost to prevent duplicate origin banner");
+    return;
+  }
+
   const safeTitle = String(title || "Notification");
   const safeBody = String(body || "");
   const link = data?.link || "/";
@@ -384,12 +390,25 @@ export async function ensureFcmTokenRegistered({
       console.warn(`[FCM] Warning: no auth token found in storage for role=${normRole}`);
     }
 
+    const isLocalhost = typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    const isProdApi = import.meta.env.VITE_API_URL &&
+      !import.meta.env.VITE_API_URL.includes("localhost") &&
+      !import.meta.env.VITE_API_URL.includes("127.0.0.1");
+
+    if (isLocalhost && isProdApi) {
+      console.log("[FCM] Running on localhost connected to production API — skipping live token registration to ensure notifications only go to live domain");
+      persistStoredFcmToken(normRole, token);
+      return token;
+    }
+
     console.log(`[FCM] Calling /push/register — role=${normRole}, platform=${resolvedPlatform}, hasAuthToken=${!!roleToken}`);
     try {
       await axiosInstance.post("/push/register", {
         token,
         platform: resolvedPlatform,
         device: device || navigator.userAgent,
+        origin: typeof window !== "undefined" ? window.location.origin : "",
       }, {
         headers,
       });

@@ -230,7 +230,10 @@ export const AuthProvider = ({ children }) => {
             }
 
             // Surface native lock-screen / system notification banner via Service Worker
-            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            // Never trigger from localhost so notifications strictly show the production domain
+            const isLocal = typeof window !== 'undefined' && 
+                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+            if (!isLocal && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
                 try {
                     const { showSystemNotification } = await import('@core/firebase/pushClient');
                     await showSystemNotification({
