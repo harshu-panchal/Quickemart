@@ -75,14 +75,14 @@ export default defineConfig({
             id.includes('@mui/material') ||
             id.includes('@mui/icons-material') ||
             id.includes('@emotion/react') ||
-            id.includes('@emotion/styled')
+            id.includes('@emotion/styled') ||
+            id.includes('recharts')
           ) {
-            return 'vendor-mui'
+            return 'vendor-ui'
           }
 
           if (id.includes('framer-motion')) return 'vendor-motion'
           if (id.includes('firebase')) return 'vendor-firebase'
-          if (id.includes('recharts')) return 'vendor-charts'
         },
       },
     },

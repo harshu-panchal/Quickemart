@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { QUICK_CATEGORY_PALETTES } from "../../constants/homeConstants";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 import QuickCategoriesBg from "@/assets/Catagorysection_bg.png";
+import { QuickCategorySliderSkeleton } from "../skeletons";
 
 const QuickCategorySlider = ({ categories, onCategoryClick }) => {
   const scrollRef = useRef(null);
@@ -66,7 +67,9 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
     };
   }, [displayCategories]);
 
-  if (!categories || categories.length === 0) return null;
+  if (!categories || categories.length === 0) {
+    return <QuickCategorySliderSkeleton />;
+  }
 
   return (
     <div className="w-full mb-5 -mt-[24px] md:mt-3 overflow-hidden relative group z-20">

@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import ProductCard from "../shared/ProductCard";
+import { ProductGridSkeleton } from "../skeletons";
+import { usePrefetchedProductFrame } from "../../hooks/usePrefetchedProductFrame";
 
-const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
-  const [visibleCount, setVisibleCount] = useState(12);
-
-  // Reset visibleCount whenever products list changes (e.g. category switch)
-  useEffect(() => {
-    setVisibleCount(12);
-  }, [products]);
+const LowestPriceSection = ({ products = [], isLoading = false, onSeeAll }) => {
+  const {
+    visibleProducts,
+    hasMore,
+    showNextFrame,
+  } = usePrefetchedProductFrame(products, { frameSize: 12, initialCount: 12 });
 
   const handleSeeMore = () => {
-    if (products && visibleCount < products.length) {
-      setVisibleCount((prev) => prev + 12);
+    if (hasMore) {
+      showNextFrame();
     } else if (onSeeAll) {
       onSeeAll();
     }
   };
-
-  const hasMoreLocal = products && visibleCount < products.length;
 
   return (
     <div className="-mt-[40px] mb-4 md:-mt-[40px] md:mb-8">
@@ -42,38 +42,42 @@ const LowestPriceSection = ({ products, isLoading, onSeeAll }) => {
             </div>
           </div>
 
-          <div className="relative z-10 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-6 pb-2 md:pb-4">
-            {isLoading ? (
-              Array.from({ length: 12 }).map((_, idx) => (
-                <div key={idx} className="animate-pulse">
-                  <div className="bg-slate-200/80 rounded-2xl h-44 w-full border border-slate-100" />
-                </div>
-              ))
-            ) : products && products.length > 0 ? (
-              products.slice(0, visibleCount).map((product) => (
-                <div key={product.id} className="smooth-transform">
+          {isLoading ? (
+            <ProductGridSkeleton count={12} compact={true} className="pb-2 md:pb-4" />
+          ) : visibleProducts.length > 0 ? (
+            <div className="relative z-10 grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-6 pb-2 md:pb-4">
+              {visibleProducts.map((product, idx) => (
+                <motion.div
+                  key={product.id || product._id || idx}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.22, delay: (idx % 12) * 0.015 }}
+                  className="smooth-transform"
+                >
                   <ProductCard
                     product={product}
                     className="bg-white shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] md:shadow-[0_15px_30px_rgba(0,0,0,0.05)] border-brand-50/50 md:border-slate-100 transition-all"
                     compact={true}
                   />
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full py-8 text-center text-slate-400 font-bold text-xs md:text-sm tracking-wide">
-                No products found in this category at the moment. Check back soon!
-              </div>
-            )}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-slate-400 font-bold text-xs md:text-sm tracking-wide">
+              No products found in this category at the moment. Check back soon!
+            </div>
+          )}
 
-          {/* See More Button below the 6 product cards */}
-          {products && products.length > 0 && !isLoading && (
+          {/* Instant See More Button */}
+          {products.length > 0 && !isLoading && (
             <div className="flex justify-center mt-2 mb-4 md:mt-4 md:mb-6">
               <button
+                type="button"
                 onClick={handleSeeMore}
-                className="flex items-center gap-1.5 bg-white px-5 py-2 md:px-7 md:py-2.5 rounded-full text-primary font-black text-[12px] md:text-sm cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-lg border border-primary/20 transition-all hover:scale-105 active:scale-95 uppercase tracking-wide">
-                {hasMoreLocal ? "See More" : "See All Products"}
-                {hasMoreLocal ? (
+                className="flex items-center gap-1.5 bg-white px-5 py-2 md:px-7 md:py-2.5 rounded-full text-primary font-black text-[12px] md:text-sm cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-lg border border-primary/20 transition-all hover:scale-105 active:scale-95 uppercase tracking-wide"
+              >
+                {hasMore ? "See More" : "See All Products"}
+                {hasMore ? (
                   <ChevronDown size={14} strokeWidth={3} className="ml-0.5 animate-bounce" />
                 ) : (
                   <ChevronRight size={14} strokeWidth={3} className="ml-0.5" />
