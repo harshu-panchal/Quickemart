@@ -39,6 +39,7 @@ import PromoMarquee from "../components/home/PromoMarquee";
 import QuickCategorySlider from "../components/home/QuickCategorySlider";
 import LowestPriceSection from "../components/home/LowestPriceSection";
 import OfferSections from "../components/home/OfferSections";
+import { HomeLandingSkeleton } from "../components/skeletons";
 
 const DEFAULT_CATEGORY_THEME = {
   gradient: "linear-gradient(to bottom, var(--primary), var(--brand-400))",
@@ -474,7 +475,9 @@ const Home = () => {
         <MainLocationHeader categories={categories} activeCategory={activeCategory} onCategorySelect={setActiveCategory} />
       </div>
 
-      {products.length === 0 && !isLoading ? (
+      {isLoading && products.length === 0 ? (
+        <HomeLandingSkeleton />
+      ) : products.length === 0 && !isLoading ? (
         <div className="flex flex-col items-center justify-center pt-24 pb-48">
           <div className="w-64 h-64 md:w-96 md:h-96 mb-8">{noServiceData && <Lottie animationData={noServiceData} loop={true} />}</div>
           <h3 className="text-3xl md:text-5xl font-black text-slate-800 text-center uppercase">Service <span className="text-primary">Unavailable</span></h3>

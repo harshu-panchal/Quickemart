@@ -8,8 +8,13 @@ import {
   getBackgroundGradientByValue,
 } from "@/shared/constants/offerSectionOptions";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import { OfferSectionSkeleton } from "../skeletons";
 
-const OfferSections = ({ sections, noServiceData }) => {
+const OfferSections = ({ sections = [], isLoading = false, noServiceData }) => {
+  if (isLoading) {
+    return <OfferSectionSkeleton count={4} />;
+  }
+
   if (!sections || sections.length === 0) return null;
 
   return (

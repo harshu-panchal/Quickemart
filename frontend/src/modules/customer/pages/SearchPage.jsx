@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useLocation as useAppLocation } from '../context/LocationContext';
 import { getJSON, setJSON, STORAGE_KEYS } from '@core/utils/storage';
 import Lottie from 'lottie-react';
+import { SearchPageSkeleton } from '../components/skeletons';
 
 const SearchPage = () => {
     const navigate = useNavigate();
@@ -309,7 +310,9 @@ const SearchPage = () => {
 
                 <div className="p-5 space-y-10 pb-24">
                 {/* Search Results List */}
-                {query ? (
+                {isLoading || (query && query !== debouncedQuery) ? (
+                    <SearchPageSkeleton />
+                ) : query ? (
                     <section>
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-slate-800 tracking-tight">

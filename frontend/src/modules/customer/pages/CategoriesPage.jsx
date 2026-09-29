@@ -149,7 +149,24 @@ const CategoriesPage = () => {
         <div className="min-h-screen bg-white">
             <MainLocationHeader />
             <div className="max-w-[1280px] mx-auto px-4 pt-6 md:pt-8 pb-20">
-                {groups.map((group, groupIdx) => (
+                {isLoading ? (
+                    <div className="space-y-10 animate-pulse" aria-hidden="true">
+                        {[1, 2].map((g) => (
+                            <div key={g} className="space-y-4">
+                                <div className="h-7 w-48 rounded-lg ds-skeleton" />
+                                <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-3 gap-y-8">
+                                    {Array.from({ length: 8 }).map((_, i) => (
+                                        <div key={i} className="flex flex-col items-center gap-2">
+                                            <div className="w-full aspect-square rounded-2xl ds-skeleton" />
+                                            <div className="h-3 w-3/4 rounded ds-skeleton" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    groups.map((group, groupIdx) => (
                     <div key={groupIdx} className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${groupIdx * 100}ms` }}>
                         {/* Group Title */}
                         <h2 className="text-xl md:text-2xl font-black text-[#1A1A1A] mb-6 px-1">
@@ -209,7 +226,7 @@ const CategoriesPage = () => {
                             ))}
                         </div>
                     </div>
-                ))}
+                )))}
             </div>
         </div>
     );
