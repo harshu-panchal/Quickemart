@@ -65,17 +65,21 @@ export async function sendFCM(tokens = [], payload = {}) {
 
   const messaging = getMessagingClient();
   const link = payload?.data?.link || "";
-  const data = toStringMap({
-    ...(payload.data || {}),
-    link,
-    click_action: link,
-    clickAction: link,
-  });
   const resolvedLink = isWebLink(link) ? link : "";
   const title = payload.title || "";
   const body = payload.body || payload.message || "";
+  const image = resolveImageUrl(payload, payload.data || {});
+  const data = toStringMap({
+    ...(payload.data || {}),
+    title,
+    body,
+    message: body,
+    link,
+    click_action: link,
+    clickAction: link,
+    ...(image ? { image, imageUrl: image, "attachment-url": image } : {}),
+  });
   const tag = data.orderId || data.eventType || "quick-commerce";
-  const image = resolveImageUrl(payload, data);
   const chunks = chunkArray(tokens, MAX_FCM_MULTICAST_TOKENS);
 
   const merged = {
@@ -94,21 +98,27 @@ export async function sendFCM(tokens = [], payload = {}) {
       },
       data,
       android: {
+        priority: "high",
         notification: {
           sound: ["NEW_ORDER", "NEW_DELIVERY_BROADCAST", "DELIVERY_ASSIGNED", "order"].includes(data.eventType) ? "order_alert" : "default",
           channelId: ["NEW_ORDER", "NEW_DELIVERY_BROADCAST", "DELIVERY_ASSIGNED", "order"].includes(data.eventType) ? "order_alert" : "default",
           clickAction: link,
+          ...(image ? { imageUrl: image } : {}),
         }
       },
       apns: {
         payload: {
           aps: {
             sound: ["NEW_ORDER", "NEW_DELIVERY_BROADCAST", "DELIVERY_ASSIGNED", "order"].includes(data.eventType) ? "order_alert.caf" : "default",
+            "mutable-content": 1,
+            contentAvailable: true,
           },
           link,
           click_action: link,
           clickAction: link,
-        }
+          ...(image ? { image, imageUrl: image } : {}),
+        },
+        fcmOptions: image ? { image } : undefined,
       },
       webpush: {
         headers: {
@@ -119,9 +129,11 @@ export async function sendFCM(tokens = [], payload = {}) {
           title,
           body,
           tag,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
           requireInteraction: true,
           ...(image ? { image } : {}),
-          data: { link: resolvedLink || link },
+          data: { link: resolvedLink || link, image },
         },
         fcmOptions: resolvedLink ? { link: resolvedLink } : undefined,
       },

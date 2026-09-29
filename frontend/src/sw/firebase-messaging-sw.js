@@ -92,6 +92,13 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.apiKey
   });
 
   messaging.onBackgroundMessage((payload) => {
+    // Suppress background notification if running on localhost / 127.0.0.1
+    // to strictly prevent duplicate notification origin banners
+    const hostname = self.location?.hostname || "";
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      console.log("[firebase-messaging-sw] Dropping background notification on localhost");
+      return;
+    }
     const { title, options } = buildNotificationOptions(payload);
     self.registration.showNotification(title, options);
   });
