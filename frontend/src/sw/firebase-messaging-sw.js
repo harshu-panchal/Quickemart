@@ -25,8 +25,8 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-importScripts("https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js");
 
 const firebaseConfig = {
   apiKey: "__VITE_FIREBASE_API_KEY__",

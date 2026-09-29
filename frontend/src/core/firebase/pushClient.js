@@ -9,6 +9,70 @@ let foregroundUnsubscribe = null;
 const GESTURE_EVENTS = ["pointerdown", "touchstart", "click", "keydown"];
 const gestureHandlers = new Map();
 
+let inFlightRegistrations = new Map();
+
+/**
+ * Delete all stale Firebase IndexedDB databases.
+ * Called automatically when an IndexedDB version conflict error is detected.
+ * Unregisters any active service workers first so they don't hold database locks.
+ */
+async function clearFirebaseIndexedDbs() {
+  if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) {
+        await reg.unregister();
+      }
+    } catch (_) {}
+  }
+
+  const knownDbs = new Set([
+    "firebase-messaging-database",
+    "firebase-installations-database",
+    "firebase-heartbeat-database",
+    "fcm_token_details_db",
+    "fcm_vapid_details_db",
+  ]);
+
+  if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
+    try {
+      const list = await indexedDB.databases();
+      for (const db of list) {
+        if (db.name && (db.name.toLowerCase().includes("firebase") || db.name.toLowerCase().includes("fcm"))) {
+          knownDbs.add(db.name);
+        }
+      }
+    } catch (_) {}
+  }
+
+  await Promise.allSettled(
+    Array.from(knownDbs).map(
+      (name) =>
+        new Promise((resolve) => {
+          try {
+            const req = indexedDB.deleteDatabase(name);
+            req.onsuccess = () => {
+              console.log(`[FCM] Deleted IndexedDB: ${name}`);
+              resolve();
+            };
+            req.onerror = () => {
+              console.warn(`[FCM] Could not delete IndexedDB: ${name}`);
+              resolve();
+            };
+            req.onblocked = () => {
+              console.warn(`[FCM] Delete blocked for IndexedDB: ${name}`);
+              resolve();
+            };
+            setTimeout(resolve, 1500);
+          } catch (_) {
+            resolve();
+          }
+        })
+    )
+  );
+}
+
+
 function registeredKey(role = "customer") {
   return `${KEY_PREFIXES.PUSH_REGISTERED}${String(role || "customer").toLowerCase()}`;
 }
@@ -91,8 +155,43 @@ async function ensureServiceWorkerRegistration() {
   const registration = await navigator.serviceWorker.register(swUrl, {
     updateViaCache: "none",
   });
-  await registration.update();
-  await navigator.serviceWorker.ready;
+
+  // Guard update() and ready with timeouts so service worker never hangs registration
+  try {
+    await Promise.race([
+      registration.update(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("SW update timeout")), 3000)),
+    ]);
+  } catch (err) {
+    console.warn("[FCM] SW update non-fatal note:", err?.message || err);
+  }
+
+  try {
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("SW ready timeout")), 4000)),
+    ]);
+  } catch (err) {
+    console.warn("[FCM] SW ready non-fatal note:", err?.message || err);
+  }
+
+  // Ensure the installing/waiting worker actually activates so getToken doesn't stall
+  if (!registration.active) {
+    const candidate = registration.installing || registration.waiting;
+    if (candidate) {
+      await new Promise((resolve) => {
+        const onState = () => {
+          if (candidate.state === "activated" || candidate.state === "redundant") {
+            candidate.removeEventListener("statechange", onState);
+            resolve();
+          }
+        };
+        candidate.addEventListener("statechange", onState);
+        setTimeout(resolve, 3000);
+      });
+    }
+  }
+
   return registration;
 }
 
@@ -170,79 +269,146 @@ export async function showSystemNotification({ title, body, data } = {}) {
 
 export async function ensureFcmTokenRegistered({
   role = "customer",
-  platform = "web",
+  platform,
   device = "",
 } = {}) {
-  const support = describePushSupport();
-  if (!support.supported) {
-    throw new Error(support.message || `Push unsupported: ${support.reason}`);
+  const normRole = String(role || "customer").toLowerCase();
+  if (inFlightRegistrations.has(normRole)) {
+    console.log(`[FCM] Reusing in-flight registration for role=${normRole}`);
+    return inFlightRegistrations.get(normRole);
   }
 
-  if (!window.Flutter) {
-    const supported = await isSupported().catch(() => false);
-    if (!supported) {
-      throw new Error("Firebase Messaging is not supported in this environment");
+  const registrationPromise = (async () => {
+    // Auto-detect platform: Flutter mobile app → 'app', browser → 'web'
+    const resolvedPlatform = platform || (window.Flutter ? "app" : "web");
+    console.log(`[FCM] Starting registration: role=${normRole}, platform=${resolvedPlatform}`);
+
+    const support = describePushSupport();
+    if (!support.supported) {
+      console.warn(`[FCM] Push not supported: ${support.reason} - ${support.message || ""}`);
+      throw new Error(support.message || `Push unsupported: ${support.reason}`);
     }
+
+    if (!window.Flutter) {
+      const supported = await isSupported().catch(() => false);
+      if (!supported) {
+        console.warn("[FCM] Firebase Messaging not supported in this browser");
+        throw new Error("Firebase Messaging is not supported in this environment");
+      }
+    }
+
+    let token = "";
+
+    if (window.Flutter) {
+      console.log("[FCM] Getting token from Flutter native layer...");
+      token = await AppZetoBridge.getFcmToken();
+      if (!token) {
+        throw new Error("Failed to obtain native FCM token from Flutter");
+      }
+      console.log("[FCM] Got Flutter token:", token.substring(0, 20) + "...");
+    } else {
+      const app = getFirebaseApp();
+      if (!app) {
+        console.error("[FCM] Firebase app not initialized — check VITE_FIREBASE_* env vars");
+        throw new Error("Firebase is not configured (missing VITE_FIREBASE_* env)");
+      }
+
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+      if (!vapidKey) {
+        console.error("[FCM] Missing VITE_FIREBASE_VAPID_KEY");
+        throw new Error("Missing VITE_FIREBASE_VAPID_KEY");
+      }
+
+      console.log("[FCM] Requesting notification permission...");
+      const permission = await Notification.requestPermission();
+      console.log("[FCM] Permission result:", permission);
+      if (permission !== "granted") {
+        throw new Error("Notification permission not granted");
+      }
+
+      console.log("[FCM] Registering service worker...");
+      const swRegistration = await ensureServiceWorkerRegistration();
+      console.log("[FCM] Service worker ready, getting FCM token...");
+      const messaging = getMessaging(app);
+
+      const fetchTokenWithTimeout = (reg) => {
+        const tokenPromise = getToken(messaging, { vapidKey, serviceWorkerRegistration: reg });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("FCM getToken timed out after 15 seconds")), 15000)
+        );
+        return Promise.race([tokenPromise, timeoutPromise]);
+      };
+
+      try {
+        token = await fetchTokenWithTimeout(swRegistration);
+      } catch (idbErr) {
+        if (String(idbErr?.message || "").toLowerCase().includes("version")) {
+          console.warn("[FCM] IndexedDB version conflict detected — clearing stale DBs and resetting SW...");
+          await clearFirebaseIndexedDbs();
+          const reloadKey = "fcm:idb_version_recovered";
+          if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(reloadKey)) {
+            sessionStorage.setItem(reloadKey, "1");
+            console.log("[FCM] Reloading page to apply clean IndexedDB state...");
+            window.location.reload();
+            return "";
+          }
+          const freshSwReg = await ensureServiceWorkerRegistration();
+          token = await fetchTokenWithTimeout(freshSwReg);
+        } else {
+          throw idbErr;
+        }
+      }
+
+      if (!token) {
+        throw new Error("Failed to obtain FCM token");
+      }
+      console.log("[FCM] Got browser FCM token:", token.substring(0, 20) + "...");
+    }
+
+    const ROLE_TO_STORAGE_KEY = {
+      seller: STORAGE_KEYS.AUTH_SELLER,
+      admin: STORAGE_KEYS.AUTH_ADMIN,
+      delivery: STORAGE_KEYS.AUTH_DELIVERY,
+      customer: STORAGE_KEYS.AUTH_CUSTOMER,
+    };
+    const { getStoredAuthToken } = await import("@core/utils/authStorage");
+    const storageKey = ROLE_TO_STORAGE_KEY[normRole];
+    let roleToken = storageKey ? getStoredAuthToken(storageKey) : null;
+    if (!roleToken) {
+      roleToken = getStoredAuthToken(STORAGE_KEYS.AUTH_LEGACY) || getStoredAuthToken("token");
+    }
+    const headers = {};
+    if (roleToken) {
+      headers.Authorization = `Bearer ${roleToken}`;
+    } else {
+      console.warn(`[FCM] Warning: no auth token found in storage for role=${normRole}`);
+    }
+
+    console.log(`[FCM] Calling /push/register — role=${normRole}, platform=${resolvedPlatform}, hasAuthToken=${!!roleToken}`);
+    try {
+      await axiosInstance.post("/push/register", {
+        token,
+        platform: resolvedPlatform,
+        device: device || navigator.userAgent,
+      }, {
+        headers,
+      });
+      console.log("[FCM] /push/register SUCCESS — token saved in DB");
+    } catch (apiErr) {
+      console.error("[FCM] /push/register FAILED:", apiErr?.response?.status, apiErr?.response?.data || apiErr.message);
+      throw apiErr;
+    }
+
+    persistStoredFcmToken(normRole, token);
+    return token;
+  })();
+
+  inFlightRegistrations.set(normRole, registrationPromise);
+  try {
+    return await registrationPromise;
+  } finally {
+    inFlightRegistrations.delete(normRole);
   }
-
-  let token = "";
-
-  if (window.Flutter) {
-    // Get token from Flutter native layer
-    token = await AppZetoBridge.getFcmToken();
-    if (!token) {
-      throw new Error("Failed to obtain native FCM token from Flutter");
-    }
-    // Set platform to 'app' to match backend validation (instead of android/ios)
-    platform = "app";
-  } else {
-    const app = getFirebaseApp();
-    if (!app) {
-      throw new Error("Firebase is not configured (missing VITE_FIREBASE_* env)");
-    }
-
-    const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-    if (!vapidKey) {
-      throw new Error("Missing VITE_FIREBASE_VAPID_KEY");
-    }
-
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      throw new Error("Notification permission not granted");
-    }
-
-    const swRegistration = await ensureServiceWorkerRegistration();
-    const messaging = getMessaging(app);
-    token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
-    if (!token) {
-      throw new Error("Failed to obtain FCM token");
-    }
-  }
-
-  const ROLE_TO_STORAGE_KEY = {
-    seller: STORAGE_KEYS.AUTH_SELLER,
-    admin: STORAGE_KEYS.AUTH_ADMIN,
-    delivery: STORAGE_KEYS.AUTH_DELIVERY,
-    customer: STORAGE_KEYS.AUTH_CUSTOMER,
-  };
-  const { getStoredAuthToken } = await import("@core/utils/authStorage");
-  const storageKey = ROLE_TO_STORAGE_KEY[role];
-  const roleToken = storageKey ? getStoredAuthToken(storageKey) : null;
-  const headers = {};
-  if (roleToken) {
-    headers.Authorization = `Bearer ${roleToken}`;
-  }
-
-  await axiosInstance.post("/push/register", {
-    token,
-    platform,
-    device: device || navigator.userAgent,
-  }, {
-    headers,
-  });
-
-  persistStoredFcmToken(role, token);
-  return token;
 }
 
 export function scheduleFcmRegistrationOnUserGesture({
@@ -271,18 +437,24 @@ export function scheduleFcmRegistrationOnUserGesture({
     gestureHandlers.delete(key);
   };
 
+  let isAttempting = false;
   const handler = async () => {
-    remove();
+    if (isAttempting) return;
+    isAttempting = true;
     try {
       const token = await ensureFcmTokenRegistered({ role: key, platform, device });
+      remove();
       if (typeof onSuccess === "function") onSuccess(token);
     } catch (error) {
+      console.warn(`[FCM] Gesture registration attempt failed, will retry on next user interaction:`, error?.message || error);
       if (typeof onError === "function") onError(error);
+    } finally {
+      isAttempting = false;
     }
   };
 
   for (const eventName of GESTURE_EVENTS) {
-    window.addEventListener(eventName, handler, { capture: true, once: true, passive: true });
+    window.addEventListener(eventName, handler, { capture: true, passive: true });
   }
 
   gestureHandlers.set(key, remove);

@@ -75,11 +75,10 @@ export const INVALID_FCM_TOKEN_CODES = new Set([
 
 export function normalizeNotificationRole(role) {
   const value = String(role || "").trim().toLowerCase();
-  if (value === "user") return NOTIFICATION_ROLES.CUSTOMER;
-  if (value === "customer") return NOTIFICATION_ROLES.CUSTOMER;
+  if (value === "user" || value === "customer") return NOTIFICATION_ROLES.CUSTOMER;
   if (value === "seller") return NOTIFICATION_ROLES.SELLER;
-  if (value === "delivery") return NOTIFICATION_ROLES.DELIVERY;
-  if (value === "admin") return NOTIFICATION_ROLES.ADMIN;
+  if (value === "delivery" || value === "driver") return NOTIFICATION_ROLES.DELIVERY;
+  if (value === "admin" || value === "superadmin" || value === "product") return NOTIFICATION_ROLES.ADMIN;
   return null;
 }
 
@@ -87,8 +86,8 @@ export function roleFromRecipientModel(recipientModel) {
   const model = String(recipientModel || "").trim().toLowerCase();
   if (model === "user" || model === "customer") return NOTIFICATION_ROLES.CUSTOMER;
   if (model === "seller") return NOTIFICATION_ROLES.SELLER;
-  if (model === "delivery") return NOTIFICATION_ROLES.DELIVERY;
-  if (model === "admin") return NOTIFICATION_ROLES.ADMIN;
+  if (model === "delivery" || model === "driver") return NOTIFICATION_ROLES.DELIVERY;
+  if (model === "admin" || model === "product") return NOTIFICATION_ROLES.ADMIN;
   return null;
 }
 

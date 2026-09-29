@@ -182,21 +182,17 @@ export const registerPushToken = async (req, res) => {
 
     const bearerToken = resolveBearerToken(req);
     const userModelName = ROLE_TO_USER_MODEL[role];
-    const userDoc = await fetchLoginUser(userModelName, userId);
+    let userDoc = null;
+    try {
+      userDoc = await fetchLoginUser(userModelName, userId);
+    } catch (_) {}
 
-    if (!userDoc) {
-      return handleResponse(res, 404, "User not found");
-    }
-
-    // Client expects a login-like response for this endpoint.
-    // We intentionally return the same token the client used (Bearer token),
-    // and a normalized user object.
     return res.status(200).json({
       success: true,
-      message: "Login successful",
+      message: "Push token registered successfully",
       data: {
         token: bearerToken,
-        user: normalizeLoginUser(userDoc),
+        user: userDoc ? normalizeLoginUser(userDoc) : { id: userId, role },
       },
     });
   } catch (error) {

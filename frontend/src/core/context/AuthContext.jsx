@@ -72,44 +72,86 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
-    // Register FCM token after login (non-blocking).
-    useEffect(() => {
-        if (!token) return;
-        let cancelled = false;
-        let cleanupDeferredRegistration = null;
-
-        // Fire-and-forget; never block auth/profile load.
+    // Helper: register FCM token for a specific role immediately after login/signup.
+    // Called directly with the resolved role so there is no delay waiting for
+    // the activeRoleStore to propagate via useEffect.
+    const triggerFcmRegistration = (role) => {
         setTimeout(() => {
             import('@core/firebase/pushClient')
                 .then(async ({
                     ensureFcmTokenRegistered,
                     hasRegisteredFcmToken,
                     startForegroundPushListener,
-                    scheduleFcmRegistrationOnUserGesture
+                    scheduleFcmRegistrationOnUserGesture,
                 }) => {
-                    if (cancelled) return;
                     await startForegroundPushListener();
-                    if (hasRegisteredFcmToken(currentRole)) return;
+                    if (hasRegisteredFcmToken(role)) return;
 
                     const permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
-                    if (permission === 'granted') {
-                        await ensureFcmTokenRegistered({
-                            role: currentRole,
-                            platform: 'web'
-                        });
-                        return;
+
+                    if (permission === 'granted' || permission === 'default') {
+                        try {
+                            // platform is auto-detected inside ensureFcmTokenRegistered
+                            await ensureFcmTokenRegistered({ role });
+                            return;
+                        } catch (err) {
+                            console.warn('[push] Immediate registration failed, falling back to gesture:', err?.message || err);
+                        }
                     }
 
-                    cleanupDeferredRegistration = scheduleFcmRegistrationOnUserGesture({
-                        role: currentRole,
-                        platform: 'web',
+                    // Denied or immediate attempt failed — wait for next user gesture
+                    scheduleFcmRegistrationOnUserGesture({
+                        role,
                         onError: (error) => {
                             console.warn('[push] Deferred registration failed:', error?.message || error);
                         },
                     });
                 })
                 .catch((error) => {
-                    // Permission denied / unsupported / any error: user can retry later from push-enabled actions.
+                    console.warn('[push] Auto-registration skipped:', error?.message || error);
+                });
+        }, 0);
+    };
+
+    // On page reload: user already has a token in localStorage → re-register FCM
+    // (token may have rotated, or the DB record may have been cleaned up).
+    useEffect(() => {
+        if (!token) return;
+        let cleanupDeferredRegistration = null;
+        let cancelled = false;
+
+        setTimeout(() => {
+            import('@core/firebase/pushClient')
+                .then(async ({
+                    ensureFcmTokenRegistered,
+                    hasRegisteredFcmToken,
+                    startForegroundPushListener,
+                    scheduleFcmRegistrationOnUserGesture,
+                }) => {
+                    if (cancelled) return;
+                    await startForegroundPushListener();
+                    // Skip if already registered in this session
+                    if (hasRegisteredFcmToken(currentRole)) return;
+
+                    const permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+
+                    if (permission === 'granted' || permission === 'default') {
+                        try {
+                            await ensureFcmTokenRegistered({ role: currentRole });
+                            return;
+                        } catch (err) {
+                            console.warn('[push] Page-reload FCM registration failed, waiting for gesture:', err?.message || err);
+                        }
+                    }
+
+                    cleanupDeferredRegistration = scheduleFcmRegistrationOnUserGesture({
+                        role: currentRole,
+                        onError: (error) => {
+                            console.warn('[push] Deferred registration failed:', error?.message || error);
+                        },
+                    });
+                })
+                .catch((error) => {
                     console.warn('[push] Auto-registration skipped:', error?.message || error);
                 });
         }, 0);
@@ -121,6 +163,7 @@ export const AuthProvider = ({ children }) => {
             }
         };
     }, [token, currentRole]);
+
 
     // Fetch user profile on mount or token change
     useEffect(() => {
@@ -241,6 +284,16 @@ export const AuthProvider = ({ children }) => {
                 [rawRole]: userData.token
             }));
             setUser(userData); // Set full data initially
+
+            // Clear any stale FCM session-registration marker so the fresh
+            // login always triggers a real /push/register call, even if the
+            // user logged in before during the same browser session.
+            rawRemove(`push:registered:${role}`, { storage: 'session' });
+
+            // Trigger FCM token registration immediately with the correct resolved role.
+            // This avoids the activeRoleStore propagation delay that caused the
+            // /push/register API to be skipped on the live platform.
+            triggerFcmRegistration(role);
         } else {
             console.error('Invalid role or missing token for login:', rawRole);
         }
