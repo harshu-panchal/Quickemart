@@ -94,4 +94,9 @@ router.get("/earnings", verifyToken, allowRoles("seller"), getSellerEarnings);
 router.get("/wallet/summary", verifyToken, allowRoles("seller"), getSellerWalletSummaryController);
 router.post("/request-withdrawal", verifyToken, allowRoles("seller"), requestWithdrawal);
 
+import { handleLogoutActivity } from "../controller/adminActivityController.js";
+
+// Logout activity route
+router.post("/logout", verifyToken, handleLogoutActivity);
+
 export default router;

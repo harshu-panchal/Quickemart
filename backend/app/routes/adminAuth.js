@@ -56,6 +56,12 @@ import {
 
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 import {
+    getActivities,
+    getActivityStats,
+    getUserActivityTimeline,
+    handleLogoutActivity,
+} from "../controller/adminActivityController.js";
+import {
     adminBootstrapRateLimiter,
     authRouteRateLimiter,
     createContentLengthGuard,
@@ -105,6 +111,34 @@ router.get(
     verifyToken,
     allowRoles("admin"),
     getAdminStats
+);
+
+// User Activity Monitoring routes (static sub-routes first)
+router.get(
+    "/user-activities/stats",
+    verifyToken,
+    allowRoles("admin"),
+    getActivityStats
+);
+
+router.get(
+    "/user-activities/user/:userIdentifier",
+    verifyToken,
+    allowRoles("admin"),
+    getUserActivityTimeline
+);
+
+router.get(
+    "/user-activities",
+    verifyToken,
+    allowRoles("admin"),
+    getActivities
+);
+
+router.post(
+    "/logout",
+    verifyToken,
+    handleLogoutActivity
 );
 router.get(
     "/finance/summary",

@@ -1,4 +1,5 @@
 import React from 'react';
+import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 
 const stories = [
     { id: 1, title: 'Big Savings', image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?q=80&w=150&auto=format&fit=crop', color: 'border-orange-500' },
@@ -20,7 +21,7 @@ const CategoryStories = () => {
                         <div key={story.id} className="flex flex-col items-center gap-2 flex-shrink-0 cursor-pointer group snap-start">
                             <div className={`p-1 rounded-full border-2 ${story.color} transition-transform duration-300 group-hover:scale-110 group-active:scale-95`}>
                                 <div className="h-16 w-16 md:h-20 md:w-20 rounded-full overflow-hidden border-2 border-white shadow-md">
-                                    <img src={story.image} alt={story.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                    <img src={applyCloudinaryTransform(story.image)} alt={story.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                 </div>
                             </div>
                             <span className="text-[10px] md:text-xs font-black text-slate-700 tracking-tight uppercase group-hover:text-primary transition-colors">{story.title}</span>

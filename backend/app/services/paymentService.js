@@ -19,6 +19,7 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import logger from "./logger.js";
 import { getActivePaymentProvider } from "./payment/providerRegistry.js";
+import { logActivity } from "./userActivityService.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 
@@ -373,6 +374,22 @@ async function handleOrderSideEffectsFromPaymentStatus(payment, nextStatus, reas
         },
       });
       await moveOrderToSellerPendingAfterPayment(order._id);
+
+      logActivity({
+        userId: order.customer,
+        role: "customer",
+        action: "ORDER_PURCHASED",
+        category: "ORDER",
+        severity: "INFO",
+        description: `Payment successful for Order #${order.orderId} (Trans ID: ${payment.gatewayPaymentId || payment.gatewayOrderId || 'N/A'}) Amount: ₹${order.pricing?.total || payment.amount || 0}`,
+        metadata: {
+          orderId: order._id,
+          publicOrderId: order.orderId,
+          transactionId: payment.gatewayPaymentId || payment.gatewayOrderId,
+          gatewayOrderId: payment.gatewayOrderId,
+          amount: order.pricing?.total || payment.amount,
+        },
+      });
       emitNotificationEvent(NOTIFICATION_EVENTS.PAYMENT_SUCCESS, {
         orderId: order.orderId,
         checkoutGroupId: payment.checkoutGroupId,

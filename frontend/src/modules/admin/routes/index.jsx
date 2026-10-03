@@ -24,7 +24,10 @@ import {
   User,
   Store,
   ShieldCheck,
+  Activity,
 } from "lucide-react";
+
+const UserActivity = React.lazy(() => import("../pages/UserActivity"));
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
 const CategoryManagement = React.lazy(
@@ -185,6 +188,7 @@ const navItems = [
     color: "green",
   },
   { label: "Customers", path: "/admin/customers", icon: Users, color: "sky" },
+  { label: "User Activity", path: "/admin/user-activity", icon: Activity, color: "indigo" },
   { label: "FAQs", path: "/admin/faqs", icon: HelpCircle, color: "pink" },
   {
     label: "Orders",
@@ -293,6 +297,7 @@ const AdminRoutes = () => {
         <Route path="/cash-collection" element={<CashCollection />} />
         <Route path="/customers" element={<CustomerManagement />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
+        <Route path="/user-activity" element={<UserActivity />} />
         <Route path="/faqs" element={<FAQManagement />} />
         <Route path="/orders/:status" element={<OrdersList />} />
         <Route path="/orders/view/:orderId" element={<OrderDetail />} />

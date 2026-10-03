@@ -13,6 +13,7 @@ import getPagination from "../utils/pagination.js";
 import Admin from "../models/admin.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { logActivity } from "../services/userActivityService.js";
 
 async function getAdminIds() {
   const admins = await Admin.find().select("_id").lean();
@@ -1831,6 +1832,15 @@ export const getModerationProducts = async (req, res) => {
           { sku: safe },
         ];
       }
+
+      logActivity({
+        req,
+        action: "PRODUCT_SEARCH",
+        category: "SEARCH",
+        severity: "INFO",
+        description: `Searched for: "${term}"`,
+        metadata: { query: term },
+      });
     }
 
     const effectiveStockExpr = {

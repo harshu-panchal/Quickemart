@@ -2,6 +2,7 @@ import Wishlist from "../models/wishlist.js";
 import Product from "../models/product.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
+import { logActivity } from "../services/userActivityService.js";
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",
@@ -20,7 +21,7 @@ async function findCustomerVisibleProductById(productId) {
     _id: productId,
     ...CUSTOMER_VISIBLE_PRODUCT_MATCH,
   })
-    .select("_id")
+    .select("_id name price salePrice")
     .lean();
 }
 
@@ -47,7 +48,6 @@ export const getWishlist = async (req, res) => {
     let query = Wishlist.findOne({ customerId });
 
     if (idsOnly === "true") {
-      // Only select the products array (which contains IDs)
       const wishlist = await query.select("products").lean();
       const rawIds = Array.isArray(wishlist?.products) ? wishlist.products : [];
       const visibleProducts = await Product.find({
@@ -111,6 +111,17 @@ export const addToWishlist = async (req, res) => {
     await wishlist.save();
     const updatedWishlist = await fetchPopulatedWishlist(wishlist._id);
 
+    logActivity({
+      req,
+      userId: customerId,
+      role: "customer",
+      action: "WISHLIST_ADD",
+      category: "WISHLIST",
+      severity: "INFO",
+      description: `Added "${product.name || 'Product'}" to wishlist`,
+      metadata: { productId, productName: product.name, price: product.salePrice || product.price },
+    });
+
     return handleResponse(
       res,
       200,
@@ -143,6 +154,17 @@ export const removeFromWishlist = async (req, res) => {
     await wishlist.save();
     const updatedWishlist = await fetchPopulatedWishlist(wishlist._id);
 
+    logActivity({
+      req,
+      userId: customerId,
+      role: "customer",
+      action: "WISHLIST_REMOVE",
+      category: "WISHLIST",
+      severity: "INFO",
+      description: `Removed item (ID: ${productId}) from wishlist`,
+      metadata: { productId },
+    });
+
     return handleResponse(
       res,
       200,
@@ -171,6 +193,7 @@ export const toggleWishlist = async (req, res) => {
 
     const index = wishlist.products.indexOf(productId);
     let message = "";
+    let isAdded = false;
 
     if (index > -1) {
       wishlist.products.splice(index, 1);
@@ -181,10 +204,24 @@ export const toggleWishlist = async (req, res) => {
       }
       wishlist.products.push(productId);
       message = "Product added to wishlist";
+      isAdded = true;
     }
 
     await wishlist.save();
     const updatedWishlist = await fetchPopulatedWishlist(wishlist._id);
+
+    logActivity({
+      req,
+      userId: customerId,
+      role: "customer",
+      action: isAdded ? "WISHLIST_ADD" : "WISHLIST_REMOVE",
+      category: "WISHLIST",
+      severity: "INFO",
+      description: isAdded
+        ? `Added "${product?.name || 'Product'}" to wishlist`
+        : `Removed item from wishlist`,
+      metadata: { productId, productName: product?.name },
+    });
 
     return handleResponse(res, 200, message, updatedWishlist);
   } catch (error) {

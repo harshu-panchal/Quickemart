@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
+import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 
 const categories = [
     { id: 1, name: 'Fruits', image: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=200&auto=format&fit=crop', color: 'bg-red-50' },
@@ -34,7 +35,7 @@ const Categories = () => {
                         >
                             <div className={`h-36 w-36 rounded-full ${category.color} p-4 flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl border border-slate-100`}>
                                 <img
-                                    src={category.image}
+                                    src={applyCloudinaryTransform(category.image)}
                                     alt={category.name}
                                     className="w-full h-full object-contain drop-shadow-sm mix-blend-multiply"
                                 />

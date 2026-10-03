@@ -5,7 +5,7 @@ import getPagination from "../../utils/pagination.js";
 
 export const getDeliveryPartners = async (req, res) => {
   try {
-    const { status, verified } = req.query;
+    const { status, verified, search } = req.query;
     const query = {};
 
     if (status === "online") {
@@ -18,6 +18,11 @@ export const getDeliveryPartners = async (req, res) => {
       query.isVerified = true;
     } else if (verified === "false") {
       query.isVerified = false;
+    }
+
+    if (search && String(search).trim()) {
+      const regex = new RegExp(String(search).trim(), "i");
+      query.$or = [{ name: regex }, { phone: regex }, { vehicleNumber: regex }, { currentArea: regex }];
     }
 
     const { page, limit, skip } = getPagination(req, {
@@ -34,8 +39,93 @@ export const getDeliveryPartners = async (req, res) => {
       Delivery.countDocuments(query),
     ]);
 
+    const partnerIds = deliveryPartners.map((d) => d._id);
+
+    // Aggregate delivered order counts & today earnings per rider
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const [completedCounts, todayEarnings] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: {
+            $or: [
+              { deliveryBoy: { $in: partnerIds } },
+              { deliveryPartner: { $in: partnerIds } },
+            ],
+            $or: [
+              { status: "delivered" },
+              { orderStatus: "delivered" },
+              { workflowStatus: "DELIVERED" },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: { $ifNull: ["$deliveryBoy", "$deliveryPartner"] },
+            totalDelivered: { $sum: 1 },
+          },
+        },
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            $or: [
+              { deliveryBoy: { $in: partnerIds } },
+              { deliveryPartner: { $in: partnerIds } },
+            ],
+            $or: [
+              { status: "delivered" },
+              { orderStatus: "delivered" },
+              { workflowStatus: "DELIVERED" },
+            ],
+            updatedAt: { $gte: startOfToday },
+          },
+        },
+        {
+          $group: {
+            _id: { $ifNull: ["$deliveryBoy", "$deliveryPartner"] },
+            earnings: {
+              $sum: {
+                $add: [
+                  { $ifNull: ["$paymentBreakdown.riderPayoutTotal", 0] },
+                  { $ifNull: ["$paymentBreakdown.riderTipAmount", 0] },
+                  { $ifNull: ["$pricing.deliveryFee", 0] },
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const countsMap = new Map();
+    completedCounts.forEach((item) => {
+      if (item._id) countsMap.set(String(item._id), item.totalDelivered);
+    });
+
+    const earningsMap = new Map();
+    todayEarnings.forEach((item) => {
+      if (item._id) earningsMap.set(String(item._id), item.earnings);
+    });
+
+    const enrichedItems = deliveryPartners.map((partner) => {
+      const riderIdStr = String(partner._id);
+      const totalDelivered = countsMap.get(riderIdStr) || 0;
+      const todayEarningsVal = earningsMap.get(riderIdStr) || 0;
+
+      return {
+        ...partner,
+        totalOrders: totalDelivered,
+        completedOrders: totalDelivered,
+        deliveredOrders: totalDelivered,
+        totalDelivered,
+        todayEarnings: todayEarningsVal,
+      };
+    });
+
     return handleResponse(res, 200, "Delivery partners fetched successfully", {
-      items: deliveryPartners,
+      items: enrichedItems,
       page,
       limit,
       total,

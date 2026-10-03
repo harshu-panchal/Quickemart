@@ -53,6 +53,12 @@ export function resolveApiBaseUrl() {
     browserHostname === "127.0.0.1" ||
     browserHostname === "[::1]";
 
+  // When developing on localhost, route API requests to the local backend server (port 7000)
+  // unless explicitly forced to use remote production API via VITE_FORCE_REMOTE_API=true.
+  if (isCurrentLocal && import.meta.env.VITE_FORCE_REMOTE_API !== "true") {
+    return buildLocalApiUrl(browserHostname || "localhost");
+  }
+
   // If we are running on a remote live site (or remote dev network IP), but the envUrl
   // points to localhost/127.0.0.1, we ignore the local envUrl and use the current page's origin.
   const shouldIgnoreLocalEnv = !isCurrentLocal && envUrl && isLocalUrl(envUrl);

@@ -306,6 +306,12 @@ export const AuthProvider = ({ children }) => {
         const previousUserId = user?._id || user?.id || '';
 
         try {
+            await axiosInstance.post(`/${currentRole}/logout`);
+        } catch (logoutError) {
+            console.warn('Backend logout notification skipped:', logoutError?.message);
+        }
+
+        try {
             const { removeStoredFcmToken } = await import('@core/firebase/pushClient');
             await removeStoredFcmToken({ role: currentRole });
         } catch (error) {

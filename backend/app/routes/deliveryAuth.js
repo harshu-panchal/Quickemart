@@ -57,4 +57,9 @@ router.post("/location", verifyToken, updateDeliveryLocation);
 // single source of truth (see backend/app/services/orderWorkflowService.js
 // requestHandoffOtpAtomic / verifyHandoffOtpAndDeliver).
 
+import { handleLogoutActivity } from "../controller/adminActivityController.js";
+
+// Logout activity route
+router.post("/logout", verifyToken, handleLogoutActivity);
+
 export default router;

@@ -5,21 +5,34 @@ const CLOUDINARY_UPLOAD_SEGMENT_REGEX = /\/upload\/([^/]+)\//i;
 
 export function resolveImageUrl(url) {
   if (!url || typeof url !== "string") return url;
+  if (url.startsWith("data:") || url.startsWith("blob:")) return url;
   if (CLOUDINARY_REGEX.test(url)) return url;
 
-  let apiBase;
-  try {
-    apiBase = resolveApiBaseUrl().replace(/\/api$/, "");
-  } catch {
-    return url;
-  }
-  if (!apiBase) return url;
+  // Primary base URL for images (production host where static uploads reside)
+  const envApiUrl = import.meta.env.VITE_API_URL || "https://quickemartcom.com/api";
+  const productionBase = envApiUrl.replace(/\/+$/, "").replace(/\/api$/, "");
+  const imageBase = `${productionBase}/api`; // https://quickemartcom.com/api
 
-  // If the URL contains /uploads/, extract the relative path starting from /uploads/
-  // and prepend the active backend base URL with the /api prefix.
-  const idx = url.indexOf("/uploads/");
-  if (idx !== -1) {
-    return `${apiBase}/api${url.substring(idx)}`;
+  // 1. If URL starts with http://localhost:7000 or http://127.0.0.1:7000, convert it to production imageBase
+  if (url.includes("localhost:7000") || url.includes("127.0.0.1:7000")) {
+    const uploadsIdx = url.indexOf("uploads/");
+    if (uploadsIdx !== -1) {
+      const subPath = url.substring(uploadsIdx + "uploads/".length);
+      return `${imageBase}/uploads/${subPath}`;
+    }
+  }
+
+  // 2. If url contains "uploads/" (whether relative or absolute)
+  const uploadsIdx = url.indexOf("uploads/");
+  if (uploadsIdx !== -1) {
+    const subPath = url.substring(uploadsIdx + "uploads/".length);
+    return `${imageBase}/uploads/${subPath}`;
+  }
+
+  // 3. If relative path (does not start with http:// or https://)
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    const cleanPath = url.startsWith("/") ? url.slice(1) : url;
+    return `${imageBase}/uploads/${cleanPath}`;
   }
 
   return url;

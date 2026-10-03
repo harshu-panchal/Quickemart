@@ -46,6 +46,7 @@ import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import * as logger from "./logger.js";
+import { logActivity } from "./userActivityService.js";
 
 const IDEMPOTENCY_RECORD_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -572,6 +573,22 @@ export async function placeOrderAtomic({
       freezeFinancialSnapshot(order, entry.breakdown);
       await order.save({ session });
       orders.push(order);
+
+      logActivity({
+        userId: ownerId,
+        role: "customer",
+        action: "ORDER_PLACED",
+        category: "ORDER",
+        severity: "INFO",
+        description: `Placed order #${order.orderId} (${order.items.length} items) for ₹${order.pricing?.total || 0}`,
+        metadata: {
+          orderId: order._id,
+          publicOrderId: order.orderId,
+          paymentMode: order.paymentMode,
+          totalAmount: order.pricing?.total || 0,
+          itemsCount: order.items.length,
+        },
+      });
     }
 
     checkoutGroup.orderIds = orders.map((order) => order._id);

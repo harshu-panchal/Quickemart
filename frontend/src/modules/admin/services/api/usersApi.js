@@ -26,6 +26,13 @@ export const adminUsersApi = {
         axiosInstance.post('/admin/sellers/create', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
+
+    getUserActivities: (params) =>
+        axiosInstance.get('/admin/user-activities', { params }),
+    getUserActivityStats: () =>
+        axiosInstance.get('/admin/user-activities/stats'),
+    getUserTimeline: (userIdentifier, params) =>
+        axiosInstance.get(`/admin/user-activities/user/${userIdentifier}`, { params }),
 };
 
 export default adminUsersApi;

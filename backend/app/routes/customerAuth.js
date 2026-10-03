@@ -41,4 +41,9 @@ router.get("/transactions", verifyToken, getCustomerTransactions);
 // Order-for-someone-else recipient lookup
 router.get("/lookup-by-phone", verifyToken, customerLookupRateLimiter, lookupCustomerByPhone);
 
+import { handleLogoutActivity } from "../controller/adminActivityController.js";
+
+// Logout activity route
+router.post("/logout", verifyToken, handleLogoutActivity);
+
 export default router;

@@ -115,26 +115,61 @@ export const signupAdmin = async (req, res) => {
   }
 };
 
+import { logActivity } from "../services/userActivityService.js";
+
 export const loginAdmin = async (req, res) => {
   try {
     const payload = validateSchema(loginAdminSchema, req.body || {});
 
     const admin = await Admin.findOne({ email: payload.email }).select("+password");
     if (!admin) {
+      logActivity({
+        action: "ADMIN_LOGIN_FAILED",
+        category: "AUTH",
+        severity: "WARNING",
+        description: `Failed admin login attempt for ${payload.email}`,
+        req,
+      });
       return handleResponse(res, 401, "Invalid credentials");
     }
 
     if (admin.isActive === false) {
+      logActivity({
+        action: "ADMIN_LOGIN_BLOCKED",
+        category: "SECURITY",
+        severity: "WARNING",
+        description: `Deactivated admin ${payload.email} attempted login`,
+        req,
+      });
       return handleResponse(res, 403, "Your account has been deactivated. Please contact Administrator.");
     }
 
     const isMatch = await admin.comparePassword(payload.password);
     if (!isMatch) {
+      logActivity({
+        action: "ADMIN_LOGIN_FAILED",
+        category: "AUTH",
+        severity: "WARNING",
+        description: `Failed admin password check for ${payload.email}`,
+        req,
+      });
       return handleResponse(res, 401, "Invalid credentials");
     }
 
     admin.lastLogin = new Date();
     await admin.save();
+
+    logActivity({
+      userId: admin._id,
+      userModel: "Admin",
+      userName: admin.name,
+      role: admin.role || "admin",
+      action: "ADMIN_LOGIN_SUCCESS",
+      category: "AUTH",
+      severity: "INFO",
+      description: `Admin ${admin.name} logged in successfully`,
+      req,
+    });
 
     const token = generateToken(admin);
     return handleResponse(res, 200, "Login successful", {
