@@ -142,18 +142,50 @@ const Orders = () => {
             }));
 
             setOrders(formattedOrders);
-            setSummary({
-                totalOrders: Number(payload.summary?.totalOrders || payload.total || formattedOrders.length || 0),
-                totalAmount: Number(payload.summary?.totalAmount || 0),
-                pending: Number(payload.summary?.pending || 0),
-                confirmed: Number(payload.summary?.confirmed || 0),
-                packed: Number(payload.summary?.packed || 0),
-                outForDelivery: Number(payload.summary?.outForDelivery || 0),
-                delivered: Number(payload.summary?.delivered || 0),
-                cancelled: Number(payload.summary?.cancelled || 0),
-                returned: Number(payload.summary?.returned || 0),
-                activeOrders: Number(payload.summary?.activeOrders || 0),
-            });
+
+            const backendSummary = payload.summary;
+            const hasValidSummary = backendSummary && (
+                backendSummary.totalOrders > 0 ||
+                backendSummary.pending > 0 ||
+                backendSummary.confirmed > 0 ||
+                backendSummary.delivered > 0
+            );
+
+            if (hasValidSummary) {
+                setSummary({
+                    totalOrders: Number(backendSummary.totalOrders || payload.total || formattedOrders.length || 0),
+                    totalAmount: Number(backendSummary.totalAmount || 0),
+                    pending: Number(backendSummary.pending || 0),
+                    confirmed: Number(backendSummary.confirmed || 0),
+                    packed: Number(backendSummary.packed || 0),
+                    outForDelivery: Number(backendSummary.outForDelivery || 0),
+                    delivered: Number(backendSummary.delivered || 0),
+                    cancelled: Number(backendSummary.cancelled || 0),
+                    returned: Number(backendSummary.returned || 0),
+                    activeOrders: Number(backendSummary.activeOrders || 0),
+                });
+            } else {
+                const pendingCount = formattedOrders.filter(o => o.status === 'pending').length;
+                const confirmedCount = formattedOrders.filter(o => o.status === 'confirmed').length;
+                const packedCount = formattedOrders.filter(o => o.status === 'packed').length;
+                const outForDeliveryCount = formattedOrders.filter(o => o.status === 'out_for_delivery').length;
+                const deliveredCount = formattedOrders.filter(o => o.status === 'delivered').length;
+                const cancelledCount = formattedOrders.filter(o => o.status === 'cancelled').length;
+
+                setSummary({
+                    totalOrders: Number(payload.total || formattedOrders.length || 0),
+                    totalAmount: formattedOrders.reduce((sum, o) => sum + (o.total || 0), 0),
+                    pending: pendingCount,
+                    confirmed: confirmedCount,
+                    packed: packedCount,
+                    outForDelivery: outForDeliveryCount,
+                    delivered: deliveredCount,
+                    cancelled: cancelledCount,
+                    returned: 0,
+                    activeOrders: pendingCount + confirmedCount + packedCount + outForDeliveryCount,
+                });
+            }
+
             if (typeof payload.total === 'number') {
                 setTotal(payload.total);
             } else {

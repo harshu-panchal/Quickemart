@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 import Order from "../models/order.js";
 import OrderOtp from "../models/orderOtp.js";
 import Delivery from "../models/delivery.js";
@@ -80,7 +80,14 @@ export function buildSellerOrdersQuery({
   startDate,
   endDate,
 }) {
-  const base = role === "admin" ? {} : { seller: userId };
+  let sellerObj = undefined;
+  if (role !== "admin" && userId) {
+    sellerObj = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+  }
+
+  const base = sellerObj ? { seller: sellerObj } : {};
   const withStatus = {
     ...base,
     ...normalizeSellerStatusFilter(statusParam),
@@ -105,6 +112,14 @@ export async function fetchSellerOrdersPage({
     endDate,
   });
 
+  const summaryQuery = buildSellerOrdersQuery({
+    role,
+    userId,
+    statusParam: "all",
+    startDate,
+    endDate,
+  });
+
   const [orders, total, summaryRows] = await Promise.all([
     Order.find(query)
       .sort({ createdAt: -1, _id: -1 })
@@ -117,29 +132,105 @@ export async function fetchSellerOrdersPage({
       .lean(),
     Order.countDocuments(query),
     Order.aggregate([
-      { $match: query },
+      { $match: summaryQuery },
       {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
           totalAmount: { $sum: { $ifNull: ["$pricing.total", 0] } },
           pending: {
-            $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] },
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "pending"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$orderStatus", ""] } }, "pending"] },
+                    { $eq: ["$workflowStatus", "CREATED"] },
+                    { $eq: ["$workflowStatus", "SELLER_PENDING"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
           confirmed: {
-            $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] },
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "confirmed"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$orderStatus", ""] } }, "confirmed"] },
+                    { $eq: ["$workflowStatus", "SELLER_ACCEPTED"] },
+                    { $eq: ["$workflowStatus", "DELIVERY_SEARCH"] },
+                    { $eq: ["$workflowStatus", "DELIVERY_ASSIGNED"] },
+                    { $eq: ["$workflowStatus", "PICKUP_READY"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
           packed: {
-            $sum: { $cond: [{ $eq: ["$status", "packed"] }, 1, 0] },
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "packed"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$orderStatus", ""] } }, "packed"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
           outForDelivery: {
-            $sum: { $cond: [{ $eq: ["$status", "out_for_delivery"] }, 1, 0] },
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "out_for_delivery"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$orderStatus", ""] } }, "out_for_delivery"] },
+                    { $eq: ["$workflowStatus", "OUT_FOR_DELIVERY"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
           delivered: {
-            $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] },
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "delivered"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$orderStatus", ""] } }, "delivered"] },
+                    { $eq: ["$workflowStatus", "DELIVERED"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
           cancelled: {
-            $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] },
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "cancelled"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "canceled"] },
+                    { $eq: [{ $toLower: { $ifNull: ["$orderStatus", ""] } }, "cancelled"] },
+                    { $eq: ["$workflowStatus", "CANCELLED"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
           returned: {
             $sum: {
