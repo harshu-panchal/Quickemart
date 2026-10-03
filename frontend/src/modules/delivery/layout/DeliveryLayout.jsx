@@ -132,6 +132,19 @@ const DeliveryLayout = () => {
     [location.pathname],
   );
 
+  /**
+   * Extract the canonical orderId from the active delivery route so the
+   * background location heartbeat can include it in the POST body.
+   * The backend only emits socket + Firebase per-order writes when orderId
+   * is present — without it the customer map never updates.
+   */
+  const activeDeliveryOrderId = useMemo(() => {
+    const match = location.pathname.match(
+      /\/delivery\/(order-details|navigation|confirm-delivery)\/([^/]+)/
+    );
+    return match?.[2] || null;
+  }, [location.pathname]);
+
   useEffect(() => {
     loadHandledIncomingOrderIds().forEach((id) => shownOrderIdsRef.current.add(id));
   }, []);
@@ -307,6 +320,13 @@ const DeliveryLayout = () => {
     }
   }, []);
 
+  // Keep a ref so the watchPosition callback (which closes over the initial
+  // value) always sees the latest orderId without re-registering the watcher.
+  const activeDeliveryOrderIdRef = useRef(activeDeliveryOrderId);
+  useEffect(() => {
+    activeDeliveryOrderIdRef.current = activeDeliveryOrderId;
+  }, [activeDeliveryOrderId]);
+
   const postLocationOnce = useCallback(async (lat, lng) => {
     if (locationRequestRef.current.inFlight) return;
     locationRequestRef.current.inFlight = true;
@@ -319,8 +339,12 @@ const DeliveryLayout = () => {
 
     try {
       saveDeliveryPartnerLocation(lat, lng);
+      // Include the active orderId so the backend can emit the socket event
+      // and write to the per-order Firebase path — both channels the customer
+      // map listens to. Without this, location updates are silently dropped.
+      const currentOrderId = activeDeliveryOrderIdRef.current;
       await deliveryApi.postLocation(
-        { lat, lng },
+        { lat, lng, ...(currentOrderId ? { orderId: currentOrderId } : {}) },
         { signal: controller.signal, timeout: 10000 },
       );
     } catch {

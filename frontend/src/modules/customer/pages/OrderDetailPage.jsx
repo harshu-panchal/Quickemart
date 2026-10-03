@@ -393,6 +393,13 @@ const OrderDetailPage = () => {
     const getToken = createSocketTokenReader(STORAGE_KEYS.AUTH_CUSTOMER);
     const offSocketLocation = onDeliveryLocationUpdate(getToken, (loc) => {
       console.log(`[OrderDetailPage] Location update via socket:`, loc);
+      // Guard: only apply updates that belong to this order.
+      // Without this, a location event from a different order could
+      // overwrite the map position.
+      if (loc?.orderId && !matchesOrderIdentifier(loc.orderId, identifiersRef.current)) {
+        console.warn(`[OrderDetailPage] Ignoring socket location for mismatched order:`, loc.orderId);
+        return;
+      }
       setLiveLocation(loc);
     });
     return () => {
@@ -407,31 +414,43 @@ const OrderDetailPage = () => {
   // _id, so subscribing on the raw URL produces zero updates for those
   // surfaces. We re-pin the subscriptions whenever the resolved canonical
   // id changes (i.e. once the order has loaded).
+  //
+  // However, we also subscribe on the raw URL orderId immediately so that
+  // location updates that arrive during the initial API load are not missed.
+  // Both subscriptions are active when they differ; the `publishIfBetter`
+  // scoring in trackingClient deduplicates them.
   useEffect(() => {
-    const trackingId = canonicalOrderId;
-    if (!trackingId) return;
+    // Start with the raw URL param immediately so we don't miss early pings.
+    const trackingIds = new Set([orderId].filter(Boolean));
+    if (canonicalOrderId && canonicalOrderId !== orderId) {
+      trackingIds.add(canonicalOrderId);
+    }
+    if (trackingIds.size === 0) return;
 
-    console.log(`[OrderDetailPage] Setting up Firebase subscriptions for order ${trackingId}`);
-    const offLocation = subscribeToOrderLocation(trackingId, (loc) => {
-      console.log(`[OrderDetailPage] Location update:`, loc);
-      setLiveLocation(loc);
-    });
-    const offTrail = subscribeToOrderTrail(trackingId, (t) => {
-      console.log(`[OrderDetailPage] Trail update: ${t.length} points`);
-      setTrail(t);
-    });
-    const offRoute = subscribeToOrderRoute(trackingId, (route) => {
-      console.log(`[OrderDetailPage] Route update:`, route);
-      setRoutePolyline(route);
-    });
+    console.log(`[OrderDetailPage] Setting up Firebase subscriptions for orders:`, [...trackingIds]);
+    const unsubscribers = [];
+
+    for (const trackingId of trackingIds) {
+      const offLocation = subscribeToOrderLocation(trackingId, (loc) => {
+        console.log(`[OrderDetailPage] Location update (Firebase, ${trackingId}):`, loc);
+        setLiveLocation(loc);
+      });
+      const offTrail = subscribeToOrderTrail(trackingId, (t) => {
+        console.log(`[OrderDetailPage] Trail update: ${t.length} points`);
+        setTrail(t);
+      });
+      const offRoute = subscribeToOrderRoute(trackingId, (route) => {
+        console.log(`[OrderDetailPage] Route update:`, route);
+        setRoutePolyline(route);
+      });
+      unsubscribers.push(offLocation, offTrail, offRoute);
+    }
 
     return () => {
-      console.log(`[OrderDetailPage] Cleaning up Firebase subscriptions for order ${trackingId}`);
-      offLocation && offLocation();
-      offTrail && offTrail();
-      offRoute && offRoute();
+      console.log(`[OrderDetailPage] Cleaning up Firebase subscriptions for orders:`, [...trackingIds]);
+      unsubscribers.forEach((off) => off && off());
     };
-  }, [canonicalOrderId]);
+  }, [orderId, canonicalOrderId]);
 
   useEffect(() => {
     const iv = setInterval(() => setClockTick(Date.now()), 30000);
