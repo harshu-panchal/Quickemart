@@ -1,5 +1,19 @@
 import mongoose from "mongoose";
 import { normalizePhoneNumber } from "../utils/phone.js";
+import crypto from "crypto";
+
+/**
+ * Generates a 15-character alphanumeric customer ID.
+ * Format: CUS + 12 random uppercase alphanumeric chars
+ * Example: CUS8F3K9LMTPX2A
+ */
+function generateCustomerId() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const randomPart = Array.from({ length: 12 }, () =>
+    chars[crypto.randomInt(0, chars.length)]
+  ).join("");
+  return `CUS${randomPart}`;
+}
 
 const addressSchema = new mongoose.Schema({
     label: {
@@ -53,6 +67,18 @@ const userSchema = new mongoose.Schema(
             type: String,
             enum: ["user", "admin", "delivery", "seller"],
             default: "user",
+        },
+
+        /**
+         * Human-readable 15-character unique customer identifier.
+         * Auto-generated on first save. Format: CUS + 12 alphanumeric chars.
+         * Visible to sellers instead of the Mongo _id (privacy layer).
+         */
+        customerId: {
+            type: String,
+            unique: true,
+            sparse: true, // existing users without it are not affected
+            index: true,
         },
 
         isVerified: {
@@ -143,6 +169,25 @@ userSchema.index({ role: 1, isActive: 1 });
 userSchema.pre("validate", function(next) {
     if (this.phone) {
         this.phone = normalizePhoneNumber(this.phone);
+    }
+    next();
+});
+
+// Auto-generate a 15-char customerId on first insert.
+// Using pre("save") so it runs for both Customer.create() (signup)
+// and User.create() (admin flow) without any call-site changes.
+userSchema.pre("save", async function(next) {
+    if (this.isNew && !this.customerId) {
+        // Retry up to 5 times in the (astronomically unlikely) case of a collision
+        for (let i = 0; i < 5; i++) {
+            const candidate = generateCustomerId();
+            // eslint-disable-next-line no-await-in-loop
+            const exists = await mongoose.model("User").exists({ customerId: candidate });
+            if (!exists) {
+                this.customerId = candidate;
+                break;
+            }
+        }
     }
     next();
 });

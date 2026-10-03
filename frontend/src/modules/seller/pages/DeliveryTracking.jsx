@@ -4,7 +4,6 @@ import Badge from "@shared/components/ui/Badge";
 import {
   HiOutlineMagnifyingGlass,
   HiOutlineTruck,
-  HiOutlinePhone,
   HiOutlineMapPin,
   HiOutlineClock,
   HiOutlineCheckCircle,
@@ -78,6 +77,7 @@ const DeliveryTracking = () => {
             orderId: order.orderId,
             status: uiStatus,
             deliveryBoy: order.deliveryBoy ? {
+              id: order.deliveryBoy._id || order.deliveryBoy.id || "N/A",
               name: order.deliveryBoy.name,
               phone: order.deliveryBoy.phone,
               avatar: order.deliveryBoy.name?.charAt(0) || "?",
@@ -86,6 +86,7 @@ const DeliveryTracking = () => {
               vehicleNumber: order.deliveryBoy.vehicleNumber || "N/A",
               vehicleType: order.deliveryBoy.vehicleType || "bike",
             } : {
+              id: "N/A",
               name: "Not Assigned",
               phone: "N/A",
               avatar: "?",
@@ -332,21 +333,18 @@ const DeliveryTracking = () => {
                               <h3 className="text-xs font-black text-slate-900 leading-none truncate">
                                 {dlv.deliveryBoy.name}
                               </h3>
-                              <a
-                                href={`tel:${dlv.deliveryBoy.phone}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-slate-500 hover:text-primary transition-colors"
-                              >
-                                <HiOutlinePhone className="h-2.5 w-2.5 shrink-0" />
-                                <span className="truncate">{dlv.deliveryBoy.phone}</span>
-                              </a>
+                              {dlv.deliveryBoy.id && dlv.deliveryBoy.id !== "N/A" && (
+                                <p className="text-[9px] font-bold text-slate-500 mt-1 truncate">
+                                  ID: {dlv.deliveryBoy.id}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
 
                         {/* Order Info Section */}
                         <div className="flex-1 p-2 flex flex-col justify-between min-w-0">
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 mb-2">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                                 <span className="text-[10px] font-black text-slate-900 tracking-tight">
@@ -372,13 +370,6 @@ const DeliveryTracking = () => {
                                 {dlv.startTime || "—"}
                               </p>
                             </div>
-                          </div>
-
-                          <div className="bg-slate-50/30 px-3 py-1.5 rounded-md border border-slate-100/30 min-w-0">
-                            <p className="text-[10px] font-bold text-slate-600 leading-tight truncate">
-                              <HiOutlineMapPin className="inline h-2.5 w-2.5 text-primary mr-1 -mt-0.5" />
-                              {dlv.address}
-                            </p>
                           </div>
                         </div>
 
@@ -481,32 +472,14 @@ const DeliveryTracking = () => {
                     <h4 className="text-lg font-black text-slate-800 leading-tight">
                       {activeTrackingDetail.deliveryBoy.name}
                     </h4>
+                    {activeTrackingDetail.deliveryBoy.id && activeTrackingDetail.deliveryBoy.id !== "N/A" && (
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                        ID: <span className="font-mono text-slate-800 font-bold">{activeTrackingDetail.deliveryBoy.id}</span>
+                      </p>
+                    )}
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
                       Rating: {activeTrackingDetail.deliveryBoy.rating} ★
                     </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t border-slate-50">
-                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                    Contact & Vehicle Information
-                  </h5>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Phone Number</p>
-                      <a
-                        href={`tel:${activeTrackingDetail.deliveryBoy.phone}`}
-                        className="text-xs font-bold text-slate-800 hover:text-primary transition-colors block mt-1"
-                      >
-                        {activeTrackingDetail.deliveryBoy.phone}
-                      </a>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vehicle Details</p>
-                      <p className="text-xs font-bold text-slate-800 mt-1 capitalize">
-                        {activeTrackingDetail.deliveryBoy.vehicleNumber || "N/A"} ({activeTrackingDetail.deliveryBoy.vehicleType || "N/A"})
-                      </p>
-                    </div>
                   </div>
                 </div>
 

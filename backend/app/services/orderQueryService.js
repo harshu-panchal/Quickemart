@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import Order from "../models/order.js";
 import OrderOtp from "../models/orderOtp.js";
 import Delivery from "../models/delivery.js";
@@ -110,7 +110,7 @@ export async function fetchSellerOrdersPage({
       .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone customerId")
       .populate("items.product", "name mainImage price salePrice")
       .populate("deliveryBoy", "name phone vehicleNumber profileImage vehicleType")
       .populate("seller", "shopName name")
@@ -231,7 +231,7 @@ async function resolveNearbySellerIds(deliveryPartner, userId) {
 
   const sellerIds = matchingSellers.map((s) => s._id);
 
-  // No dev fallback — if delivery partner is not near any seller,
+  // No dev fallback â€” if delivery partner is not near any seller,
   // they simply get no orders. This prevents cross-city/cross-state leaks.
   if (sellerIds.length === 0) {
     console.info(
@@ -310,7 +310,7 @@ export async function fetchAvailableOrdersForDelivery({
       })
         .sort({ createdAt: -1, _id: -1 })
         .limit(limit)
-        .populate("customer", "name phone")
+        .populate("customer", "name phone customerId")
         .populate("seller", "shopName address name location")
         .lean();
 
@@ -336,7 +336,7 @@ export async function fetchAvailableOrdersForDelivery({
     })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone customerId")
       .populate("seller", "shopName address name location")
       .lean();
 
@@ -372,7 +372,7 @@ export async function fetchAvailableOrdersForDelivery({
     })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone customerId")
       .populate("seller", "shopName address name location serviceRadius")
       .lean();
 
@@ -396,7 +396,7 @@ export async function fetchAvailableOrdersForDelivery({
     })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone customerId")
       .populate("seller", "shopName address name location")
       .lean();
   }
@@ -407,7 +407,7 @@ export async function fetchAvailableOrdersForDelivery({
     const returnPickupsRaw = await Order.find({
       skippedBy: { $nin: [userId] },
       $or: [
-        // Manual reassign queue — seller picked "no specific rider" but
+        // Manual reassign queue â€” seller picked "no specific rider" but
         // the broadcast loop hasn't been kicked off yet (or it expired
         // out). These stay visible until a seller re-assigns.
         {
@@ -415,7 +415,7 @@ export async function fetchAvailableOrdersForDelivery({
           returnDeliveryBoy: null,
           seller: { $in: sellerIds },
         },
-        // Active broadcast — only show while the assignment window is
+        // Active broadcast â€” only show while the assignment window is
         // still open. Legacy rows without a stored expiry stay visible
         // for backwards compatibility.
         {
@@ -428,7 +428,7 @@ export async function fetchAvailableOrdersForDelivery({
             { returnSearchExpiresAt: { $gt: now } },
           ],
         },
-        // Mine to handle right now — always show, regardless of expiry.
+        // Mine to handle right now â€” always show, regardless of expiry.
         {
           returnDeliveryBoy: userId,
         },
@@ -436,7 +436,7 @@ export async function fetchAvailableOrdersForDelivery({
     })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone customerId")
       .populate("seller", "shopName address name location")
       .lean();
 
@@ -502,7 +502,7 @@ export async function getCustomerOrders(customerId, pagination) {
 }
 
 /**
- * Orders a customer placed as a gift for someone else — mirrors
+ * Orders a customer placed as a gift for someone else â€” mirrors
  * `getCustomerOrders` but queries by `placedBy` instead of `customer`.
  */
 export async function getOrdersPlacedByUser(userId, pagination) {
@@ -762,7 +762,7 @@ export async function getSellerReturns({
       .sort({ returnRequestedAt: -1, createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("customer", "name phone")
+      .populate("customer", "name phone customerId")
       .populate("returnDeliveryBoy", "name phone")
       .lean(),
     Order.countDocuments(query),
@@ -785,3 +785,4 @@ export default {
   getOrderWithAccess,
   getSellerReturns,
 };
+

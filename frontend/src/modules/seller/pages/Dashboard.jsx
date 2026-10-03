@@ -215,6 +215,8 @@ const Dashboard = () => {
       customer: {
         name: order.customer?.name || "Customer",
         phone: order.customer?.phone || "",
+        // Prefer the 15-char human-readable customerId; fall back to _id
+        id: order.customer?.customerId || order.customer?._id || order.customer?.id || "",
       },
       address: addressStr || "—",
       items,
@@ -496,11 +498,9 @@ const Dashboard = () => {
                     <span className="text-sm font-semibold text-slate-900">{order.orderId}</span>
                   </td>
                   <td className="py-4 px-4 align-middle">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-600">
-                        {order.customer?.name?.split(" ").map(n => n[0]).join("") || "C"}
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">{order.customer?.name || "Customer"}</span>
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Customer ID</p>
+                      <p className="text-xs font-mono font-bold text-slate-800">{order.customer?.customerId || order.customer?._id || order.customer?.id || '—'}</p>
                     </div>
                   </td>
                   <td className="py-4 px-4 align-middle">
@@ -584,24 +584,13 @@ const Dashboard = () => {
                   <div className="space-y-3 sm:space-y-4">
                     <div>
                       <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                        <HiOutlineMapPin className="h-3 w-3 text-primary" />{" "}
-                        Delivery Address
-                      </h4>
-                      <p className="text-xs font-bold text-slate-800 leading-relaxed bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-sm">
-                        {selectedOrder.address}
-                      </p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-2">
                         <HiOutlinePhone className="h-3 w-3 text-brand-500" />{" "}
-                        Contact Info
+                        Customer
                       </h4>
                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-sm">
-                        <p className="text-xs font-bold text-slate-800">
-                          {selectedOrder.customer.name}
-                        </p>
-                        <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
-                          {selectedOrder.customer.phone}
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Customer ID</p>
+                        <p className="text-xs font-mono font-bold text-slate-800 break-all">
+                          {selectedOrder.customer.id || '—'}
                         </p>
                       </div>
                     </div>

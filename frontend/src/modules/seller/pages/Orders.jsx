@@ -112,7 +112,9 @@ const Orders = () => {
                 customer: {
                     name: order.customer?.name || 'Unknown',
                     phone: order.customer?.phone || '',
-                    avatar: (order.customer?.name || 'U').charAt(0)
+                    avatar: (order.customer?.name || 'U').charAt(0),
+                    // Prefer the 15-char human-readable customerId; fall back to _id
+                    id: order.customer?.customerId || order.customer?._id || order.customer?.id || ''
                 },
                 items: (order.items || []).map(item => ({
                     name: item.name,
@@ -178,7 +180,7 @@ const Orders = () => {
     const filteredOrders = useMemo(() => {
         return safeOrders.filter(order => {
             const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                order.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
+                (order.customer.id && order.customer.id.toLowerCase().includes(searchTerm.toLowerCase()));
             const statusToMatch = activeTab === 'Out for Delivery' ? 'out_for_delivery' : activeTab.toLowerCase();
             const matchesTab = activeTab === 'All' || order.status.toLowerCase() === statusToMatch;
             return matchesSearch && matchesTab;
@@ -371,7 +373,7 @@ const Orders = () => {
                                         type="text"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        placeholder="Search by Order ID or Customer Name..."
+                                        placeholder="Search by Order ID or Customer ID..."
                                         className="w-full pl-10 pr-4 py-2.5 bg-slate-100/50 border-none rounded-lg text-sm font-semibold text-slate-700 placeholder:text-slate-500 focus:ring-2 focus:ring-primary/5 transition-all outline-none"
                                     />
                                 </div>
@@ -476,10 +478,8 @@ const Orders = () => {
                                                         {order.date} • {order.time}
                                                     </p>
                                                     <div className="flex items-center gap-2 mt-2">
-                                                        <div className="h-7 w-7 rounded-full bg-slate-900 flex items-center justify-center text-[10px] font-black text-white shrink-0">
-                                                            {order.customer.avatar}
-                                                        </div>
-                                                        <p className="text-xs font-bold text-slate-800 truncate">{order.customer.name}</p>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer ID</p>
+                                                        <p className="text-xs font-mono font-bold text-slate-800 truncate">{order.customer.id || '—'}</p>
                                                     </div>
                                                     <p className="text-sm font-black text-slate-900 mt-2">₹{order.total.toLocaleString()}</p>
                                                 </div>
@@ -555,14 +555,9 @@ const Orders = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-[10px] font-black text-white shadow-sm ring-2 ring-white">
-                                                                {order.customer.avatar}
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs font-bold text-slate-900">{order.customer.name}</p>
-                                                                <p className="text-xs font-semibold text-slate-600">{order.customer.phone}</p>
-                                                            </div>
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Customer ID</p>
+                                                            <p className="text-xs font-mono font-bold text-slate-800">{order.customer.id || '—'}</p>
                                                         </div>
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
@@ -790,39 +785,12 @@ const Orders = () => {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
                                             <div className="space-y-3 sm:space-y-4">
                                                 <div>
-                                                    <div className="flex items-center justify-between gap-2 mb-2">
-                                                        <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest flex items-center gap-2">
-                                                            <HiOutlineMapPin className="h-3 w-3 text-primary" /> Delivery Address
-                                                        </h4>
-                                                        {selectedOrder.location &&
-                                                            typeof selectedOrder.location.lat === "number" &&
-                                                            typeof selectedOrder.location.lng === "number" && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const { lat, lng } = selectedOrder.location;
-                                                                        window.open(
-                                                                            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-                                                                            "_blank",
-                                                                        );
-                                                                    }}
-                                                                    className="text-[10px] font-bold text-primary hover:underline"
-                                                                >
-                                                                    View on map
-                                                                </button>
-                                                            )}
-                                                    </div>
-                                                    <p className="text-xs font-bold text-slate-800 leading-relaxed bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-sm">
-                                                        {selectedOrder.address}
-                                                    </p>
-                                                </div>
-                                                <div>
                                                     <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                                        <HiOutlinePhone className="h-3 w-3 text-brand-500" /> Contact Info
+                                                        <HiOutlinePhone className="h-3 w-3 text-brand-500" /> Customer
                                                     </h4>
                                                     <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-sm">
-                                                        <p className="text-xs font-bold text-slate-800">{selectedOrder.customer.name}</p>
-                                                        <p className="text-xs font-semibold text-slate-600 mt-0.5">{selectedOrder.customer.phone}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Customer ID</p>
+                                                        <p className="text-xs font-mono font-bold text-slate-800 break-all">{selectedOrder.customer.id || '—'}</p>
                                                     </div>
                                                 </div>
                                             </div>
