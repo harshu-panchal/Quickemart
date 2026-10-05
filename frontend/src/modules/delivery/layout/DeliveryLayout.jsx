@@ -345,7 +345,9 @@ const DeliveryLayout = () => {
       const currentOrderId = activeDeliveryOrderIdRef.current;
       await deliveryApi.postLocation(
         { lat, lng, ...(currentOrderId ? { orderId: currentOrderId } : {}) },
-        { signal: controller.signal, timeout: 10000 },
+        // 5 s timeout: matches the heartbeat cadence so a slow/hung request
+        // can never block the next location update cycle for more than one tick.
+        { signal: controller.signal, timeout: 5000 },
       );
     } catch {
       /* ignore */
@@ -496,7 +498,11 @@ const DeliveryLayout = () => {
       return undefined;
     }
 
-    const HEARTBEAT_MS = 30000;
+    // 5 s matches DeliveryTrackingMap's LOCATION_POST_INTERVAL_MS.
+    // The backend throttle (locationThrottleService: 3 s + 20 m) is the
+    // authoritative rate-limiter — the frontend just needs to stop blocking
+    // every update for 30 s, which caused the 30–50 m map-update lag.
+    const HEARTBEAT_MS = 5000;
     let lastPostAt = 0;
 
     const watchId = navigator.geolocation.watchPosition(
@@ -526,7 +532,11 @@ const DeliveryLayout = () => {
            the rider just won't receive proximity matches until they
            grant location or move into a covered area. */
       },
-      { enableHighAccuracy: false, maximumAge: 15000, timeout: 30000 },
+      // enableHighAccuracy: true  — use GPS chip, not cell/wifi triangulation.
+      // maximumAge: 3000           — never reuse a fix older than 3 s; stale
+      //                             cached coords were a secondary source of lag.
+      // timeout: 15000             — tighter timeout keeps the watcher responsive.
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
     );
 
     return () => {
