@@ -16,7 +16,7 @@ import customerPin from "@/assets/customer-pin.png";
 import deliveryIcon from "@/assets/deliveryIcon.png";
 import storePin from "@/assets/store-pin.png";
 
-const libraries = ["geometry"];
+const libraries = ["places", "geometry"];
 
 const containerStyle = {
   width: "100%",
@@ -80,18 +80,31 @@ const LiveTrackingMap = memo(({
   }, []);
 
   const focusOnRider500m = useCallback((map, rider) => {
-    if (!map || !window.google || !hasValidLatLng(rider)) return;
+    if (!map || !window.google?.maps || !hasValidLatLng(rider)) return;
     const center = { lat: Number(rider.lat), lng: Number(rider.lng) };
     const bounds = new window.google.maps.LatLngBounds();
-    const offsets = [0, 90, 180, 270];
-    offsets.forEach((heading) => {
-      const point = window.google.maps.geometry.spherical.computeOffset(
-        center,
-        RIDER_FOCUS_RADIUS_M,
-        heading,
-      );
-      bounds.extend(point);
-    });
+
+    if (window.google.maps.geometry?.spherical?.computeOffset) {
+      const offsets = [0, 90, 180, 270];
+      offsets.forEach((heading) => {
+        const point = window.google.maps.geometry.spherical.computeOffset(
+          center,
+          RIDER_FOCUS_RADIUS_M,
+          heading,
+        );
+        bounds.extend(point);
+      });
+    } else {
+      const latOffset = RIDER_FOCUS_RADIUS_M / 111111;
+      const lngOffset =
+        RIDER_FOCUS_RADIUS_M /
+        (111111 * Math.cos((center.lat * Math.PI) / 180) || 1);
+      bounds.extend({ lat: center.lat + latOffset, lng: center.lng });
+      bounds.extend({ lat: center.lat - latOffset, lng: center.lng });
+      bounds.extend({ lat: center.lat, lng: center.lng + lngOffset });
+      bounds.extend({ lat: center.lat, lng: center.lng - lngOffset });
+    }
+
     map.fitBounds(bounds, 24);
   }, []);
 

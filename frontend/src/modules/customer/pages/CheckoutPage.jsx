@@ -71,7 +71,7 @@ import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommend
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
 
-const placesLibrary = ["places"];
+const placesLibrary = ["places", "geometry"];
 
 const getItemStockLimit = (item) => {
   if (!item) return 0;

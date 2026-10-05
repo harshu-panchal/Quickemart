@@ -10,7 +10,7 @@ import {
   saveDeliveryPartnerLocation,
 } from "../utils/deliveryLastLocation";
 
-const libraries = ["geometry"];
+const libraries = ["places", "geometry"];
 const ROUTE_REFRESH_THRESHOLD_M = 150;
 const ROUTE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const RECENTER_INTERVAL_MS = 15000;
@@ -345,18 +345,31 @@ const DeliveryTrackingMapComponent = ({
   }, []);
 
   const focusOnRider500m = useCallback((map, riderLocation) => {
-    if (!map || !window.google?.maps?.geometry?.spherical || !riderLocation) return;
+    if (!map || !window.google?.maps || !riderLocation) return;
 
     const center = new window.google.maps.LatLng(riderLocation.lat, riderLocation.lng);
     const bounds = new window.google.maps.LatLngBounds();
-    [0, 90, 180, 270].forEach((heading) => {
-      const edge = window.google.maps.geometry.spherical.computeOffset(
-        center,
-        RIDER_FOCUS_RADIUS_M,
-        heading,
-      );
-      bounds.extend(edge);
-    });
+
+    if (window.google.maps.geometry?.spherical?.computeOffset) {
+      [0, 90, 180, 270].forEach((heading) => {
+        const edge = window.google.maps.geometry.spherical.computeOffset(
+          center,
+          RIDER_FOCUS_RADIUS_M,
+          heading,
+        );
+        bounds.extend(edge);
+      });
+    } else {
+      const latOffset = RIDER_FOCUS_RADIUS_M / 111111;
+      const lngOffset =
+        RIDER_FOCUS_RADIUS_M /
+        (111111 * Math.cos((riderLocation.lat * Math.PI) / 180) || 1);
+      bounds.extend({ lat: riderLocation.lat + latOffset, lng: riderLocation.lng });
+      bounds.extend({ lat: riderLocation.lat - latOffset, lng: riderLocation.lng });
+      bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng + lngOffset });
+      bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng - lngOffset });
+    }
+
     map.fitBounds(bounds, 24);
   }, []);
 
