@@ -14,6 +14,7 @@ import {
     verifyOtpSchema,
 } from "../validation/customerAuthValidation.js";
 import { normalizePhoneNumber } from "../utils/phone.js";
+import { logActivity } from "../services/userActivityService.js";
 
 const generateToken = (customer) =>
     jwt.sign(
@@ -73,6 +74,20 @@ export const verifyCustomerOTP = async (req, res) => {
             ipAddress: req.ip,
         });
         const token = generateToken(customer);
+
+        // Log login activity with the real customer name
+        logActivity({
+          userId: customer._id,
+          userModel: "Customer",
+          userName: customer.name || customer.phone || "Customer",
+          userCustomId: customer.customerId || "",
+          role: "customer",
+          action: "CUSTOMER_LOGIN",
+          category: "AUTH",
+          severity: "INFO",
+          description: `CUSTOMER ${customer.name || customer.phone || ""} logged in`,
+          req,
+        }).catch(() => {});
 
         return handleResponse(
             res,

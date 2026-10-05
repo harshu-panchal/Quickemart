@@ -576,6 +576,9 @@ export async function placeOrderAtomic({
 
       logActivity({
         userId: ownerId,
+        userModel: "Customer",
+        userName: user?.name || "Customer",
+        userCustomId: user?.customerId || "",
         role: "customer",
         action: "ORDER_PLACED",
         category: "ORDER",

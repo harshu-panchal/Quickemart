@@ -102,7 +102,13 @@ const UserActivity = () => {
 
   useEffect(() => {
     fetchActivities(page);
-  }, [fetchActivities, page]);
+    // Live auto-refresh feed every 5 seconds
+    const interval = setInterval(() => {
+      fetchActivities(page);
+      fetchStats();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [fetchActivities, fetchStats, page]);
 
   // Open user timeline drawer
   const handleOpenTimeline = async (userItem) => {

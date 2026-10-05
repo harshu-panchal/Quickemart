@@ -16,7 +16,10 @@ export const customerApi = {
     params?.tree
       ? axiosInstance.get("/categories", { params })
       : getWithDedupe("/categories", params, { ttl: 60 * 1000 }),
-  getProducts: (params) => getWithDedupe("/products", params),
+  getProducts: (params, options) =>
+    params?.search
+      ? axiosInstance.get("/products", { params, ...options })
+      : getWithDedupe("/products", params, options),
   getProductById: (id, params) => getWithDedupe(`/products/${id}`, params),
 
   // Sellers & Location

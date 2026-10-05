@@ -1,4 +1,69 @@
 import UserActivity from "../models/userActivity.js";
+import Customer from "../models/customer.js";
+import Seller from "../models/seller.js";
+import Delivery from "../models/delivery.js";
+import Admin from "../models/admin.js";
+
+// Cache for resolved user info to prevent redundant DB calls
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+export async function resolveUserInfo(userId, role) {
+  if (!userId) return { userName: null, userCustomId: null };
+
+  const cacheKey = `${userId}_${role}`;
+  const cached = userCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+    return cached.data;
+  }
+
+  let resolvedName = null;
+  let resolvedCustomId = null;
+
+  try {
+    const roleLower = String(role || "").toLowerCase();
+    if (roleLower === "customer" || roleLower === "user") {
+      const doc = await Customer.findById(userId).select("name customerId phone email").lean();
+      if (doc) {
+        resolvedName = doc.name || doc.phone || doc.email || "Customer";
+        resolvedCustomId = doc.customerId || "";
+      }
+    } else if (roleLower === "seller") {
+      const doc = await Seller.findById(userId).select("name storeName sellerId phone email").lean();
+      if (doc) {
+        resolvedName = doc.name || doc.storeName || doc.phone || doc.email || "Seller";
+        resolvedCustomId = doc.sellerId || "";
+      }
+    } else if (roleLower === "delivery") {
+      const doc = await Delivery.findById(userId).select("name driverId phone email").lean();
+      if (doc) {
+        resolvedName = doc.name || doc.phone || doc.email || "Delivery Partner";
+        resolvedCustomId = doc.driverId || "";
+      }
+    } else if (roleLower === "admin") {
+      const doc = await Admin.findById(userId).select("name email phone").lean();
+      if (doc) {
+        resolvedName = doc.name || doc.email || "Admin";
+        resolvedCustomId = "ADM-" + String(doc._id).slice(-6).toUpperCase();
+      }
+    } else {
+      const doc = await Customer.findById(userId).select("name customerId phone email").lean();
+      if (doc) {
+        resolvedName = doc.name || doc.phone || doc.email;
+        resolvedCustomId = doc.customerId || "";
+      }
+    }
+  } catch (err) {
+    console.error("Failed to resolve user info:", err.message);
+  }
+
+  const result = { userName: resolvedName, userCustomId: resolvedCustomId };
+  if (resolvedName) {
+    userCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  }
+
+  return result;
+}
 
 /**
  * Parses user-agent header for basic browser and OS identification.
@@ -54,13 +119,40 @@ export async function logActivity({
         "0.0.0.0";
       userAgent = req.headers["user-agent"] || "";
 
-      if (!userId && req.user) {
-        userId = req.user.id || req.user._id || null;
-        role = req.user.role || role;
-        userName = req.user.name || userName;
-        userCustomId = req.user.customerId || req.user.customId || userCustomId;
+      if (req.user) {
+        // Always fill missing fields from the authenticated request user
+        if (!userId) userId = req.user.id || req.user._id || null;
+        if (!userCustomId) userCustomId = req.user.customerId || req.user.customId || "";
+        const rawRole = req.user.role || role;
+        role = rawRole === "user" ? "customer" : rawRole;
+        if (!userName || userName === "System/Guest" || userName === "Guest") {
+          userName = req.user.name || req.user.email || req.user.phone || "";
+        }
       }
     }
+
+    // Normalise "user" → "customer"
+    const finalRole = (role || "system").toLowerCase() === "user"
+      ? "customer"
+      : (role || "system").toLowerCase();
+
+    // Derive userModel from role
+    if (!userModel || userModel === "User") {
+      if (finalRole === "customer") userModel = "Customer";
+      else if (finalRole === "seller") userModel = "Seller";
+      else if (finalRole === "delivery") userModel = "Delivery";
+      else if (finalRole === "admin") userModel = "Admin";
+      else userModel = "User";
+    }
+
+    // Auto-resolve real name and customId if missing/generic
+    if (userId && (!userName || userName === "System/Guest" || userName === "Guest" || userName === "Guest User" || !userCustomId)) {
+      const resolved = await resolveUserInfo(userId, finalRole);
+      if (resolved.userName) userName = resolved.userName;
+      if (resolved.userCustomId) userCustomId = resolved.userCustomId;
+    }
+
+    if (!userName) userName = "Guest";
 
     const deviceInfo = parseUserAgent(userAgent);
 
@@ -69,7 +161,7 @@ export async function logActivity({
       userModel,
       userCustomId,
       userName,
-      role: (role || "system").toLowerCase(),
+      role: finalRole,
       action,
       category,
       severity,
@@ -135,7 +227,7 @@ export async function getUserActivities({
 
   const skip = (Math.max(1, page) - 1) * limit;
 
-  const [items, total] = await Promise.all([
+  const [rawItems, total] = await Promise.all([
     UserActivity.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -143,6 +235,25 @@ export async function getUserActivities({
       .lean(),
     UserActivity.countDocuments(query),
   ]);
+
+  // Ensure items have resolved customer/user names and custom IDs
+  const items = await Promise.all(
+    rawItems.map(async (item) => {
+      if (
+        item.userId &&
+        (!item.userName ||
+          item.userName === "Guest" ||
+          item.userName === "System/Guest" ||
+          item.userName === "Guest User" ||
+          !item.userCustomId)
+      ) {
+        const resolved = await resolveUserInfo(item.userId, item.role);
+        if (resolved.userName) item.userName = resolved.userName;
+        if (resolved.userCustomId) item.userCustomId = resolved.userCustomId;
+      }
+      return item;
+    })
+  );
 
   return {
     items,

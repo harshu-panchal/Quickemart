@@ -226,6 +226,17 @@ const SearchPage = () => {
         setResults(filteredResults);
     }, [filteredResults]);
 
+    // Trigger backend search activity logging when user searches
+    useEffect(() => {
+        if (debouncedQuery && debouncedQuery.trim().length >= 2) {
+            customerApi.getProducts({
+                search: debouncedQuery.trim(),
+                lat: currentLocation?.latitude,
+                lng: currentLocation?.longitude,
+            }).catch((err) => console.error("Search activity log error:", err));
+        }
+    }, [debouncedQuery, currentLocation?.latitude, currentLocation?.longitude]);
+
     // Dynamically load no-service Lottie when results are empty
     useEffect(() => {
         if (!isLoading) {

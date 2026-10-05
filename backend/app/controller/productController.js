@@ -260,6 +260,16 @@ export const getProducts = async (req, res) => {
           // injection and runtime errors on `(`, `*`, etc.
           query.name = buildSearchRegex(term, { anchored: false });
         }
+
+        // Log user product search activity
+        logActivity({
+          req,
+          action: "PRODUCT_SEARCH",
+          category: "SEARCH",
+          severity: "INFO",
+          description: `Searched for: "${term}"`,
+          metadata: { query: term },
+        });
       }
     }
 
