@@ -289,6 +289,8 @@ const DashboardLayout = ({ children, navItems, title }) => {
                         balances: raw.balances ?? {},
                         ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
                         monthlyChart: Array.isArray(raw.monthlyChart) ? raw.monthlyChart : [],
+                        penalties: Array.isArray(raw.penalties) ? raw.penalties : [],
+                        payouts: Array.isArray(raw.payouts) ? raw.payouts : [],
                     });
                 }
             })
@@ -311,6 +313,8 @@ const DashboardLayout = ({ children, navItems, title }) => {
                         balances: raw.balances ?? {},
                         ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
                         monthlyChart: Array.isArray(raw.monthlyChart) ? raw.monthlyChart : [],
+                        penalties: Array.isArray(raw.penalties) ? raw.penalties : [],
+                        payouts: Array.isArray(raw.payouts) ? raw.payouts : [],
                     });
                 }
             })

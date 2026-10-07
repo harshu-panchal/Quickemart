@@ -14,7 +14,7 @@ async function getAdminIds() {
 // Create a new ticket (Customer/Seller/Rider)
 export const createTicket = async (req, res) => {
     try {
-        const { subject, description, priority, userType, mediaUrl, mediaType, mimeType } = req.body;
+        const { subject, description, priority, userType, mediaUrl, mediaType, mimeType, orderId } = req.body;
         const userId = req.user.id; // From verifyToken middleware
 
         const safeMediaUrl = String(mediaUrl || "").trim();
@@ -25,6 +25,7 @@ export const createTicket = async (req, res) => {
             userId,
             userType: userType || "Customer",
             subject,
+            orderId: String(orderId || "").trim(),
             description,
             priority,
             messages: [

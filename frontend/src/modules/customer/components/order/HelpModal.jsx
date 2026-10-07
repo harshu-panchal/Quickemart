@@ -35,9 +35,10 @@ const HelpModal = ({ isOpen, onClose, orderId }) => {
     ];
 
     const handleIssueClick = (item) => {
+        const cleanOrderId = orderId ? ` #${orderId}` : '';
         setTicketData(prev => ({
             ...prev,
-            subject: `${item.label} - Order ${orderId || ''}`.trim()
+            subject: `${item.label}${cleanOrderId}`.trim()
         }));
         setIsTicketMode(true);
     };
@@ -48,6 +49,7 @@ const HelpModal = ({ isOpen, onClose, orderId }) => {
             setTicketLoading(true);
             const res = await customerApi.createTicket({
                 ...ticketData,
+                orderId: orderId || '',
                 userType: 'Customer'
             });
             if (res.data.success) {

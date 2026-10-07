@@ -209,18 +209,26 @@ const SupportTickets = () => {
             if (res.data.success) {
                 const payload = res.data.result || {};
                 const data = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
-                setTickets(data.map(t => ({
-                    ...t,
-                    id: t._id,
-                    ticketCode: t._id.slice(-6).toUpperCase(),
-                    user: t.userId?.name || "Unknown",
-                    date: new Date(t.createdAt).toLocaleString(),
-                    messages: (t.messages || []).map((m, i) => ({
-                        ...m,
-                        id: m._id || m.id || `msg-${t._id}-${i}`,
-                        time: new Date(m.createdAt || Date.now()).toLocaleTimeString()
-                    }))
-                })));
+                setTickets(data.map(t => {
+                    const textToScan = `${t.subject || ''} ${t.description || ''} ${(t.messages || []).map(m => m.text || '').join(' ')}`;
+                    const orderMatch = textToScan.match(/(?:Order\s*#?|#)\s*([A-Za-z0-9_-]{5,30})/i);
+                    const rawMatched = orderMatch ? orderMatch[1] : "";
+                    const cleanExtracted = (rawMatched && rawMatched.toLowerCase() !== "order") ? rawMatched : "";
+                    const extractedOrderId = t.orderId || cleanExtracted;
+                    return {
+                        ...t,
+                        id: t._id,
+                        extractedOrderId,
+                        ticketCode: t._id.slice(-6).toUpperCase(),
+                        user: t.userId?.name || "Unknown",
+                        date: new Date(t.createdAt).toLocaleString(),
+                        messages: (t.messages || []).map((m, i) => ({
+                            ...m,
+                            id: m._id || m.id || `msg-${t._id}-${i}`,
+                            time: new Date(m.createdAt || Date.now()).toLocaleTimeString()
+                        }))
+                    };
+                }));
                 setTotal(typeof payload.total === 'number' ? payload.total : data.length);
                 setPage(typeof payload.page === 'number' ? payload.page : requestedPage);
             }
@@ -550,8 +558,13 @@ const SupportTickets = () => {
                                         {t.userType === 'Seller' && <HiOutlineBuildingStorefront className="h-3 w-3" />}
                                         {t.userType === 'Rider' && <HiOutlineTruck className="h-3 w-3" />}
                                     </div>
-                                    <span className={cn("text-[10px] font-bold", selectedTicket?.id === t.id ? "text-white/80" : "text-slate-500")}>
-                                        {t.user} • {t.userType}
+                                    <span className={cn("text-[10px] font-bold flex items-center gap-1.5 flex-wrap", selectedTicket?.id === t.id ? "text-white/80" : "text-slate-500")}>
+                                        <span>{t.user} • {t.userType}</span>
+                                        {(t.orderId || t.extractedOrderId) && (
+                                            <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-extrabold tracking-tight", selectedTicket?.id === t.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700")}>
+                                                #{t.orderId || t.extractedOrderId}
+                                            </span>
+                                        )}
                                     </span>
                                 </div>
                             </button>
@@ -590,8 +603,26 @@ const SupportTickets = () => {
                                 </div>
                                 <div>
                                     <h3 className="text-sm font-black text-slate-900 leading-none mb-1">{selectedTicket.subject}</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                                        Ticket ID: {selectedTicket.ticketCode} • USER: {selectedTicket.user} • STATUS: {selectedTicket.status}
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none flex items-center gap-1.5 flex-wrap">
+                                        <span>Ticket ID: {selectedTicket.ticketCode}</span>
+                                        <span>•</span>
+                                        <span className="flex items-center gap-1">
+                                            ORDER ID: {selectedTicket.orderId || selectedTicket.extractedOrderId ? (
+                                                <button
+                                                    onClick={() => copyToClipboard(selectedTicket.orderId || selectedTicket.extractedOrderId)}
+                                                    className="font-extrabold text-brand-600 bg-brand-50 hover:bg-brand-100 px-1.5 py-0.5 rounded border border-brand-200 transition-colors uppercase tracking-normal"
+                                                    title="Click to copy Order ID"
+                                                >
+                                                    #{selectedTicket.orderId || selectedTicket.extractedOrderId}
+                                                </button>
+                                            ) : (
+                                                <span className="text-slate-400">N/A</span>
+                                            )}
+                                        </span>
+                                        <span>•</span>
+                                        <span>USER: {selectedTicket.user}</span>
+                                        <span>•</span>
+                                        <span>STATUS: {selectedTicket.status}</span>
                                     </p>
                                 </div>
                             </div>
@@ -635,6 +666,18 @@ const SupportTickets = () => {
                                             >
                                                 Copy ticket ID
                                             </button>
+                                            {(selectedTicket.orderId || selectedTicket.extractedOrderId) && (
+                                                <button
+                                                    onClick={() => copyToClipboard(selectedTicket.orderId || selectedTicket.extractedOrderId)}
+                                                    className="w-full text-left px-4 py-3 text-xs font-black text-brand-600 hover:bg-brand-50 transition-colors flex items-center justify-between"
+                                                    role="menuitem"
+                                                >
+                                                    <span>Copy Order ID</span>
+                                                    <span className="text-[10px] font-extrabold bg-brand-100 px-1.5 py-0.5 rounded">
+                                                        #{selectedTicket.orderId || selectedTicket.extractedOrderId}
+                                                    </span>
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => copyToClipboard(selectedTicket.user)}
                                                 className="w-full text-left px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition-colors"

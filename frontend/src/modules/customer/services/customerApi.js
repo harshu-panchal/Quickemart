@@ -107,11 +107,17 @@ export const customerApi = {
   verifyPaymentStatus: (id) => axiosInstance.get(`/payments/status/${id}`),
 
   // Support & Reviews
-  getProductReviews: (productId) =>
-    getWithDedupe(`/reviews/product/${productId}`),
+  getProductReviews: (productId, params = {}) =>
+    getWithDedupe(`/reviews/product/${productId}`, params),
+  checkEligibility: (productId) =>
+    axiosInstance.get(`/reviews/check-eligibility`, { params: { productId } }),
   submitReview: (data) => {
     invalidateCache("/reviews/product");
     return axiosInstance.post("/reviews/submit", data);
+  },
+  deleteReview: (reviewId) => {
+    invalidateCache("/reviews/product");
+    return axiosInstance.delete(`/reviews/${reviewId}`);
   },
   createTicket: (data) => axiosInstance.post("/tickets/create", data),
   getMyTickets: () => getWithDedupe("/tickets/my-tickets"),

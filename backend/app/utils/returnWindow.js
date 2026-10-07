@@ -20,11 +20,11 @@ export function parsePositiveInt(value, fallback) {
 }
 
 export function getReturnEligibilityDelayMinutes() {
-  return parsePositiveInt(process.env.RETURN_ELIGIBILITY_DELAY_MINUTES, 2);
+  return parsePositiveInt(process.env.RETURN_ELIGIBILITY_DELAY_MINUTES, 0);
 }
 
 export function getReturnWindowMinutes() {
-  return parsePositiveInt(process.env.RETURN_WINDOW_MINUTES, 2);
+  return parsePositiveInt(process.env.RETURN_WINDOW_MINUTES, 360);
 }
 
 /**

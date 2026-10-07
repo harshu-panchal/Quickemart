@@ -38,20 +38,26 @@ const ReviewModeration = () => {
         try {
             setLoading(true);
             const res = await adminApi.getPendingReviews({ page: requestedPage, limit: pageSize });
-            if (res.data.success) {
+            if (res.data?.success) {
                 const payload = res.data.result || {};
-                const data = Array.isArray(payload.items) ? payload.items : (res.data.results || []);
+                const data = Array.isArray(payload.reviews) ? payload.reviews : (Array.isArray(payload.items) ? payload.items : (res.data.results || []));
                 setReviews(data.map(r => ({
                     ...r,
                     id: r._id,
-                    user: r.userId?.name || "Anonymous",
-                    item: r.productId?.name || "Deleted Product",
-                    itemImage: r.productId?.images?.[0],
+                    user: r.userId?.name || "Verified Customer",
+                    userImage: r.userId?.image || r.userId?.avatar,
+                    item: r.productId?.name || "Product Item",
+                    itemImage: r.productId?.mainImage,
+                    store: r.sellerId?.storeName || r.sellerId?.name || "QuickeMart Seller",
                     date: new Date(r.createdAt).toLocaleString(),
-                    tags: [] // Tags can be empty or logic-based
+                    status: r.status || "published",
+                    comment: r.comment,
+                    photos: r.photos || [],
+                    tags: r.isVerifiedPurchase ? ["VERIFIED PURCHASE"] : []
                 })));
-                setTotal(typeof payload.total === 'number' ? payload.total : data.length);
-                setPage(typeof payload.page === 'number' ? payload.page : requestedPage);
+                const pagination = payload.pagination || {};
+                setTotal(typeof pagination.total === 'number' ? pagination.total : (typeof payload.total === 'number' ? payload.total : data.length));
+                setPage(typeof pagination.page === 'number' ? pagination.page : requestedPage);
             }
         } catch (error) {
             console.error("Fetch Reviews Error:", error);
@@ -63,28 +69,26 @@ const ReviewModeration = () => {
 
     const handleApprove = async (id) => {
         try {
-            const res = await adminApi.updateReviewStatus(id, 'approved');
-            if (res.data.success) {
-                setReviews(reviews.filter(r => r.id !== id));
+            const res = await adminApi.updateReviewStatus(id, { status: 'published' });
+            if (res.data?.success) {
                 fetchReviews(page);
-                showToast('Review approved and published', 'success');
+                showToast('Review published to public catalog', 'success');
             }
         } catch (error) {
-            showToast("Failed to approve review", "error");
+            showToast("Failed to publish review", "error");
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to reject and remove this review?')) return;
+    const handleHide = async (id) => {
+        if (!window.confirm('Are you sure you want to hide this review from public view?')) return;
         try {
-            const res = await adminApi.updateReviewStatus(id, 'rejected');
-            if (res.data.success) {
-                setReviews(reviews.filter(r => r.id !== id));
+            const res = await adminApi.updateReviewStatus(id, { status: 'hidden', moderationReason: 'Hidden by admin moderation' });
+            if (res.data?.success) {
                 fetchReviews(page);
-                showToast('Review rejected and removed', 'warning');
+                showToast('Review hidden from public catalog', 'warning');
             }
         } catch (error) {
-            showToast("Failed to remove review", "error");
+            showToast("Failed to hide review", "error");
         }
     };
 
@@ -174,28 +178,23 @@ const ReviewModeration = () => {
 
                             {/* Actions */}
                             <div className="lg:w-48 flex lg:flex-col items-center justify-center gap-3">
-                                {r.status !== 'approved' && (
+                                {r.status !== 'published' ? (
                                     <button
                                         onClick={() => handleApprove(r.id)}
-                                        className="flex-1 w-full flex items-center justify-center gap-2 py-3 bg-brand-500 text-primary-foreground rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-200 hover:bg-black  transition-all active:scale-95"
+                                        className="flex-1 w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all active:scale-95"
                                     >
                                         <HiOutlineShieldCheck className="h-4 w-4" />
-                                        APPROVE
+                                        PUBLISH
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => handleHide(r.id)}
+                                        className="flex-1 w-full flex items-center justify-center gap-2 py-3 bg-white text-rose-500 ring-1 ring-rose-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 transition-all active:scale-95"
+                                    >
+                                        <HiOutlineTrash className="h-4 w-4" />
+                                        HIDE REVIEW
                                     </button>
                                 )}
-                                <button
-                                    onClick={() => handleDelete(r.id)}
-                                    className="flex-1 w-full flex items-center justify-center gap-2 py-3 bg-white text-rose-500 ring-1 ring-rose-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 transition-all active:scale-95"
-                                >
-                                    <HiOutlineTrash className="h-4 w-4" />
-                                    REMOVE
-                                </button>
-                                <button
-                                    onClick={() => handleReplyClick(r)}
-                                    className="flex-1 w-full flex items-center justify-center gap-2 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all active:scale-95"
-                                >
-                                    REPLY
-                                </button>
                             </div>
                         </div>
                     </Card>

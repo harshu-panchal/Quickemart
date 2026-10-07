@@ -322,12 +322,14 @@ async function resolveNearbySellerIds(deliveryPartner, userId) {
 
   const sellerIds = matchingSellers.map((s) => s._id);
 
-  // No dev fallback â€” if delivery partner is not near any seller,
-  // they simply get no orders. This prevents cross-city/cross-state leaks.
   if (sellerIds.length === 0) {
-    console.info(
-      `[resolveNearbySellerIds] Delivery partner ${userId} is not within any seller's service radius. No orders shown.`,
-    );
+    try {
+      const activeSellers = await Seller.find({ isActive: true }).select("_id").lean();
+      const fallbackIds = activeSellers.map((s) => s._id);
+      return { sellerIds: fallbackIds, usedFallback: true };
+    } catch {
+      return { sellerIds: [], usedFallback: false };
+    }
   }
 
   return { sellerIds, usedFallback: false };

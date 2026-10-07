@@ -347,6 +347,12 @@ const ProductCard = React.memo(
               )}>
               {product.weight || "1 unit"}
             </div>
+            {Number(product.averageRating || 0) > 0 && (
+              <div className="ml-auto flex items-center gap-0.5 bg-amber-50 text-amber-700 font-black px-1.5 py-0.5 rounded text-[8px] sm:text-[9px]">
+                <Star size={10} className="fill-amber-400 text-amber-400" />
+                <span>{Number(product.averageRating).toFixed(1)}</span>
+              </div>
+            )}
           </div>
 
           <div className={cn(compact ? "h-7 sm:h-8" : "h-7 sm:h-8 md:h-9")}>

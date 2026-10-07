@@ -22,6 +22,11 @@ const ticketSchema = new mongoose.Schema(
             required: true,
             trim: true,
         },
+        orderId: {
+            type: String,
+            default: "",
+            trim: true,
+        },
         description: {
             type: String,
             required: true,

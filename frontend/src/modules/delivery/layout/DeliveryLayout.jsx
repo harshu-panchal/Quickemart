@@ -153,28 +153,21 @@ const DeliveryLayout = () => {
     if (!payload?.orderId) return false;
     if (activeOrderRef.current) return true;
     if (shownOrderIdsRef.current.has(payload.orderId)) return true;
-    const p = payload.preview;
-    if (
-      !p ||
-      typeof p.pickup !== "string" ||
-      (typeof p.drop !== "string" && typeof p.drop !== "number") ||
-      String(p.drop).trim() === ""
-    ) {
-      return false;
-    }
+    const p = payload.preview || {};
+    const pickup = (typeof p.pickup === "string" && p.pickup.trim()) ? p.pickup : (payload.sellerName || "Seller Store");
+    const drop = (p.drop != null && String(p.drop).trim()) ? String(p.drop) : (payload.customerAddress || "Customer Address");
     const exp = payload.deliverySearchExpiresAt;
     if (exp && secondsLeftUntilDeliveryExpiry(exp) <= 0) {
       return false;
     }
     shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(payload.orderId);
-    const total = typeof p.total === "number" ? p.total : Number(p.total) || 0;
-    const dropLabel = typeof p.drop === "string" ? p.drop : String(p.drop);
+    const total = typeof p.total === "number" ? p.total : Number(p.total) || Number(payload.value) || 0;
     const earnings = typeof p.earnings === "number" ? p.earnings : (payload.paymentBreakdown?.riderPayoutTotal ?? Math.round(total * 0.1));
     setActiveOrder({
       id: payload.orderId,
-      mongoId: undefined,
-      pickup: p.pickup,
-      drop: dropLabel,
+      mongoId: payload.mongoId || payload._id,
+      pickup: pickup,
+      drop: drop,
       distance: "Nearby",
       estTime: "10-15 min",
       value: total,

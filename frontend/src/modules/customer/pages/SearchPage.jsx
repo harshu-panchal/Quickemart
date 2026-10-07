@@ -228,7 +228,7 @@ const SearchPage = () => {
 
     // Trigger backend search activity logging when user searches
     useEffect(() => {
-        if (debouncedQuery && debouncedQuery.trim().length >= 2) {
+        if (debouncedQuery && debouncedQuery.trim().length >= 1) {
             customerApi.getProducts({
                 search: debouncedQuery.trim(),
                 lat: currentLocation?.latitude,

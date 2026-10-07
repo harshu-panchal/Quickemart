@@ -9,6 +9,7 @@ import DeliveryOtpDisplay from "../components/DeliveryOtpDisplay";
 import OrderProgressTracker from "../components/order/OrderProgressTracker";
 import ReturnProgressTracker from "../components/order/ReturnProgressTracker";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import ReviewFormModal from "../components/reviews/ReviewFormModal";
 import {
   ChevronLeft,
   Package,
@@ -150,6 +151,7 @@ const OrderDetailPage = () => {
 
   const [showInvoice, setShowInvoice] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [reviewProductId, setReviewProductId] = useState(null);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [returnDetails, setReturnDetails] = useState(null);
@@ -168,13 +170,13 @@ const OrderDetailPage = () => {
   const [handoffOtp, setHandoffOtp] = useState(null);
   const [clockTick, setClockTick] = useState(Date.now());
   const parsedReturnWindowMinutes = parseInt(
-    import.meta.env.VITE_RETURN_WINDOW_MINUTES || "2",
+    import.meta.env.VITE_RETURN_WINDOW_MINUTES || "360",
     10,
   );
   const returnWindowMinutes =
     Number.isFinite(parsedReturnWindowMinutes) && parsedReturnWindowMinutes > 0
       ? parsedReturnWindowMinutes
-      : 2;
+      : 360;
   const routeOriginRef = useRef(null);
   const routeRequestRef = useRef({ phase: "", startedAt: 0 });
   const [returnCountdown, setReturnCountdown] = useState(null);
@@ -1106,6 +1108,14 @@ const OrderDetailPage = () => {
                   <p className="text-slate-500 text-xs font-medium">
                     Qty: {item.quantity}
                   </p>
+                  {(status === "delivered" || order?.workflowStatus === "DELIVERED") && (
+                    <button
+                      onClick={() => setReviewProductId(item.product?._id || item.product)}
+                      className="mt-1.5 text-[11px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 transition-colors inline-flex items-center gap-1"
+                    >
+                      ★ Rate & Review
+                    </button>
+                  )}
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="font-bold text-slate-900">
@@ -1300,7 +1310,11 @@ const OrderDetailPage = () => {
         onClose={() => setShowInvoice(false)}
         order={order}
       />
-      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <HelpModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        orderId={order?.orderId || order?._id || id}
+      />
 
       {/* Return Request Modal */}
       {showReturnModal && (
@@ -1451,6 +1465,19 @@ const OrderDetailPage = () => {
             </div>
           </motion.div>
         </div>
+      )}
+
+      {/* Review Modal for Item Rating */}
+      {reviewProductId && (
+        <ReviewFormModal
+          isOpen={Boolean(reviewProductId)}
+          onClose={() => setReviewProductId(null)}
+          productId={reviewProductId}
+          onSuccess={() => {
+            setReviewProductId(null);
+            toast.success("Review submitted! Thank you for your feedback.");
+          }}
+        />
       )}
     </div>
   );

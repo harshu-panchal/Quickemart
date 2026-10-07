@@ -77,6 +77,9 @@ export const LEDGER_TRANSACTION_TYPE = {
   // the `LedgerEntry` collection were both bypassed, leaving every
   // wallet-using customer in permanent drift between the two ledgers.
   WALLET_PAYMENT: "WALLET_PAYMENT",
+  SELLER_SLA_PENALTY_DEDUCTION: "SELLER_SLA_PENALTY_DEDUCTION",
+  SELLER_SLA_PENALTY_REVERSAL: "SELLER_SLA_PENALTY_REVERSAL",
+  SELLER_SLA_PENALTY_WAIVER: "SELLER_SLA_PENALTY_WAIVER",
 };
 
 export const PAYOUT_TYPE = {
@@ -89,15 +92,6 @@ export const PAYOUT_STATUS = {
   PROCESSING: "PROCESSING",
   COMPLETED: "COMPLETED",
   FAILED: "FAILED",
-  // Audit Phase 1 (H-1): `cancelPendingPayoutForOrder` writes this status
-  // when reversing a HOLD/PENDING payout after a return or cancellation.
-  // Previously `PAYOUT_STATUS.CANCELLED` was `undefined`, so
-  //   - `{ $ne: PAYOUT_STATUS.CANCELLED }` matched every document (idempotency
-  //     guard never short-circuited correctly), and
-  //   - `payout.status = PAYOUT_STATUS.CANCELLED; await payout.save()` failed
-  //     the schema enum (ALL_PAYOUT_STATUSES) and threw a ValidationError,
-  //     aborting the return-refund flow.
-  // Adding the value is additive: `ALL_PAYOUT_STATUSES` is derived below.
   CANCELLED: "CANCELLED",
 };
 
@@ -139,6 +133,38 @@ export const FINANCE_AUDIT_ACTION = {
   PAYOUT_PROCESSED: "PAYOUT_PROCESSED",
   DELIVERY_SETTINGS_UPDATED: "DELIVERY_SETTINGS_UPDATED",
   FINANCE_ADJUSTMENT_APPLIED: "FINANCE_ADJUSTMENT_APPLIED",
+  SLA_RULE_CREATED: "SLA_RULE_CREATED",
+  SLA_RULE_UPDATED: "SLA_RULE_UPDATED",
+  SLA_VIOLATION_RECORDED: "SLA_VIOLATION_RECORDED",
+  SLA_VIOLATION_APPROVED: "SLA_VIOLATION_APPROVED",
+  SLA_VIOLATION_REJECTED: "SLA_VIOLATION_REJECTED",
+  SLA_VIOLATION_WAIVED: "SLA_VIOLATION_WAIVED",
+  SLA_VIOLATION_DISPUTED: "SLA_VIOLATION_DISPUTED",
+  SLA_VIOLATION_DISPUTE_RESOLVED: "SLA_VIOLATION_DISPUTE_RESOLVED",
+};
+
+export const SLA_VIOLATION_CATEGORY = {
+  ACCEPTANCE_DELAY: "ACCEPTANCE_DELAY",
+  DISPATCH_DELAY: "DISPATCH_DELAY",
+  POST_ACCEPTANCE_CANCEL: "POST_ACCEPTANCE_CANCEL",
+  EXPIRED_PRODUCT: "EXPIRED_PRODUCT",
+  DEFECTIVE_WRONG_ITEM: "DEFECTIVE_WRONG_ITEM",
+  FAKE_UNACCEPTED_SUPPLY: "FAKE_UNACCEPTED_SUPPLY",
+};
+
+export const SLA_FORMULA_TYPE = {
+  FIXED: "FIXED",
+  PERCENTAGE: "PERCENTAGE",
+  COMBINED: "COMBINED",
+};
+
+export const SLA_VIOLATION_STATUS = {
+  PENDING_APPROVAL: "PENDING_APPROVAL",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  WAIVED: "WAIVED",
+  DISPUTED: "DISPUTED",
+  RESOLVED: "RESOLVED",
 };
 
 // Audit Phase 4 (C-1 + H-5): when this flag is on, `grandTotal` is

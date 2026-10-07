@@ -3,6 +3,9 @@ import Transaction from "../models/transaction.js";
 import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import Wallet from "../models/wallet.js";
+import SlaViolation from "../models/slaViolation.js";
+import Payout from "../models/payout.js";
+import LedgerEntry from "../models/ledgerEntry.js";
 import { getSellerStats as getSellerStatsFromService } from "../services/seller/sellerStatsService.js";
 
 /* ===============================
@@ -29,9 +32,23 @@ export const getSellerEarnings = async (req, res) => {
         const sellerId = req.user.id;
         const sellerOid = new mongoose.Types.ObjectId(sellerId);
 
-        const transactions = await Transaction.find({ user: sellerId, userModel: 'Seller' })
-            .sort({ createdAt: -1 })
-            .populate("order", "orderId");
+        const [transactions, violations, payouts] = await Promise.all([
+            Transaction.find({ user: sellerId, userModel: 'Seller' })
+                .sort({ createdAt: -1 })
+                .populate("order", "orderId"),
+            SlaViolation.find({
+                $or: [
+                    ...(sellerOid ? [{ sellerId: sellerOid }] : []),
+                    { sellerId: String(sellerId) }
+                ]
+            })
+                .sort({ createdAt: -1 })
+                .populate("orderId", "orderId")
+                .lean(),
+            Payout.find({ beneficiaryId: sellerId, payoutType: 'SELLER' })
+                .sort({ createdAt: -1 })
+                .lean(),
+        ]);
 
         const settledBalance = transactions
             .filter(t => t.status === 'Settled')
@@ -68,6 +85,14 @@ export const getSellerEarnings = async (req, res) => {
             .filter(t => t.type === 'Withdrawal' && t.status === 'Settled')
             .reduce((acc, t) => acc + Math.abs(t.amount), 0);
 
+        // Calculate Total SLA Deductions
+        const totalSlaDeductions = violations
+            .filter(v => v.status === 'APPROVED')
+            .reduce((acc, v) => acc + (v.appliedPenalty || 0), 0);
+
+        const totalDeductions = totalSlaDeductions;
+        const netEarnings = Math.max(0, totalRevenue - totalDeductions);
+
         // Monthly Revenue Aggregation (Last 6 Months)
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -103,23 +128,57 @@ export const getSellerEarnings = async (req, res) => {
             });
         }
 
+        const formattedPenalties = violations.map(v => ({
+            id: v._id,
+            violationId: v.violationId,
+            category: v.category,
+            orderId: v.orderId?._id || v.orderId,
+            orderRef: v.orderSnapshot?.orderId ? `#${v.orderSnapshot.orderId}` : (v.orderId?.orderId ? `#${v.orderId.orderId}` : "N/A"),
+            calculatedPenalty: v.calculatedPenalty,
+            appliedPenalty: v.appliedPenalty,
+            status: v.status,
+            description: v.description,
+            date: v.createdAt ? new Date(v.createdAt).toISOString().split('T')[0] : "",
+            time: v.createdAt ? new Date(v.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+            dispute: v.dispute || {},
+        }));
+
+        const formattedPayouts = payouts.map(p => ({
+            id: p._id,
+            amount: p.amount,
+            status: p.status,
+            payoutType: p.payoutType,
+            processedAt: p.processedAt,
+            createdAt: p.createdAt,
+            date: p.createdAt ? new Date(p.createdAt).toISOString().split('T')[0] : "",
+            remarks: p.remarks || "Regular settlement",
+            orderCount: Array.isArray(p.relatedOrderIds) ? p.relatedOrderIds.length : 0,
+        }));
+
         return handleResponse(res, 200, "Earnings fetched successfully", {
             balances: {
+                totalEarnings: totalRevenue,
+                totalRevenue: totalRevenue,
+                totalDeductions: totalDeductions,
+                netEarnings: netEarnings,
+                availableForPayout: liveAvailableBalance,
+                availableBalance: liveAvailableBalance,
+                pendingSettlement: onHoldBalance,
                 settledBalance: settledBalance,
                 pendingPayouts: pendingPayouts,
-                onHoldBalance: onHoldBalance, // New field
-                availableBalance: liveAvailableBalance, // New field for clarity
-                totalRevenue: totalRevenue,
-                totalWithdrawn: totalWithdrawn
+                onHoldBalance: onHoldBalance,
+                totalWithdrawn: totalWithdrawn,
             },
             monthlyChart: chartData,
+            penalties: formattedPenalties,
+            payouts: formattedPayouts,
             ledger: transactions.map(t => ({
                 id: (t.reference || t._id).toString(),
                 type: t.type,
                 amount: t.amount,
                 status: t.status,
-                date: t.createdAt.toISOString().split('T')[0],
-                time: t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                date: t.createdAt ? t.createdAt.toISOString().split('T')[0] : "",
+                time: t.createdAt ? t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
                 customer: t.type === 'Withdrawal' ? 'Bank Transfer' : 'Customer',
                 ref: t.order ? `#${t.order.orderId}` : t.reference || t._id
             }))

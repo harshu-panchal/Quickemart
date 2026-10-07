@@ -36,6 +36,8 @@ export function getOrderSocket(getToken) {
     console.log('[orderSocket] Creating new Socket.IO connection to:', url);
 
     // Important: capture the instance so logs don't reference a later-overwritten module variable.
+    // Use websocket-first to avoid the polling 400 "Unknown session" error that occurs when
+    // the backend restarts and the client holds a stale sid from a previous session.
     const s = io(url, {
       autoConnect: false,
       auth: { token },
@@ -58,9 +60,52 @@ export function getOrderSocket(getToken) {
 
     s.on("disconnect", (reason) => {
       console.log("[orderSocket] Socket disconnected, reason:", reason);
+      // If the server closed the connection (e.g., after a backend restart),
+      // give it a brief moment then reconnect cleanly.
+      if (reason === "transport close" || reason === "io server disconnect") {
+        setTimeout(() => {
+          if (s.disconnected) s.connect();
+        }, 1500);
+      }
     });
 
     s.on("connect_error", (error) => {
+      const msg = error?.message || "";
+      const isUnauthorized =
+        msg.includes("Unauthorized") ||
+        msg.includes("jwt expired") ||
+        msg.includes("jwt malformed") ||
+        msg.includes("invalid token");
+
+      if (isUnauthorized) {
+        console.warn("[orderSocket] Unauthorized token — pausing socket reconnect until fresh token is provided");
+        try {
+          s.disconnect();
+        } catch (_) {}
+        return;
+      }
+
+      // 400 "Bad request" / "Unknown session" means the backend restarted and
+      // our sid is stale. Force a fresh handshake by resetting the engine.
+      const isStaleSession =
+        msg.includes("Bad request") ||
+        msg.includes("unknown sid") ||
+        msg.includes("Unknown session") ||
+        (error?.description?.status === 400) ||
+        (error?.context?.status === 400);
+
+      if (isStaleSession) {
+        console.warn("[orderSocket] Stale session detected — forcing fresh connection");
+        try {
+          s.io.engine.close();
+        } catch (_) {
+          // ignore
+        }
+        setTimeout(() => {
+          if (s.disconnected) s.connect();
+        }, 500);
+        return;
+      }
       console.error("[orderSocket] Socket connection error:", error);
     });
 

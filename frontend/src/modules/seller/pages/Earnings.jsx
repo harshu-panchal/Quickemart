@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import Button from "@shared/components/ui/Button";
@@ -10,6 +10,12 @@ import {
   Banknote,
   ArrowDownToLine,
   Building2,
+  ShieldAlert,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Receipt,
+  Scale,
 } from "lucide-react";
 import {
   BarChart,
@@ -30,206 +36,200 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { exportToCSV } from "@/lib/exportUtils";
 import { useSellerEarnings } from "../context/SellerEarningsContext";
+import PenaltyDisputeModal from "../components/PenaltyDisputeModal";
+import Pagination from "@shared/components/ui/Pagination";
 
 const Earnings = () => {
   const navigate = useNavigate();
   const { earningsData: data, earningsLoading: loading, refreshEarnings } = useSellerEarnings();
-  const [withdrawAmount, setWithdrawAmount] = React.useState("");
-  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = React.useState(false);
-  const [isWithdrawing, setIsWithdrawing] = React.useState(false);
+  const [selectedPenaltyForDispute, setSelectedPenaltyForDispute] = useState(null);
+  const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
 
-  React.useEffect(() => {
-    if (data?.balances != null && withdrawAmount === "") {
-      const settled = Number(data.balances?.settledBalance ?? 0);
-      setWithdrawAmount(settled > 0 ? String(settled) : "");
+  // Pagination for Penalties & Payouts
+  const [penaltyPage, setPenaltyPage] = useState(1);
+  const [payoutPage, setPayoutPage] = useState(1);
+  const pageSize = 5;
+
+  const totalEarnings = Number(data?.balances?.totalEarnings ?? data?.balances?.totalRevenue ?? 0);
+  const totalDeductions = Number(data?.balances?.totalDeductions ?? 0);
+  const netEarnings = Number(data?.balances?.netEarnings ?? Math.max(0, totalEarnings - totalDeductions));
+  const availableForPayout = Number(data?.balances?.availableForPayout ?? data?.balances?.availableBalance ?? data?.balances?.settledBalance ?? 0);
+  const pendingSettlement = Number(data?.balances?.pendingSettlement ?? data?.balances?.onHoldBalance ?? 0);
+
+  const penalties = Array.isArray(data?.penalties) ? data.penalties : [];
+  const payouts = Array.isArray(data?.payouts) ? data.payouts : [];
+
+  const paginatedPenalties = penalties.slice((penaltyPage - 1) * pageSize, penaltyPage * pageSize);
+  const paginatedPayouts = payouts.slice((payoutPage - 1) * pageSize, payoutPage * pageSize);
+
+  const getPenaltyStatusBadge = (status) => {
+    switch (status) {
+      case "APPROVED":
+        return <Badge variant="destructive" className="bg-rose-100 text-rose-800 font-bold">DEDUCTED</Badge>;
+      case "PENDING_APPROVAL":
+        return <Badge variant="warning" className="bg-amber-100 text-amber-800 font-bold">UNDER REVIEW</Badge>;
+      case "DISPUTED":
+        return <Badge className="bg-purple-100 text-purple-800 font-bold">DISPUTED</Badge>;
+      case "WAIVED":
+        return <Badge className="bg-blue-100 text-blue-800 font-bold">WAIVED / REFUNDED</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
     }
-  }, [data?.balances]);
-
-  const handleWithdraw = () => {
-    const totalBalance = Number(data?.balances?.settledBalance ?? 0);
-    const amount = parseFloat(withdrawAmount);
-    if (isNaN(amount) || amount <= 0 || amount > totalBalance) {
-      alert(
-        "Please enter a valid amount between ₹0.01 and ₹" +
-        totalBalance.toLocaleString(),
-      );
-      return;
-    }
-
-    setIsWithdrawing(true);
-    setTimeout(() => {
-      setIsWithdrawing(false);
-      setIsWithdrawModalOpen(false);
-      alert(
-        `Withdrawal request of ₹${amount.toLocaleString()} submitted successfully!`,
-      );
-    }, 1500);
-  };
-
-  const exportReport = () => {
-    alert("Exporting monthly earnings report as PDF (Simulation)");
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen font-black text-slate-600">LOADING EARNINGS...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen font-black text-slate-600">
+        LOADING SELLER EARNINGS & DEDUCTIONS...
+      </div>
+    );
   }
+
   return (
     <div className="space-y-8 pb-16">
+      {/* Top Bar / Header */}
       <BlurFade delay={0.1}>
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800 hidden md:block">
-            Earnings Overview
-          </h2>
-          <div className="flex space-x-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              Seller Earnings & Settlement Dashboard
+            </h2>
+            <p className="text-slate-600 text-sm font-medium mt-0.5">
+              Auditable financial summary, SLA deductions, payouts, and dispute submissions.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
             <Button
               onClick={() => {
                 const ledger = Array.isArray(data?.ledger) ? data.ledger : [];
-                if (ledger.length === 0) {
-                  toast.info("No transactions to export.");
+                if (ledger.length === 0 && penalties.length === 0) {
+                  toast.info("No financial records to export.");
                   return;
                 }
-                const exportData = ledger.map((txn) => ({
-                  id: txn.id ?? txn.ref ?? "",
-                  type: txn.type ?? "",
-                  amount: `₹${Number(txn.amount ?? 0).toLocaleString()}`,
-                  status: txn.status ?? "",
-                  date: txn.date ?? (txn.createdAt ? new Date(txn.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ""),
-                  customer: txn.customer ?? "",
-                  ref: txn.ref ?? "",
-                }));
-                exportToCSV(exportData, "Seller_Earnings_Report", {
-                  id: "Transaction ID",
-                  type: "Type",
-                  amount: "Amount",
-                  status: "Status",
-                  date: "Date",
-                  customer: "Customer",
-                  ref: "Reference",
-                });
+                exportToCSV(
+                  ledger.map((txn) => ({
+                    id: txn.id ?? txn.ref ?? "",
+                    type: txn.type ?? "",
+                    amount: `₹${Number(txn.amount ?? 0).toLocaleString()}`,
+                    status: txn.status ?? "",
+                    date: txn.date ?? "",
+                    customer: txn.customer ?? "",
+                    ref: txn.ref ?? "",
+                  })),
+                  "Seller_Earnings_Report"
+                );
                 toast.success("Earnings report downloaded successfully!");
               }}
               variant="outline"
-              className="border-gray-200">
-              <Download className="mr-2 h-5 w-5" />
-              Download Report
+              className="border-slate-200 font-bold">
+              <Download className="mr-2 h-4 w-4" />
+              Export Report
             </Button>
             <ShimmerButton
               onClick={() => navigate("/seller/withdrawals")}
-              className="px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg">
-              <span className="text-white">Withdraw Funds</span>
+              className="px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg">
+              <span className="text-white">Request Payout</span>
             </ShimmerButton>
           </div>
         </div>
       </BlurFade>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <BlurFade delay={0.2}>
-          <Card className="bg-gradient-to-br from-brand-600 to-teal-700 text-white border-none shadow-lg h-full">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-brand-100 font-medium">Total Revenue</p>
-                <h3 className="text-4xl font-bold mt-2">₹{Number(data?.balances?.totalRevenue ?? 0).toLocaleString()}</h3>
-              </div>
-              <div className="p-3 bg-white/20 rounded-xl">
-                <IndianRupee className="h-8 w-8 text-white" />
-              </div>
+      {/* Five Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* 1. Total Earnings */}
+        <BlurFade delay={0.15}>
+          <MagicCard className="p-5 border-none shadow-md bg-white flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider">Total Earnings</span>
+              <IndianRupee className="h-5 w-5 text-indigo-600" />
             </div>
-            <div className="mt-8 flex items-center text-brand-100 bg-white/10 w-fit px-3 py-1 rounded-full text-sm">
-              <TrendingUp className="mr-2" />
-              <span>Real-time earnings data</span>
-            </div>
-          </Card>
+            <h3 className="text-2xl font-black text-slate-900">₹{totalEarnings.toLocaleString()}</h3>
+            <p className="text-[11px] text-slate-500 font-bold mt-2">Gross revenue from orders</p>
+          </MagicCard>
         </BlurFade>
 
+        {/* 2. Total Deductions */}
+        <BlurFade delay={0.2}>
+          <MagicCard className="p-5 border-none shadow-md bg-white flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-rose-600">Total Deductions</span>
+              <ShieldAlert className="h-5 w-5 text-rose-600" />
+            </div>
+            <h3 className="text-2xl font-black text-rose-600">₹{totalDeductions.toLocaleString()}</h3>
+            <p className="text-[11px] text-rose-600 font-bold mt-2">Approved SLA penalties</p>
+          </MagicCard>
+        </BlurFade>
+
+        {/* 3. Net Earnings */}
+        <BlurFade delay={0.25}>
+          <MagicCard className="p-5 border-none shadow-md bg-white flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-600">Net Earnings</span>
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
+            </div>
+            <h3 className="text-2xl font-black text-emerald-700">₹{netEarnings.toLocaleString()}</h3>
+            <p className="text-[11px] text-emerald-600 font-bold mt-2">Earnings after deductions</p>
+          </MagicCard>
+        </BlurFade>
+
+        {/* 4. Available for Payout */}
         <BlurFade delay={0.3}>
-          <Card className="h-full border-none shadow-md bg-white p-6 flex flex-col justify-between group hover:shadow-xl transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-1">
-                  Total Withdrawn
-                </p>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                  ₹{Number(data?.balances?.totalWithdrawn ?? 0).toLocaleString()}
-                </h2>
-              </div>
-              <div className="p-3 bg-brand-50 rounded-lg group-hover:scale-110 transition-transform duration-300">
-                <Banknote className="h-6 w-6 text-brand-500" />
-              </div>
+          <MagicCard className="p-5 border-none shadow-md bg-white flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-indigo-600">Available Payout</span>
+              <Banknote className="h-5 w-5 text-indigo-600" />
             </div>
-            <div className="mt-4">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs">
-                  <ArrowDownToLine className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-600 uppercase">
-                    Available to Withdraw
-                  </p>
-                  <p className="text-xs font-black text-slate-900">
-                    ₹{Number(data?.balances?.settledBalance ?? 0).toLocaleString()}
-                  </p>
-                </div>
-              </div>
+            <h3 className="text-2xl font-black text-indigo-900">₹{availableForPayout.toLocaleString()}</h3>
+            <p className="text-[11px] text-indigo-600 font-bold mt-2">Ready for withdrawal</p>
+          </MagicCard>
+        </BlurFade>
+
+        {/* 5. Pending Settlement */}
+        <BlurFade delay={0.35}>
+          <MagicCard className="p-5 border-none shadow-md bg-white flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-600">Pending Hold</span>
+              <Clock className="h-5 w-5 text-amber-600" />
             </div>
-          </Card>
+            <h3 className="text-2xl font-black text-amber-900">₹{pendingSettlement.toLocaleString()}</h3>
+            <p className="text-[11px] text-amber-600 font-bold mt-2">Return window holding</p>
+          </MagicCard>
         </BlurFade>
       </div>
 
+      {/* Monthly Chart */}
       <BlurFade delay={0.4}>
         <Card className="p-6 border-none shadow-md bg-white">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-brand-500" />
-              Monthly Revenue Performance
+            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-indigo-600" />
+              Monthly Revenue & Performance
             </h3>
           </div>
-          <div className="h-[300px] w-full min-h-[200px] flex items-center justify-center">
+          <div className="h-[280px] w-full min-h-[200px] flex items-center justify-center">
             {(Array.isArray(data?.monthlyChart) ? data.monthlyChart : []).length === 0 ? (
-              <p className="text-slate-600 text-sm font-medium">No monthly revenue data yet.</p>
+              <p className="text-slate-500 text-sm font-bold">No monthly revenue data available.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.monthlyChart}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    stroke="#f1f5f9"
-                  />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 700 }}
-                    dy={10}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 700 }}
-                    tickFormatter={(value) => `₹${value}`}
+                    tickFormatter={(val) => `₹${val}`}
                   />
                   <Tooltip
-                    cursor={{ fill: "#f8fafc" }}
-                    contentStyle={{
-                      borderRadius: "12px",
-                      border: "none",
-                      boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
-                      fontSize: "12px",
-                      fontWeight: "700",
-                    }}
-                    formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]}
+                    contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
+                    formatter={(val) => [`₹${val.toLocaleString()}`, "Revenue"]}
                   />
-                  <Bar
-                    dataKey="revenue"
-                    fill="url(#colorRevenue)"
-                    radius={[6, 6, 0, 0]}
-                    barSize={40}
-                  />
-                  <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={1} />
-                      <stop offset="95%" stopColor="#818cf8" stopOpacity={1} />
-                    </linearGradient>
-                  </defs>
+                  <Bar dataKey="revenue" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={36} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -237,88 +237,163 @@ const Earnings = () => {
         </Card>
       </BlurFade>
 
-      {/* Withdrawal Modal */}
-      <AnimatePresence>
-        {isWithdrawModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-md relative z-10 bg-white rounded-lg shadow-2xl overflow-hidden p-8 text-center">
-              <div className="h-16 w-16 bg-brand-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
-                <Banknote className="h-8 w-8 text-brand-600" />
-              </div>
-
-              <h2 className="text-2xl font-black text-slate-900 mb-2">
-                Withdraw Funds
-              </h2>
-              <p className="text-sm text-slate-600 font-medium mb-8">
-                Available Balance:{" "}
-                <span className="text-brand-600 font-bold">
-                  ₹{Number(data?.balances?.settledBalance ?? 0).toLocaleString()}
-                </span>
+      {/* Itemized SLA Penalty History Section */}
+      <BlurFade delay={0.45}>
+        <Card className="border-none shadow-md bg-white p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-rose-600" />
+                Itemized SLA Deductions & Penalty History
+              </h3>
+              <p className="text-slate-500 text-xs font-medium mt-0.5">
+                Review assessed penalties, check dispute status, or submit appeals with supporting evidence.
               </p>
-
-              <div className="space-y-4 text-left">
-                <div>
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 block">
-                    Amount
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 font-bold">
-                      ₹
-                    </span>
-                    <input
-                      type="number"
-                      className="w-full pl-8 pr-4 py-3 rounded-lg border-slate-200 bg-slate-50 font-bold text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all outline-none"
-                      placeholder="0.00"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 block">
-                    Select Bank Account
-                  </label>
-                  <div className="p-4 border border-slate-200 rounded-lg flex items-center gap-4 cursor-pointer hover:border-brand-500 hover:bg-brand-50/10 transition-all group">
-                    <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-600 transition-colors">
-                      <Building2 className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-black text-slate-900">
-                        HDFC Bank **** 4589
-                      </p>
-                      <p className="text-xs text-slate-600 font-bold">
-                        Primary Account
-                      </p>
-                    </div>
-                    <div className="h-5 w-5 rounded-full border-2 border-slate-200 group-hover:border-brand-500 group-hover:bg-brand-500 transition-all"></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mt-8">
-                <button
-                  onClick={() => setIsWithdrawModalOpen(false)}
-                  className="py-3 rounded-lg font-black text-slate-600 hover:bg-slate-50 transition-colors">
-                  CANCEL
-                </button>
-                <button
-                  onClick={() => {
-                    setIsWithdrawModalOpen(false);
-                    alert("Withdrawal request submitted!");
-                  }}
-                  className="py-3 rounded-lg bg-black  text-primary-foreground font-black shadow-lg shadow-brand-200 hover:bg-brand-700 hover:shadow-brand-300 transition-all">
-                  CONFIRM
-                </button>
-              </div>
-            </motion.div>
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-wider">
+                  <th className="px-4 py-3">Violation ID</th>
+                  <th className="px-4 py-3">Category / Reason</th>
+                  <th className="px-4 py-3">Order Ref</th>
+                  <th className="px-4 py-3">Penalty Amount</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                {!Array.isArray(penalties) || penalties.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-10 text-slate-400 font-bold">
+                      No SLA penalties recorded for your seller account. Great job maintaining high service standards!
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedPenalties.map((pen) => (
+                    <tr key={pen.id} className="hover:bg-slate-50 transition-all">
+                      <td className="px-4 py-4 font-black text-slate-900">{pen.violationId}</td>
+                      <td className="px-4 py-4">
+                        <p className="font-black text-slate-900">{pen.category?.replace(/_/g, " ")}</p>
+                        <p className="text-[11px] text-slate-500 truncate max-w-xs">{pen.description}</p>
+                      </td>
+                      <td className="px-4 py-4 font-bold text-slate-900">{pen.orderRef}</td>
+                      <td className="px-4 py-4 font-black text-rose-600 text-sm">₹{pen.appliedPenalty || pen.calculatedPenalty}</td>
+                      <td className="px-4 py-4">{getPenaltyStatusBadge(pen.status)}</td>
+                      <td className="px-4 py-4 text-slate-500 font-bold">{pen.date}</td>
+                      <td className="px-4 py-4 text-right">
+                        <Button
+                          onClick={() => {
+                            setSelectedPenaltyForDispute(pen);
+                            setIsDisputeModalOpen(true);
+                          }}
+                          variant="outline"
+                          className="h-8 px-3 text-xs font-bold border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+                          <Scale className="h-3.5 w-3.5 mr-1" />
+                          {pen.dispute?.isDisputed ? "View Dispute" : "Details & Dispute"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {Array.isArray(penalties) && penalties.length > pageSize && (
+            <div className="mt-4 border-t pt-4">
+              <Pagination
+                page={penaltyPage}
+                totalPages={Math.ceil((penalties?.length || 0) / pageSize)}
+                total={penalties?.length || 0}
+                pageSize={pageSize}
+                onPageChange={(p) => setPenaltyPage(p)}
+              />
+            </div>
+          )}
+        </Card>
+      </BlurFade>
+
+      {/* Payout History Section */}
+      <BlurFade delay={0.5}>
+        <Card className="border-none shadow-md bg-white p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-indigo-600" />
+                Seller Payout & Settlement History
+              </h3>
+              <p className="text-slate-500 text-xs font-medium mt-0.5">
+                Traceable list of all bank payouts generated and settled for your account.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-wider">
+                  <th className="px-4 py-3">Payout Ref</th>
+                  <th className="px-4 py-3">Amount</th>
+                  <th className="px-4 py-3">Orders Included</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                {!Array.isArray(payouts) || payouts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-10 text-slate-400 font-bold">
+                      No payout records yet.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedPayouts.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-50 transition-all">
+                      <td className="px-4 py-4 font-black text-slate-900">PAY-{String(p.id).slice(-8)}</td>
+                      <td className="px-4 py-4 font-black text-indigo-600 text-sm">₹{p.amount?.toLocaleString()}</td>
+                      <td className="px-4 py-4 font-bold text-slate-700">{p.orderCount} order(s)</td>
+                      <td className="px-4 py-4">
+                        <Badge variant={p.status === "COMPLETED" ? "success" : "warning"} className="font-bold">
+                          {p.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-4 text-slate-500 font-bold">{p.date}</td>
+                      <td className="px-4 py-4 text-slate-600">{p.remarks}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {Array.isArray(payouts) && payouts.length > pageSize && (
+            <div className="mt-4 border-t pt-4">
+              <Pagination
+                page={payoutPage}
+                totalPages={Math.ceil((payouts?.length || 0) / pageSize)}
+                total={payouts?.length || 0}
+                pageSize={pageSize}
+                onPageChange={(p) => setPayoutPage(p)}
+              />
+            </div>
+          )}
+        </Card>
+      </BlurFade>
+
+      {/* Modal for Penalty Details & Dispute */}
+      <PenaltyDisputeModal
+        penalty={selectedPenaltyForDispute}
+        isOpen={isDisputeModalOpen}
+        onClose={() => setIsDisputeModalOpen(false)}
+        onDisputeSubmitted={() => {
+          refreshEarnings();
+        }}
+      />
     </div>
   );
 };

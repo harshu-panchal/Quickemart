@@ -8,6 +8,7 @@ const trimmedString = Joi.string().trim();
 
 export const createTicketSchema = Joi.object({
   subject: trimmedString.min(2).max(200).required(),
+  orderId: trimmedString.max(100).allow("", null).optional(),
   description: trimmedString.min(2).max(5000).required(),
   priority: trimmedString.valid("low", "medium", "high", "urgent").optional(),
   userType: trimmedString

@@ -132,9 +132,14 @@ export async function logActivity({
     }
 
     // Normalise "user" → "customer"
-    const finalRole = (role || "system").toLowerCase() === "user"
+    let finalRole = (role || "system").toLowerCase() === "user"
       ? "customer"
       : (role || "system").toLowerCase();
+
+    // If role is system but category is SEARCH, assign to customer role
+    if (finalRole === "system" && category === "SEARCH") {
+      finalRole = "customer";
+    }
 
     // Derive userModel from role
     if (!userModel || userModel === "User") {
@@ -152,7 +157,9 @@ export async function logActivity({
       if (resolved.userCustomId) userCustomId = resolved.userCustomId;
     }
 
-    if (!userName) userName = "Guest";
+    if (!userName || userName === "System/Guest" || userName === "Guest") {
+      userName = finalRole === "customer" ? "Guest Customer" : "Guest";
+    }
 
     const deviceInfo = parseUserAgent(userAgent);
 

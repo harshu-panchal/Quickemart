@@ -56,9 +56,9 @@ const UserActivity = () => {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (isSilent = false) => {
     try {
-      setStatsLoading(true);
+      if (!isSilent) setStatsLoading(true);
       const res = await adminApi.getUserActivityStats();
       if (res.data?.success) {
         setStats(res.data.result || {});
@@ -66,13 +66,13 @@ const UserActivity = () => {
     } catch (err) {
       console.error("Failed to fetch activity stats:", err);
     } finally {
-      setStatsLoading(false);
+      if (!isSilent) setStatsLoading(false);
     }
   }, []);
 
-  const fetchActivities = useCallback(async (requestedPage = 1) => {
+  const fetchActivities = useCallback(async (requestedPage = 1, isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       const params = {
         page: requestedPage,
         limit: pageSize,
@@ -90,9 +90,9 @@ const UserActivity = () => {
       }
     } catch (err) {
       console.error("Failed to fetch user activities:", err);
-      showToast("Failed to fetch activity logs", "error");
+      if (!isSilent) showToast("Failed to fetch activity logs", "error");
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [pageSize, activeRoleTab, selectedCategory, selectedSeverity, debouncedSearch, showToast]);
 
@@ -102,10 +102,10 @@ const UserActivity = () => {
 
   useEffect(() => {
     fetchActivities(page);
-    // Live auto-refresh feed every 5 seconds
+    // Live auto-refresh feed every 5 seconds (silent background refresh)
     const interval = setInterval(() => {
-      fetchActivities(page);
-      fetchStats();
+      fetchActivities(page, true);
+      fetchStats(true);
     }, 5000);
     return () => clearInterval(interval);
   }, [fetchActivities, fetchStats, page]);

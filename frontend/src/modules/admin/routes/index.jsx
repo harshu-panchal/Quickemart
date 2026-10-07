@@ -25,8 +25,10 @@ import {
   Store,
   ShieldCheck,
   Activity,
+  ShieldAlert,
 } from "lucide-react";
 
+const SlaPenaltyManagement = React.lazy(() => import("../pages/SlaPenaltyManagement"));
 const UserActivity = React.lazy(() => import("../pages/UserActivity"));
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -182,6 +184,12 @@ const navItems = [
     color: "orange",
   },
   {
+    label: "SLA & Penalty Management",
+    path: "/admin/sla-management",
+    icon: ShieldAlert,
+    color: "red",
+  },
+  {
     label: "Collect Cash",
     path: "/admin/cash-collection",
     icon: CircleDollarSign,
@@ -294,6 +302,7 @@ const AdminRoutes = () => {
         <Route path="/wallet" element={<AdminWallet />} />
         <Route path="/withdrawals" element={<WithdrawalRequests />} />
         <Route path="/seller-transactions" element={<SellerTransactions />} />
+        <Route path="/sla-management" element={<SlaPenaltyManagement />} />
         <Route path="/cash-collection" element={<CashCollection />} />
         <Route path="/customers" element={<CustomerManagement />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />

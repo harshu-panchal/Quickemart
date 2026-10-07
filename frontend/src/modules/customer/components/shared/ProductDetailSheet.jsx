@@ -85,7 +85,7 @@ const ProductDetailSheet = () => {
     const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
     const [localHasReviewed, setLocalHasReviewed] = useState(false);
     const [extendedProduct, setExtendedProduct] = useState(null);
-    const [expandedSections, setExpandedSections] = useState(['description']); // Start with description open
+    const [expandedSections, setExpandedSections] = useState(['description', 'reviews']); // Start with description and reviews open
 
     const toggleSection = (section) => {
         setExpandedSections(prev => 
@@ -122,6 +122,31 @@ const ProductDetailSheet = () => {
             "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
         ];
     }, [selectedProduct]);
+
+    const displayReviewCount = useMemo(() => {
+        if (reviews.length > 0) return reviews.length;
+        if (typeof extendedProduct?.reviewCount === 'number') return extendedProduct.reviewCount;
+        if (typeof selectedProduct?.reviewCount === 'number') return selectedProduct.reviewCount;
+        if (typeof selectedProduct?.totalReviews === 'number') return selectedProduct.totalReviews;
+        if (reviewLoading) return '...';
+        return 0;
+    }, [reviews.length, extendedProduct?.reviewCount, selectedProduct?.reviewCount, selectedProduct?.totalReviews, reviewLoading]);
+
+    const displayAverageRating = useMemo(() => {
+        if (reviews.length > 0) {
+            return (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1);
+        }
+        if (typeof extendedProduct?.averageRating === 'number' && extendedProduct.averageRating > 0) {
+            return extendedProduct.averageRating.toFixed(1);
+        }
+        if (typeof selectedProduct?.averageRating === 'number' && selectedProduct.averageRating > 0) {
+            return selectedProduct.averageRating.toFixed(1);
+        }
+        if (typeof selectedProduct?.rating === 'number' && selectedProduct.rating > 0) {
+            return Number(selectedProduct.rating).toFixed(1);
+        }
+        return '0.0';
+    }, [reviews, extendedProduct, selectedProduct]);
 
 
 
@@ -180,11 +205,15 @@ const ProductDetailSheet = () => {
         try {
             setReviewLoading(true);
             const res = await customerApi.getProductReviews(productId);
-            if (res.data.success) {
-                setReviews(res.data.results);
+            if (res.data?.success) {
+                const list = res.data.result?.reviews || res.data.results || [];
+                setReviews(Array.isArray(list) ? list : []);
+            } else {
+                setReviews([]);
             }
         } catch (error) {
             console.error("Fetch reviews error:", error);
+            setReviews([]);
         } finally {
             setReviewLoading(false);
         }
@@ -509,8 +538,10 @@ const ProductDetailSheet = () => {
                                                 className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-[10px] font-[700] border border-orange-100/50"
                                             >
                                                 <Star size={10} fill="currentColor" />
-                                                {reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
-                                                <span className="text-orange-400 font-medium">({reviews.length > 0 ? reviews.length : '120+'})</span>
+                                                {Array.isArray(reviews) && reviews.length > 0
+                                                    ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / reviews.length).toFixed(1)
+                                                    : (selectedProduct.averageRating ? Number(selectedProduct.averageRating).toFixed(1) : '4.8')}
+                                                <span className="text-orange-400 font-medium">({Array.isArray(reviews) && reviews.length > 0 ? reviews.length : (selectedProduct.reviewCount || '0')})</span>
                                             </motion.div>
                                         </div>
 
@@ -714,14 +745,14 @@ const ProductDetailSheet = () => {
                                             {/* Customer Reviews */}
                                             <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                                 id="reviews" 
-                                                title={`Customer Reviews (${reviews.length > 0 ? reviews.length : '120+'})`}
+                                                title={`Customer Reviews (${displayReviewCount})`}
                                                 icon={<Star size={16} />}
                                             >
                                                 <div className="space-y-6 mt-2">
                                                     <div className="flex items-center justify-between mb-4">
                                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-primary rounded-xl text-xs font-black border border-brand-100">
                                                             <Star size={14} fill="currentColor" />
-                                                            {reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
+                                                            {displayAverageRating}
                                                         </div>
                                                     </div>
 
@@ -998,14 +1029,14 @@ const ProductDetailSheet = () => {
                                     {/* Customer Reviews */}
                                     <AccordionItem expandedSections={expandedSections} toggleSection={toggleSection}
                                         id="reviews" 
-                                        title={`Customer Reviews (${reviews.length > 0 ? reviews.length : '120+'})`}
+                                        title={`Customer Reviews (${displayReviewCount})`}
                                         icon={<Star size={18} strokeWidth={2.5} />}
                                     >
                                         <div className="space-y-6 mt-2">
                                             <div className="flex items-center justify-between mb-4">
                                                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-primary rounded-xl text-xs font-black border border-brand-100">
                                                     <Star size={16} fill="currentColor" />
-                                                    {reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
+                                                    {displayAverageRating}
                                                 </div>
                                             </div>
 
@@ -1050,7 +1081,7 @@ const ProductDetailSheet = () => {
                                             <div className="space-y-4">
                                                 {reviewLoading ? (
                                                     <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" size={24} /></div>
-                                                ) : reviews.length > 0 ? (
+                                                ) : (Array.isArray(reviews) && reviews.length > 0) ? (
                                                     reviews.map((r, rIdx) => (
                                                         <div key={r._id} className="p-5 rounded-2xl border border-slate-100 bg-white hover:shadow-md transition-all">
                                                             <div className="flex justify-between items-start mb-2">

@@ -23,6 +23,7 @@ import mediaRoute from "./mediaRoutes.js";
 import healthRoute from "./healthRoutes.js";
 import metricsRoute from "./metricsRoutes.js";
 import authOtpRoute from "../modules/otp/otp.routes.js";
+import slaRoute from "./slaRoutes.js";
 
 import express from "express";
 
@@ -41,8 +42,10 @@ const setupRoutes = (app) => {
     // Same router, two URL surfaces. Do not deduplicate without coordinated frontend changes.
     router.use("/admin/categories", categoryRoute);
     router.use("/admin/catalog", adminCatalogRoute);
+    router.use("/admin/sla", slaRoute);
     router.use("/admin", adminRoute);
     router.use("/seller", sellerRoute);
+    router.use("/sla", slaRoute);
     router.use("/settings", settingsRoute);
     router.use("/categories", categoryRoute);
     router.use("/products", productRoute);

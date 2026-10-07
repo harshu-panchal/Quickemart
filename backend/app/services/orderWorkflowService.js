@@ -45,6 +45,8 @@ import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import logger from "./logger.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { recordSlaViolation } from "./sla/slaEngine.js";
+import { SLA_VIOLATION_CATEGORY } from "../constants/finance.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
   parseInt(process.env.DELIVERY_SEARCH_MAX_ATTEMPTS || "3", 10);
@@ -254,6 +256,16 @@ export async function sellerRejectAtomic(sellerId, orderId) {
 
   await removeSellerTimeoutJob(orderId);
   await compensateOrderCancellation(order, orderId);
+
+  // Trigger SLA Engine for Seller Cancellation After Acceptance
+  recordSlaViolation({
+    category: SLA_VIOLATION_CATEGORY.POST_ACCEPTANCE_CANCEL,
+    orderId: order._id,
+    sellerId: order.seller,
+    description: `Seller rejected pending order #${order.orderId}`,
+    detectedBy: "SYSTEM_EVENT",
+    idempotencyKey: `SLA:SELLER_REJECT:${order._id}`,
+  }).catch((err) => logger.warn("[SLA Engine] Seller rejection penalty error", { error: err.message }));
 
   emitOrderStatusUpdate(order.orderId, {
     workflowStatus: WORKFLOW_STATUS.CANCELLED,
@@ -506,6 +518,16 @@ export async function processSellerTimeoutJob({ orderId }) {
   if (!updated) return;
 
   await compensateOrderCancellation(updated, orderId);
+
+  // Trigger SLA Engine for Order Acceptance Delay / Auto-Cancellation
+  recordSlaViolation({
+    category: SLA_VIOLATION_CATEGORY.ACCEPTANCE_DELAY,
+    orderId: updated._id,
+    sellerId: updated.seller,
+    description: `Seller failed to accept order #${updated.orderId} in time (Auto-Cancellation)`,
+    detectedBy: "SYSTEM_EVENT",
+    idempotencyKey: `SLA:ACCEPTANCE_DELAY:${updated._id}`,
+  }).catch((err) => logger.warn("[SLA Engine] Acceptance delay penalty error", { error: err.message }));
 
   emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.CANCELLED }, updated.customer);
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {

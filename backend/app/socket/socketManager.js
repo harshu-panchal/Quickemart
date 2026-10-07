@@ -24,10 +24,7 @@ export const initSocket = (io) => {
       return next();
     }
     const user = verifySocketToken(token);
-    if (!user) {
-      return next(new Error("Unauthorized"));
-    }
-    socket.user = user;
+    socket.user = user || null;
     next();
   });
 
@@ -37,7 +34,8 @@ export const initSocket = (io) => {
       return;
     }
 
-    if (role === "delivery") {
+    const rLower = String(role || "").toLowerCase();
+    if (rLower === "delivery" || rLower === "deliveryboy" || rLower === "rider") {
       const dId = userId.toString();
       deliverySockets.set(dId, socket.id);
       socket.join("delivery:online");

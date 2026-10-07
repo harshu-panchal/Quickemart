@@ -264,6 +264,7 @@ export const getProducts = async (req, res) => {
         // Log user product search activity
         logActivity({
           req,
+          role: req.user?.role || "customer",
           action: "PRODUCT_SEARCH",
           category: "SEARCH",
           severity: "INFO",

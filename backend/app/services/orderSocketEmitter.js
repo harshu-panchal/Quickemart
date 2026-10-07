@@ -115,13 +115,21 @@ export async function emitDeliveryBroadcastForSeller(sellerId, payload) {
   const sid = normalizeSellerId(sellerId);
   if (!sid) return;
 
-  const ids = await getDeliveryPartnerIdsWithinSellerRadius(sid);
+  let ids = await getDeliveryPartnerIdsWithinSellerRadius(sid);
   if (!ids.length) {
-    // No delivery partners are within this seller's service radius.
-    // Do NOT fall back to broadcasting to all online partners —
-    // that causes cross-city/cross-state notification leaks.
+    // Fallback: If no delivery partners are found within strict seller radius
+    // (e.g. GPS location not yet updated or outside default 5km), broadcast to all online riders.
+    try {
+      const onlinePartners = await Delivery.find({ isOnline: true }).select("_id").lean();
+      ids = onlinePartners.map((p) => p._id.toString());
+    } catch (e) {
+      console.warn("[emitDeliveryBroadcastForSeller] Fallback online rider lookup error:", e.message);
+    }
+  }
+
+  if (!ids.length) {
     console.warn(
-      `[emitDeliveryBroadcastForSeller] No delivery partners in radius for seller ${sid}. Order ${payload.orderId} will not be broadcast.`,
+      `[emitDeliveryBroadcastForSeller] No online delivery partners found. Order ${payload.orderId} will not be broadcast.`,
     );
     return;
   }
@@ -132,6 +140,7 @@ export async function emitDeliveryBroadcastForSeller(sellerId, payload) {
     for (const id of ids) {
       s.to(`delivery:${id}`).emit("delivery:broadcast", body);
     }
+    s.to("delivery:online").emit("delivery:broadcast", body);
   }
 
   // Trigger Push Notifications for nearby riders
@@ -264,12 +273,19 @@ export async function emitReturnBroadcastForCustomer(customerLocation, payload) 
   const s = getIo();
   if (!customerLocation) return;
 
-  const ids = await getDeliveryPartnerIdsWithinCustomerRadius(customerLocation);
+  let ids = await getDeliveryPartnerIdsWithinCustomerRadius(customerLocation);
   if (!ids.length) {
-    // No delivery partners are near this customer for return pickup.
-    // Do not fall back to broadcasting to all online partners.
+    try {
+      const onlinePartners = await Delivery.find({ isOnline: true }).select("_id").lean();
+      ids = onlinePartners.map((p) => p._id.toString());
+    } catch (e) {
+      console.warn("[emitReturnBroadcastForCustomer] Fallback online rider lookup error:", e.message);
+    }
+  }
+
+  if (!ids.length) {
     console.warn(
-      `[emitReturnBroadcastForCustomer] No delivery partners in radius for return pickup. Order ${payload.orderId} will not be broadcast.`,
+      `[emitReturnBroadcastForCustomer] No online delivery partners found. Order ${payload.orderId} will not be broadcast.`,
     );
     return;
   }
@@ -280,6 +296,7 @@ export async function emitReturnBroadcastForCustomer(customerLocation, payload) 
     for (const id of ids) {
       s.to(`delivery:${id}`).emit("delivery:broadcast", body);
     }
+    s.to("delivery:online").emit("delivery:broadcast", body);
   }
 
   // Send Push Notification

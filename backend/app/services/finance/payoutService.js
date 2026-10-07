@@ -120,8 +120,20 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
       console.warn(`[Payout] Warning: Pending balance (${wallet.pendingBalance}) less than payout (${amount}) for ${ownerType} ${payout.beneficiaryId}`);
     }
 
+    let netCredit = amount;
+    const unrecovered = roundCurrency(wallet.meta?.unrecoveredPenalty || 0);
+    if (unrecovered > 0 && payout.payoutType === PAYOUT_TYPE.SELLER) {
+      const absorbed = Math.min(netCredit, unrecovered);
+      netCredit = roundCurrency(netCredit - absorbed);
+      wallet.meta = {
+        ...(wallet.meta || {}),
+        unrecoveredPenalty: roundCurrency(unrecovered - absorbed),
+      };
+      wallet.markModified("meta");
+    }
+
     wallet.pendingBalance = roundCurrency(Math.max(0, (wallet.pendingBalance || 0) - amount));
-    wallet.availableBalance = roundCurrency((wallet.availableBalance || 0) + amount);
+    wallet.availableBalance = roundCurrency((wallet.availableBalance || 0) + netCredit);
     await wallet.save({ session });
 
     payout.status = PAYOUT_STATUS.COMPLETED;

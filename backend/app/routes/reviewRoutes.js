@@ -2,21 +2,26 @@ import express from "express";
 import {
     submitReview,
     getProductReviews,
-    getPendingReviews,
-    updateReviewStatus
+    checkEligibility,
+    deleteUserReview,
+    getAdminReviews,
+    updateReviewStatus,
 } from "../controller/reviewController.js";
 import { verifyToken, allowRoles, optionalVerifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Public routes
+// Public / Optional auth routes
 router.get("/product/:productId", optionalVerifyToken, getProductReviews);
 
-// Authenticated User routes
+// Authenticated customer routes
+router.get("/check-eligibility", verifyToken, checkEligibility);
 router.post("/submit", verifyToken, submitReview);
+router.delete("/:reviewId", verifyToken, deleteUserReview);
 
 // Admin only routes
-router.get("/admin/pending", verifyToken, allowRoles("admin"), getPendingReviews);
+router.get("/admin/all", verifyToken, allowRoles("admin"), getAdminReviews);
+router.get("/admin/pending", verifyToken, allowRoles("admin"), getAdminReviews);
 router.patch("/admin/status/:id", verifyToken, allowRoles("admin"), updateReviewStatus);
 
 export default router;

@@ -262,6 +262,15 @@ async function startHttpServer() {
       methods: ["GET", "POST"],
       credentials: true,
     },
+    // Allow both transports; clients prefer websocket but fall back to polling.
+    // This keeps compatibility with clients behind proxies that block WS upgrades.
+    transports: ["websocket", "polling"],
+    // More generous timeouts so clients survive short backend restarts cleanly.
+    pingTimeout: 30000,
+    pingInterval: 25000,
+    connectTimeout: 10000,
+    // Prevent accumulation of stale sessions from crashed clients
+    upgradeTimeout: 10000,
   });
   
   initSocket(io);
