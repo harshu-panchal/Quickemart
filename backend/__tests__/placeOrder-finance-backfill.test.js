@@ -58,6 +58,12 @@ jest.unstable_mockModule("../app/services/finance/orderFinanceService.js", () =>
 jest.unstable_mockModule("../app/services/finance/pricingService.js", () => ({
   hydrateOrderItems: mockHydrateOrderItems,
   generateOrderPaymentBreakdown: mockGenerateOrderPaymentBreakdown,
+  calculateRiderPayout: jest.fn(),
+  calculateCustomerDeliveryFee: jest.fn(),
+  calculateCustomerDisplayPrice: jest.fn(),
+  calculateCategoryCommission: jest.fn(),
+  calculateHandlingFee: jest.fn(),
+  determineProductGST: jest.fn(),
 }));
 
 jest.unstable_mockModule("../app/models/order.js", () => ({

@@ -33,6 +33,26 @@ const productSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        sellerProductPrice: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        sellerProfitRate: {
+            type: Number,
+            default: 10,
+            min: 0,
+        },
+        sellerProfitAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        sellerSupplyPrice: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         stock: {
             type: Number,
             required: true,
@@ -127,6 +147,10 @@ const productSchema = new mongoose.Schema(
                 name: String,
                 price: Number,
                 salePrice: Number,
+                sellerProductPrice: Number,
+                sellerProfitRate: { type: Number, default: 10 },
+                sellerProfitAmount: Number,
+                sellerSupplyPrice: Number,
                 stock: Number,
                 sku: String,
             }

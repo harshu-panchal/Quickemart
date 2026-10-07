@@ -114,8 +114,8 @@ describe("checkout pricing snapshot handling fee", () => {
     expect(snapshot.sellerCount).toBe(2);
     expect(snapshot.aggregateBreakdown.deliveryFeeCharged).toBe(60);
     expect(snapshot.aggregateBreakdown.handlingFeeCharged).toBe(30);
-    expect(snapshot.aggregateBreakdown.productSubtotal).toBe(300);
-    expect(snapshot.aggregateBreakdown.grandTotal).toBe(390);
+    expect(snapshot.aggregateBreakdown.productSubtotal).toBe(345);
+    expect(snapshot.aggregateBreakdown.grandTotal).toBe(453);
 
     const perSellerFees = snapshot.sellerBreakdownEntries.map(
       (entry) => entry.breakdown.handlingFeeCharged,

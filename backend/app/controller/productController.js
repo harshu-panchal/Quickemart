@@ -42,6 +42,7 @@ import {
   resolveProductApprovalStatus,
 } from "../services/productModerationService.js";
 import { buildSearchRegex } from "../utils/regex.js";
+import { getOrCreateFinanceSettings } from "../services/finance/financeSettingsService.js";
 
 // Phase 3 P3-5: when search term is reasonably specific and the env flag
 // is enabled, prefer Mongo's `name + tags` text index over case-insensitive
@@ -1049,25 +1050,52 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    const finSettings = await getOrCreateFinanceSettings();
+    const profitRate = finSettings?.sellerProfitRate ?? 10;
+    const rawSale = Number(productData.salePrice || 0);
+    const rawPrice = Number(productData.price || 0);
+    const sellerCost = rawSale > 0 ? rawSale : (rawPrice > 0 ? rawPrice : Number(productData.sellerProductPrice || 0));
+    const profitAmt = Number((sellerCost * (profitRate / 100)).toFixed(2));
+    const supplyPrice = Number((sellerCost + profitAmt).toFixed(2));
+
+    productData.sellerProductPrice = sellerCost;
+    productData.sellerProfitRate = profitRate;
+    productData.sellerProfitAmount = profitAmt;
+    productData.sellerSupplyPrice = supplyPrice;
+    productData.price = rawPrice > 0 ? rawPrice : sellerCost;
+    productData.salePrice = rawSale > 0 ? rawSale : supplyPrice;
+
     if (Array.isArray(productData.variants) && productData.variants.length > 0) {
-      productData.variants = productData.variants.map((variant, idx) => ({
-        ...variant,
-        price: Number(variant.price || 0),
-        salePrice: Number(variant.salePrice || 0),
-        stock: Number(variant.stock || 0),
-        sku:
-          variant?.sku && String(variant.sku).trim()
-            ? variant.sku
-            : makeProductSku(productData.name, idx + 1),
-      }));
+      productData.variants = productData.variants.map((variant, idx) => {
+        const vSale = Number(variant.salePrice || 0);
+        const vPrice = vSale > 0 ? vSale : Number(variant.price || variant.sellerProductPrice || 0);
+        const vProfit = Number((vPrice * (profitRate / 100)).toFixed(2));
+        const vSupply = Number((vPrice + vProfit).toFixed(2));
+        return {
+          ...variant,
+          sellerProductPrice: vPrice,
+          sellerProfitRate: profitRate,
+          sellerProfitAmount: vProfit,
+          sellerSupplyPrice: vSupply,
+          price: Number(variant.price || vPrice),
+          salePrice: vSale > 0 ? vSale : vSupply,
+          stock: Number(variant.stock || 0),
+          sku:
+            variant?.sku && String(variant.sku).trim()
+              ? variant.sku
+              : makeProductSku(productData.name, idx + 1),
+        };
+      });
 
       const totalVariantStock = productData.variants.reduce((sum, v) => sum + Number(v.stock || 0), 0);
       productData.stock = Math.max(Number(productData.stock || 0), totalVariantStock);
 
       const firstVariant = productData.variants[0];
-      if ((!productData.price || Number(productData.price) <= 0) && firstVariant?.price > 0) {
-        productData.price = firstVariant.price;
-        productData.salePrice = firstVariant.salePrice || 0;
+      if ((!productData.price || Number(productData.price) <= 0) && firstVariant?.sellerProductPrice > 0) {
+        productData.sellerProductPrice = firstVariant.sellerProductPrice;
+        productData.sellerSupplyPrice = firstVariant.sellerSupplyPrice;
+        productData.price = firstVariant.sellerProductPrice;
+        productData.salePrice = firstVariant.sellerSupplyPrice;
       }
     }
 

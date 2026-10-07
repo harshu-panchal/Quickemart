@@ -380,18 +380,12 @@ export const CartProvider = ({ children }) => {
   };
 
   const cartTotal = cart.reduce((total, item) => {
-    const unit =
-      Number(item.salePrice || 0) > 0 && Number(item.salePrice) < Number(item.price || 0)
-        ? Number(item.salePrice)
-        : Number(item.price || 0);
+    const unit = Number(item.salePrice || 0) > 0 ? Number(item.salePrice) : Number(item.price || 0);
     return total + unit * Number(item.quantity || 0);
   }, 0);
 
   const gstTotal = cart.reduce((total, item) => {
-    const unit =
-      Number(item.salePrice || 0) > 0 && Number(item.salePrice) < Number(item.price || 0)
-        ? Number(item.salePrice)
-        : Number(item.price || 0);
+    const unit = Number(item.salePrice || 0) > 0 ? Number(item.salePrice) : Number(item.price || 0);
     const itemGstRate = Number(item.gstTax || 0);
     const itemGst = (unit * Number(item.quantity || 0) * itemGstRate) / 100;
     return total + itemGst;

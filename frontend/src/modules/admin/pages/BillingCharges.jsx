@@ -9,7 +9,9 @@ import {
     Settings,
     Zap,
     MapPin,
-    History
+    History,
+    TrendingUp,
+    Percent
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -30,6 +32,7 @@ const BillingCharges = () => {
         deliveryPartnerRatePerKm: 5,
         fixedCharge: 30,
         handlingFeeStrategy: "highest_category_fee",
+        sellerProfitRate: 10,
         codEnabled: true,
         onlineEnabled: true,
     });
@@ -58,6 +61,7 @@ const BillingCharges = () => {
                         deliveryPartnerRatePerKm: s.deliveryPartnerRatePerKm ?? s.fleetCommissionRatePerKm ?? prev.deliveryPartnerRatePerKm,
                         fixedCharge: s.fixedDeliveryFee ?? s.customerBaseDeliveryFee ?? prev.fixedCharge,
                         handlingFeeStrategy: s.handlingFeeStrategy ?? prev.handlingFeeStrategy,
+                        sellerProfitRate: s.sellerProfitRate ?? prev.sellerProfitRate,
                         codEnabled: s.codEnabled ?? prev.codEnabled,
                         onlineEnabled: s.onlineEnabled ?? prev.onlineEnabled,
                     }));
@@ -94,6 +98,7 @@ const BillingCharges = () => {
                     fleetCommissionRatePerKm: extraPerKmNum,
                     fixedDeliveryFee: fixedChargeNum,
                     handlingFeeStrategy: config.handlingFeeStrategy,
+                    sellerProfitRate: getNumericValue(config.sellerProfitRate),
                     codEnabled: config.codEnabled,
                     onlineEnabled: config.onlineEnabled,
                 }),
@@ -214,6 +219,40 @@ const BillingCharges = () => {
                                     />
                                 </div>
                                 <p className="text-[10px] font-bold text-slate-400 italic">Orders above this amount will have free delivery.</p>
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Seller Profit Settings */}
+                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                                Seller Profit Settings
+                            </h3>
+                        </div>
+                        <div className="p-8">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    Seller Profit Percentage (%)
+                                    <Info className="h-3 w-3 opacity-50" />
+                                </label>
+                                <div className="relative group max-w-sm">
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-slate-400 group-focus-within:text-emerald-600 transition-colors pointer-events-none">%</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={config.sellerProfitRate}
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => handleInputChange('sellerProfitRate', e.target.value)}
+                                        onBlur={() => handleInputBlur('sellerProfitRate')}
+                                        className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"
+                                    />
+                                </div>
+                                <p className="text-[10px] font-bold text-slate-400 italic">
+                                    Profit percentage added automatically to seller cost price (e.g. 10% on ₹100 product price gives ₹10 seller profit and ₹110 supply price).
+                                </p>
                             </div>
                         </div>
                     </Card>

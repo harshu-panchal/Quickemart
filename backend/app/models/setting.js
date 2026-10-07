@@ -139,6 +139,12 @@ const settingSchema = new mongoose.Schema(
             enum: ALL_HANDLING_FEE_STRATEGIES,
             default: "highest_category_fee",
         },
+        sellerProfitRate: {
+            type: Number,
+            default: 10,
+            min: 0,
+            max: 100,
+        },
         codEnabled: {
             type: Boolean,
             default: true,

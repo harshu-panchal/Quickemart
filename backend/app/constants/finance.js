@@ -1,5 +1,8 @@
 export const CURRENCY = "INR";
 
+export const DEFAULT_SELLER_PROFIT_RATE = 10; // 10%
+export const DEFAULT_SELLER_PROFIT_MULTIPLIER = 1.10;
+
 export const PAYMENT_MODE = {
   ONLINE: "ONLINE",
   COD: "COD",

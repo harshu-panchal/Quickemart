@@ -245,8 +245,8 @@ function applyGlobalHandlingFeeToSellerBreakdowns(
     const breakdown = entry?.breakdown;
     if (!breakdown) continue;
 
-    const shouldCharge = false;
-    const handlingFeeCharged = 0;
+    const shouldCharge = entry.sellerId === chosenSellerId;
+    const handlingFeeCharged = shouldCharge ? fee : 0;
 
     breakdown.handlingFeeCharged = handlingFeeCharged;
     breakdown.snapshots = breakdown.snapshots && typeof breakdown.snapshots === "object"

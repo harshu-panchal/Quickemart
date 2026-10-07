@@ -29,6 +29,7 @@ jest.unstable_mockModule("../app/services/finance/financeSettingsService.js", ()
 
 const {
   calculateCategoryCommission,
+  calculateCustomerDisplayPrice,
   calculateCustomerDeliveryFee,
   calculateHandlingFee,
   calculateProductSubtotal,
@@ -42,12 +43,20 @@ describe("finance pricing flow", () => {
     jest.clearAllMocks();
   });
 
+  it("calculates customer display price dynamically using admin configured profit percentage", () => {
+    const display = calculateCustomerDisplayPrice(100, null, { sellerProfitRate: 15 });
+    expect(display.sellerProductPrice).toBe(100);
+    expect(display.sellerProfitRate).toBe(15);
+    expect(display.sellerProfitAmount).toBe(15);
+    expect(display.sellerSupplyPrice).toBe(115);
+  });
+
   it("calculates product subtotal accurately", () => {
     const subtotal = calculateProductSubtotal([
       { price: 99.99, quantity: 2 },
       { price: 50, quantity: 1 },
     ]);
-    expect(subtotal).toBe(249.98);
+    expect(subtotal).toBe(250);
   });
 
   it("calculates percentage and fixed commissions correctly", () => {
@@ -156,7 +165,7 @@ describe("finance pricing flow", () => {
     });
     expect(distanceBased.roundedExtraKm).toBe(2);
     expect(distanceBased.deliveryFeeCharged).toBe(50);
-    expect(distanceBased.distanceKmRounded).toBe(2.5);
+    expect(distanceBased.distanceKmRounded).toBe(3);
 
     const fixed = calculateCustomerDeliveryFee(8, {
       deliveryPricingMode: "fixed_price",
@@ -201,7 +210,7 @@ describe("finance pricing flow", () => {
     ]);
 
     expect(hydrated).toHaveLength(1);
-    expect(hydrated[0].price).toBe(120);
+    expect(hydrated[0].price).toBe(138);
     expect(hydrated[0].headerCategoryId).toBe("cat-1");
     expect(hydrated[0].sellerId).toBe("seller-1");
   });

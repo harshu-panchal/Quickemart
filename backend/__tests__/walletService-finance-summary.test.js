@@ -54,7 +54,7 @@ describe("getAdminFinanceSummary", () => {
       .mockResolvedValueOnce([{ _id: null, amount: 270 }]) // onlineCollection
       .mockResolvedValueOnce([{ _id: null, amount: 60 }]) // codReconciled
       .mockResolvedValueOnce([{ _id: null, amount: 50 }]) // adminEarning (ONLINE only)
-      .mockResolvedValueOnce([{ _id: null, amount: 375.55 }]) // systemFloatCOD = SUM(codPendingAmount)
+      .mockResolvedValueOnce([{ _id: null, amount: 376 }]) // systemFloatCOD = SUM(codPendingAmount)
       .mockResolvedValueOnce([{ _id: null, amount: 9999 }]); // platformGross = SUM(grandTotal/pricing.total)
 
     mockPayoutAggregate.mockResolvedValueOnce([
@@ -64,7 +64,7 @@ describe("getAdminFinanceSummary", () => {
 
     const summary = await getAdminFinanceSummary();
 
-    expect(summary.systemFloatCOD).toBe(375.55);
+    expect(summary.systemFloatCOD).toBe(376);
     expect(summary.totalPlatformEarning).toBe(9999);
     expect(summary.availableBalance).toBe(9779);
     expect(summary.walletAvailableBalance).toBe(999);

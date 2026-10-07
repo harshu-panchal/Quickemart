@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Product from "../../models/product.js";
 import Category from "../../models/category.js";
 import Seller from "../../models/seller.js";
@@ -9,6 +10,7 @@ import {
 import {
   COMMISSION_FIXED_RULE,
   COMMISSION_TYPE,
+  DEFAULT_SELLER_PROFIT_RATE,
   DELIVERY_PRICING_MODE,
   HANDLING_FEE_STRATEGY,
   HANDLING_FEE_TYPE,
@@ -114,52 +116,90 @@ export function calculateProductSubtotal(items = []) {
   );
 }
 
-export function calculateCustomerDisplayPrice(sellerBasePrice, categoryConfig) {
-  const basePrice = Math.max(0, Number(sellerBasePrice || 0));
-  if (basePrice === 0) {
+export function calculateCustomerDisplayPrice(sellerProductPrice, categoryConfig, settings = {}) {
+  const profitRate = settings && Number.isFinite(Number(settings.sellerProfitRate))
+    ? Math.max(0, Number(settings.sellerProfitRate))
+    : DEFAULT_SELLER_PROFIT_RATE;
+
+  const costPrice = Math.max(0, Number(sellerProductPrice || 0));
+  if (costPrice === 0) {
     return {
-      sellerBasePrice: 0,
+      sellerProductPrice: 0,
+      sellerProfitRate: profitRate,
+      sellerProfitAmount: 0,
+      sellerSupplyPrice: 0,
       commissionAmount: 0,
       handlingFeeAmount: 0,
+      preGstAmount: 0,
       customerDisplayPrice: 0,
     };
   }
 
-  // 1. Commission percentage on base price (default 5% if category has no custom commission)
+  // 1. Seller Profit (configured profitRate %, default 10%)
+  const sellerProfitAmount = roundCurrency(costPrice * (profitRate / 100));
+  const sellerSupplyPrice = roundCurrency(costPrice + sellerProfitAmount);
+
+  // 2. Commission
   const { type: commType, value: commVal } = resolveCommissionConfig(categoryConfig);
   const commissionRate = (commVal && commVal > 0) ? commVal : 5;
   let commissionAmount = 0;
   if (commType === COMMISSION_TYPE.PERCENTAGE) {
-    commissionAmount = percentOf(basePrice, commissionRate);
+    commissionAmount = percentOf(costPrice, commissionRate);
   } else {
     commissionAmount = roundCurrency(commissionRate);
   }
 
-  // 2. Handling Fee in Rupees (₹)
+  // 3. Handling Fee
   const { value: handVal } = resolveHandlingConfig(categoryConfig);
   const handlingFeeAmount = roundCurrency(handVal || 0);
 
-  // 3. Customer Display Price = Seller Base Price + Commission (%) + Handling Fee (₹)
-  const customerPrice = roundCurrency(basePrice + commissionAmount + handlingFeeAmount);
+  // 4. Pre-GST Product Final Price = Seller Price + Profit + Commission + Handling Fee
+  const preGstAmount = roundCurrency(sellerSupplyPrice + commissionAmount + handlingFeeAmount);
+
   return {
-    sellerBasePrice: basePrice,
+    sellerProductPrice: costPrice,
+    sellerProfitRate: profitRate,
+    sellerProfitAmount,
+    sellerSupplyPrice,
     commissionAmount,
     handlingFeeAmount,
-    customerDisplayPrice: customerPrice,
+    preGstAmount,
+    customerDisplayPrice: preGstAmount,
   };
 }
 
 export function calculateCategoryCommission(item, categoryConfig) {
   const quantity = normalizeLineQuantity(item.quantity);
-  const itemSubtotal = roundCurrency(normalizeLinePrice(item.price) * quantity);
   const { type, value, fixedRule } = resolveCommissionConfig(categoryConfig);
+
+  let sellerProductPrice = 0;
+  let sellerProfitRate = 10;
+  let sellerProfitAmount = 0;
+  let sellerSupplyPrice = 0;
+
+  if (item.sellerProductPrice != null && Number(item.sellerProductPrice) > 0) {
+    sellerProductPrice = roundCurrency(item.sellerProductPrice);
+    sellerProfitAmount = roundCurrency(sellerProductPrice * 0.10);
+    sellerSupplyPrice = roundCurrency(sellerProductPrice + sellerProfitAmount);
+  } else if (item.sellerBasePrice != null && Number(item.sellerBasePrice) > 0) {
+    sellerProductPrice = roundCurrency(item.sellerBasePrice);
+    sellerProfitAmount = roundCurrency(sellerProductPrice * 0.10);
+    sellerSupplyPrice = roundCurrency(sellerProductPrice + sellerProfitAmount);
+  } else {
+    const unitPrice = normalizeLinePrice(item.price);
+    sellerSupplyPrice = unitPrice;
+    sellerProductPrice = roundCurrency(unitPrice / 1.10);
+    sellerProfitAmount = roundCurrency(sellerSupplyPrice - sellerProductPrice);
+  }
+
+  const lineUnitPrice = normalizeLinePrice(item.price) || sellerSupplyPrice;
+  const itemSubtotal = roundCurrency(lineUnitPrice * quantity);
 
   let adminCommission = 0;
   if (type === COMMISSION_TYPE.PERCENTAGE) {
     adminCommission = percentOf(itemSubtotal, value);
   } else {
-    const fixedBase =
-      fixedRule === COMMISSION_FIXED_RULE.PER_ITEM ? value : value * quantity;
+    const fixedBase = fixedRule === COMMISSION_FIXED_RULE.PER_ITEM ? value : value * quantity;
     adminCommission = roundCurrency(fixedBase);
   }
 
@@ -170,6 +210,12 @@ export function calculateCategoryCommission(item, categoryConfig) {
     itemSubtotal,
     adminCommission,
     sellerPayout,
+    sellerProductPrice,
+    sellerProfitRate,
+    sellerProfitAmount,
+    sellerSupplyPrice,
+    commissionAmount: adminCommission,
+    handlingFeeAmount: 0,
     appliedCommissionType: type,
     appliedCommissionValue: value,
     appliedFixedRule: fixedRule,
@@ -372,7 +418,7 @@ export async function hydrateOrderItems(
     .filter(Boolean);
 
   const productQuery = Product.find({ _id: { $in: productIds } })
-    .select("_id name salePrice price mainImage headerId categoryId sellerId status approvalStatus variants gstTax")
+    .select("_id name price salePrice sellerProductPrice sellerProfitRate sellerProfitAmount sellerSupplyPrice mainImage headerId categoryId sellerId status approvalStatus variants gstTax")
     .lean();
   if (session) productQuery.session(session);
   const products = await productQuery;
@@ -380,13 +426,19 @@ export async function hydrateOrderItems(
   const productMap = new Map(products.map((product) => [String(product._id), product]));
   
   const sellerIds = [...new Set(products.map((p) => String(p.sellerId)).filter(Boolean))];
-  const sellers = await Seller.find({ _id: { $in: sellerIds } }).select("_id isActive shopName shopTiming applicationStatus").lean();
+  const validSellerIds = sellerIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const sellers = validSellerIds.length > 0
+    ? await Seller.find({ _id: { $in: validSellerIds } }).select("_id isActive shopName shopTiming applicationStatus").lean()
+    : [];
   const sellerMap = new Map(sellers.map((s) => [String(s._id), s]));
 
   const categoryIds = [...new Set(products.map((p) => String(p.headerId || p.categoryId)).filter(Boolean))];
-  const categoryDocs = await Category.find({ _id: { $in: categoryIds } })
-    .select("_id name adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue")
-    .lean();
+  const validCategoryIds = categoryIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const categoryDocs = validCategoryIds.length > 0
+    ? await Category.find({ _id: { $in: validCategoryIds } })
+        .select("_id name adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue")
+        .lean()
+    : [];
   const categoryMap = new Map(categoryDocs.map((c) => [String(c._id), c]));
 
   return orderItems.map((item) => {
@@ -396,7 +448,7 @@ export async function hydrateOrderItems(
       throw new Error(`Product not found for line item: ${productId}`);
     }
     const seller = sellerMap.get(String(product.sellerId));
-    if (!seller || !isShopCurrentlyOpen(seller)) {
+    if (seller && !isShopCurrentlyOpen(seller)) {
       const err = new Error(`The shop "${seller?.shopName || "Seller"}" is currently closed and not accepting orders.`);
       err.statusCode = 400;
       throw err;
@@ -426,12 +478,13 @@ export async function hydrateOrderItems(
     const quantity = normalizeLineQuantity(item.quantity);
     const rawSellerUnitPrice = normalizeLinePrice(
       resolvedVariant
-        ? resolvedVariant.salePrice || resolvedVariant.price || product.salePrice || product.price
-        : product.salePrice || product.price,
+        ? (Number(resolvedVariant.salePrice) > 0 ? resolvedVariant.salePrice : (resolvedVariant.sellerProductPrice || resolvedVariant.price))
+        : (Number(product.salePrice) > 0 ? product.salePrice : (product.sellerProductPrice || product.price)),
     );
 
     const categoryConfig = categoryMap.get(String(product.headerId)) || categoryMap.get(String(product.categoryId)) || null;
-    const customerDisplayUnitPrice = calculateCustomerDisplayPrice(rawSellerUnitPrice, categoryConfig).customerDisplayPrice;
+    const displayInfo = calculateCustomerDisplayPrice(rawSellerUnitPrice, categoryConfig);
+    const customerDisplayUnitPrice = displayInfo.preGstAmount;
 
     const inferredUnitPrice = enforceServerPricing
       ? customerDisplayUnitPrice
@@ -446,6 +499,12 @@ export async function hydrateOrderItems(
       productName: item.name || product.name,
       quantity,
       price: inferredUnitPrice,
+      sellerProductPrice: displayInfo.sellerProductPrice,
+      sellerProfitRate: displayInfo.sellerProfitRate,
+      sellerProfitAmount: displayInfo.sellerProfitAmount,
+      sellerSupplyPrice: displayInfo.sellerSupplyPrice,
+      commissionAmount: displayInfo.commissionAmount,
+      handlingFeeAmount: displayInfo.handlingFeeAmount,
       sellerBasePrice: rawSellerUnitPrice,
       gstTax: resolvedGstRate,
       image: item.image || product.mainImage,
@@ -456,6 +515,7 @@ export async function hydrateOrderItems(
     };
   });
 }
+
 
 export async function generateOrderPaymentBreakdown({
   items = [],
@@ -532,6 +592,12 @@ export async function generateOrderPaymentBreakdown({
       productName: item.productName,
       quantity: item.quantity,
       unitPrice: item.price,
+      sellerProductPrice: commission.sellerProductPrice,
+      sellerProfitRate: commission.sellerProfitRate,
+      sellerProfitAmount: commission.sellerProfitAmount,
+      sellerSupplyPrice: commission.sellerSupplyPrice,
+      commissionAmount: commission.commissionAmount,
+      handlingFeeAmount: commission.handlingFeeAmount,
       itemSubtotal: commission.itemSubtotal,
       sellerPayout: commission.sellerPayout,
       adminProductCommission: commission.adminCommission,
@@ -560,6 +626,7 @@ export async function generateOrderPaymentBreakdown({
   const grossTotal = roundCurrency(
     productSubtotal +
       delivery.deliveryFeeCharged +
+      handling.handlingFeeCharged +
       normalizedTax -
       normalizedDiscount +
       normalizedTip,
@@ -619,7 +686,7 @@ export async function generateOrderPaymentBreakdown({
     currency: "INR",
     productSubtotal,
     deliveryFeeCharged: delivery.deliveryFeeCharged,
-    handlingFeeCharged: 0,
+    handlingFeeCharged: handling.handlingFeeCharged,
     tipTotal: normalizedTip,
     discountTotal: normalizedDiscount,
     taxTotal: normalizedTax,

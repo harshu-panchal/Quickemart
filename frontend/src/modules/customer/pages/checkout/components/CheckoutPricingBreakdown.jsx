@@ -84,22 +84,44 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
         <div className="space-y-4">
           <div className="flex justify-between items-center px-2">
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              Item Total
+              Final Price (Pre-GST)
             </span>
             <span className="font-black text-slate-800">
-              ₹{pricingPreview?.productSubtotal ?? cartTotal}
+              ₹{Number(productSubtotal || 0).toFixed(2)}
             </span>
           </div>
+
           <div className="flex justify-between items-center px-2">
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              Delivery Fee
+              GST ({gstPercentage}%)
             </span>
-            <span className="font-black text-slate-800">₹{deliveryFee}</span>
+            <span className="font-black text-slate-800">
+              {gstPercentage}%
+            </span>
           </div>
+
+          <div className="flex justify-between items-center px-2 pt-1 border-t border-slate-100">
+            <span className="text-slate-700 font-black text-[13px] uppercase tracking-wider">
+              Price Including GST
+            </span>
+            <span className="font-black text-slate-900">
+              ₹{(Number(productSubtotal || 0) + Number(taxAmount || 0)).toFixed(2)}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center px-2">
+            <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
+              Delivery Charges
+            </span>
+            <span className="font-black text-slate-800">
+              ₹{Number(deliveryFee || 0).toFixed(2)}
+            </span>
+          </div>
+
           {pricingPreview &&
             typeof pricingPreview.distanceKmActual === "number" &&
             typeof pricingPreview.distanceKmRounded === "number" && (
-              <div className="px-2 -mt-3 flex items-center justify-between text-[11px] font-semibold text-slate-400">
+              <div className="px-2 -mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-400">
                 <span>
                   Distance: {pricingPreview.distanceKmActual.toFixed(2)} km
                   {pricingPreview.distanceKmRounded
@@ -113,12 +135,6 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 </span>
               </div>
             )}
-          <div className="flex justify-between items-center px-2">
-            <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              GST TAX
-            </span>
-            <span className="font-black text-slate-800">{gstPercentage}%</span>
-          </div>
 
           {selectedCoupon && (
             <motion.div
