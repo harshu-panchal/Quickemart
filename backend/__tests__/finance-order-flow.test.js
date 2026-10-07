@@ -250,6 +250,7 @@ describe("finance order flow", () => {
     currentOrder.financeFlags = { onlinePaymentCaptured: true };
     currentOrder.status = "pending";
     currentOrder.orderStatus = "pending";
+    currentOrder.returnWindowExpiresAt = new Date(Date.now() - 1000);
 
     const updated = await settleDeliveredOrder({ _id: "order-1" }, { actorId: "admin-1" });
 

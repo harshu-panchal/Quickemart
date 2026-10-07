@@ -168,28 +168,34 @@ export function calculateCustomerDisplayPrice(sellerProductPrice, categoryConfig
   };
 }
 
-export function calculateCategoryCommission(item, categoryConfig) {
+export function calculateCategoryCommission(item, categoryConfig, settings = {}) {
   const quantity = normalizeLineQuantity(item.quantity);
   const { type, value, fixedRule } = resolveCommissionConfig(categoryConfig);
 
+  const profitRate = settings && Number.isFinite(Number(settings.sellerProfitRate))
+    ? Math.max(0, Number(settings.sellerProfitRate))
+    : (item.sellerProfitRate != null ? Number(item.sellerProfitRate) : DEFAULT_SELLER_PROFIT_RATE);
+
   let sellerProductPrice = 0;
-  let sellerProfitRate = 10;
   let sellerProfitAmount = 0;
   let sellerSupplyPrice = 0;
+  let hasExplicitSellerPrice = false;
 
   if (item.sellerProductPrice != null && Number(item.sellerProductPrice) > 0) {
     sellerProductPrice = roundCurrency(item.sellerProductPrice);
-    sellerProfitAmount = roundCurrency(sellerProductPrice * 0.10);
+    sellerProfitAmount = roundCurrency(sellerProductPrice * (profitRate / 100));
     sellerSupplyPrice = roundCurrency(sellerProductPrice + sellerProfitAmount);
+    hasExplicitSellerPrice = true;
   } else if (item.sellerBasePrice != null && Number(item.sellerBasePrice) > 0) {
     sellerProductPrice = roundCurrency(item.sellerBasePrice);
-    sellerProfitAmount = roundCurrency(sellerProductPrice * 0.10);
+    sellerProfitAmount = roundCurrency(sellerProductPrice * (profitRate / 100));
     sellerSupplyPrice = roundCurrency(sellerProductPrice + sellerProfitAmount);
+    hasExplicitSellerPrice = true;
   } else {
     const unitPrice = normalizeLinePrice(item.price);
     sellerSupplyPrice = unitPrice;
-    sellerProductPrice = roundCurrency(unitPrice / 1.10);
-    sellerProfitAmount = roundCurrency(sellerSupplyPrice - sellerProductPrice);
+    sellerProductPrice = roundCurrency(unitPrice / (1 + profitRate / 100));
+    sellerProfitAmount = roundCurrency(unitPrice - sellerProductPrice);
   }
 
   const lineUnitPrice = normalizeLinePrice(item.price) || sellerSupplyPrice;
@@ -204,14 +210,17 @@ export function calculateCategoryCommission(item, categoryConfig) {
   }
 
   adminCommission = clampMoney(adminCommission, 0, itemSubtotal);
-  const sellerPayout = roundCurrency(itemSubtotal - adminCommission);
+
+  const sellerPayout = hasExplicitSellerPrice
+    ? roundCurrency(sellerSupplyPrice * quantity)
+    : roundCurrency(itemSubtotal - adminCommission);
 
   return {
     itemSubtotal,
     adminCommission,
     sellerPayout,
     sellerProductPrice,
-    sellerProfitRate,
+    sellerProfitRate: profitRate,
     sellerProfitAmount,
     sellerSupplyPrice,
     commissionAmount: adminCommission,
@@ -575,7 +584,7 @@ export async function generateOrderPaymentBreakdown({
 
   const lineItems = normalizedItems.map((item) => {
     const category = categoryById.get(String(item.headerCategoryId));
-    const commission = calculateCategoryCommission(item, category);
+    const commission = calculateCategoryCommission(item, category, effectiveSettings);
     const lineGstRate = Number(item.gstTax || 0);
     const lineGstAmount = roundCurrency((commission.itemSubtotal * lineGstRate) / 100);
     totalGstAmount = addMoney(totalGstAmount, lineGstAmount);

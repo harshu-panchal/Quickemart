@@ -942,6 +942,7 @@ const OrderDetailPage = () => {
               eta={estimatedArrival.arrivingInText}
               riderName={order.deliveryBoy?.name || "Delivery Partner"}
               riderPhone={order.deliveryBoy?.phone || ""}
+              riderRating={deliveryRatingInfo?.deliveryPartner?.averageRating || order.deliveryBoy?.averageRating || null}
               riderLocation={liveLocation}
               sellerLocation={sellerLocation}
               destinationLocation={

@@ -2,10 +2,11 @@ import Payout from "../models/payout.js";
 import Wallet from "../models/wallet.js";
 import Seller from "../models/seller.js";
 import Delivery from "../models/delivery.js";
+import Order from "../models/order.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
 import { getLedgerEntries } from "../services/finance/ledgerService.js";
-import { bulkProcessPayouts } from "../services/finance/payoutService.js";
+import { bulkProcessPayouts, cancelPendingPayoutForOrder } from "../services/finance/payoutService.js";
 import { exportFinanceStatement } from "../services/finance/statementService.js";
 import {
   FINANCE_AUDIT_ACTION,
@@ -67,12 +68,48 @@ export const getAdminFinancePayoutsController = async (req, res) => {
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 200);
     const skip = (safePage - 1) * safeLimit;
 
+    // Self-healing: Revert any premature pending seller payouts where return window is still active
+    if (!status || status === "PENDING") {
+      const now = new Date();
+      const prematureSellerPayouts = await Payout.find({
+        payoutType: "SELLER",
+        status: { $in: ["PENDING", "PROCESSING"] },
+      }).populate("relatedOrderIds", "orderId returnWindowExpiresAt returnStatus settlementStatus financeFlags");
+
+      for (const p of prematureSellerPayouts) {
+        if (p.relatedOrderIds && p.relatedOrderIds.length > 0) {
+          const hasActiveReturnWindow = p.relatedOrderIds.some((ord) => {
+            const exp = ord.returnWindowExpiresAt ? new Date(ord.returnWindowExpiresAt) : null;
+            return exp && exp > now && ord.returnStatus !== "passed";
+          });
+
+          if (hasActiveReturnWindow) {
+            for (const ord of p.relatedOrderIds) {
+              await cancelPendingPayoutForOrder(ord._id, "SELLER", {
+                remarks: "Auto-reverted premature payout while return window is active",
+              });
+              await Order.updateOne(
+                { _id: ord._id },
+                {
+                  $set: {
+                    "settlementStatus.sellerPayout": "HOLD",
+                    "financeFlags.sellerPayoutHeld": true,
+                    "financeFlags.sellerPayoutQueued": false,
+                  },
+                },
+              );
+            }
+          }
+        }
+      }
+    }
+
     const [rawItems, total] = await Promise.all([
       Payout.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(safeLimit)
-        .populate("relatedOrderIds", "orderId paymentMode paymentStatus status")
+        .populate("relatedOrderIds", "orderId paymentMode paymentStatus status returnWindowExpiresAt")
         .lean(),
       Payout.countDocuments(query),
     ]);

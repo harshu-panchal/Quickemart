@@ -112,6 +112,20 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
       throw new Error(`Invalid payout status for processing: ${payout.status}`);
     }
 
+    if (payout.payoutType === PAYOUT_TYPE.SELLER && payout.relatedOrderIds?.length > 0) {
+      const now = new Date();
+      const orders = await Order.find({ _id: { $in: payout.relatedOrderIds } }).session(session).lean();
+      for (const ord of orders) {
+        if (
+          ord.returnWindowExpiresAt instanceof Date &&
+          ord.returnWindowExpiresAt > now &&
+          ord.returnStatus !== "passed"
+        ) {
+          throw new Error(`Cannot process seller payout for order ${ord.orderId}: return window has not expired yet.`);
+        }
+      }
+    }
+
     const ownerType = payoutTypeToOwnerType(payout.payoutType);
     const wallet = await getOrCreateWallet(ownerType, payout.beneficiaryId, { session });
 

@@ -53,6 +53,7 @@ const LiveTrackingMap = memo(({
   eta = "8 mins",
   riderName = "Ramesh Kumar",
   riderPhone,
+  riderRating = null,
   riderLocation,
   sellerLocation,
   destinationLocation,

@@ -479,6 +479,7 @@ export async function getAdminFinanceSummary() {
     pendingPayouts,
     systemFloatCOD,
     platformGross,
+    gstCollection,
   ] =
     await Promise.all([
       Order.aggregate([
@@ -495,9 +496,24 @@ export async function getAdminFinanceSummary() {
         { $group: { _id: null, amount: { $sum: "$paymentBreakdown.codRemittedAmount" } } },
       ]),
       Order.aggregate([
-        // Requirement: Total Admin Earning should not include COD orders.
-        { $match: { status: "delivered", paymentMode: "ONLINE" } },
-        { $group: { _id: null, amount: { $sum: "$paymentBreakdown.platformTotalEarning" } } },
+        {
+          $match: {
+            status: "delivered",
+            $or: [
+              { paymentMode: "ONLINE" },
+              { paymentMode: "COD", "financeFlags.codMarkedCollected": true },
+              { paymentMode: "COD", "paymentBreakdown.codRemittedAmount": { $gt: 0 } },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            amount: { $sum: "$paymentBreakdown.platformTotalEarning" },
+            commission: { $sum: "$paymentBreakdown.adminProductCommissionTotal" },
+            handling: { $sum: "$paymentBreakdown.handlingFeeCharged" },
+          },
+        },
       ]),
       Payout.aggregate([
         { $match: { status: { $in: [PAYOUT_STATUS.PENDING, PAYOUT_STATUS.PROCESSING] } } },
@@ -568,6 +584,24 @@ export async function getAdminFinanceSummary() {
           },
         },
       ]),
+      Order.aggregate([
+        {
+          $match: {
+            status: { $ne: "cancelled" },
+            orderStatus: { $ne: "cancelled" },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            amount: {
+              $sum: {
+                $ifNull: ["$paymentBreakdown.taxTotal", "$pricing.gst", 0],
+              },
+            },
+          },
+        },
+      ]),
     ]);
 
   const sellerPendingPayouts =
@@ -590,6 +624,9 @@ export async function getAdminFinanceSummary() {
   return {
     totalPlatformEarning,
     totalAdminEarning: roundCurrency(adminEarning[0]?.amount || 0),
+    totalAdminCommission: roundCurrency(adminEarning[0]?.commission || 0),
+    totalHandlingFee: roundCurrency(adminEarning[0]?.handling || 0),
+    totalGstAmount: roundCurrency(gstCollection[0]?.amount || 0),
     availableBalance: availableBalanceVirtual,
     walletAvailableBalance: roundCurrency(adminWallet.availableBalance || 0),
     systemFloatCOD: roundCurrency(systemFloatCOD[0]?.amount || 0),

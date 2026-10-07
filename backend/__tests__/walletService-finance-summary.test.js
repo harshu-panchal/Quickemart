@@ -47,15 +47,16 @@ describe("getAdminFinanceSummary", () => {
     });
   });
 
-  it("computes systemFloatCOD as SUM(paymentBreakdown.codPendingAmount) for COD orders", async () => {
-    // getAdminFinanceSummary runs 6 aggregates:
-    // 1) onlineCollection, 2) codReconciled, 3) adminEarning, 4) pendingPayouts, 5) systemFloatCOD, 6) platformGross
+  it("computes systemFloatCOD, admin earnings breakdown, and GST amount", async () => {
+    // getAdminFinanceSummary runs 7 Order aggregates and 1 Payout aggregate:
+    // 1) onlineCollection, 2) codReconciled, 3) adminEarning, 4) pendingPayouts (Payout), 5) systemFloatCOD, 6) platformGross, 7) gstCollection
     mockOrderAggregate
       .mockResolvedValueOnce([{ _id: null, amount: 270 }]) // onlineCollection
       .mockResolvedValueOnce([{ _id: null, amount: 60 }]) // codReconciled
-      .mockResolvedValueOnce([{ _id: null, amount: 50 }]) // adminEarning (ONLINE only)
+      .mockResolvedValueOnce([{ _id: null, amount: 50, commission: 40, handling: 10 }]) // adminEarning
       .mockResolvedValueOnce([{ _id: null, amount: 376 }]) // systemFloatCOD = SUM(codPendingAmount)
-      .mockResolvedValueOnce([{ _id: null, amount: 9999 }]); // platformGross = SUM(grandTotal/pricing.total)
+      .mockResolvedValueOnce([{ _id: null, amount: 9999 }]) // platformGross = SUM(grandTotal/pricing.total)
+      .mockResolvedValueOnce([{ _id: null, amount: 150 }]); // gstCollection
 
     mockPayoutAggregate.mockResolvedValueOnce([
       { _id: "SELLER", amount: 180 },
@@ -66,9 +67,13 @@ describe("getAdminFinanceSummary", () => {
 
     expect(summary.systemFloatCOD).toBe(376);
     expect(summary.totalPlatformEarning).toBe(9999);
+    expect(summary.totalAdminEarning).toBe(50);
+    expect(summary.totalAdminCommission).toBe(40);
+    expect(summary.totalHandlingFee).toBe(10);
+    expect(summary.totalGstAmount).toBe(150);
     expect(summary.availableBalance).toBe(9779);
     expect(summary.walletAvailableBalance).toBe(999);
-    expect(mockOrderAggregate).toHaveBeenCalledTimes(5);
+    expect(mockOrderAggregate).toHaveBeenCalledTimes(6);
     expect(mockPayoutAggregate).toHaveBeenCalledTimes(1);
   });
 
@@ -76,6 +81,7 @@ describe("getAdminFinanceSummary", () => {
     mockOrderAggregate
       .mockResolvedValueOnce([{ _id: null, amount: 0 }])
       .mockResolvedValueOnce([{ _id: null, amount: 0 }])
+      .mockResolvedValueOnce([{ _id: null, amount: 0, commission: 0, handling: 0 }])
       .mockResolvedValueOnce([{ _id: null, amount: 0 }])
       .mockResolvedValueOnce([{ _id: null, amount: 0 }])
       .mockResolvedValueOnce([{ _id: null, amount: 0 }]);

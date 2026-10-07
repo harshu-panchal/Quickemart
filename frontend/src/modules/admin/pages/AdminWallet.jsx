@@ -24,7 +24,8 @@ import {
     BarChart3,
     ArrowDownCircle,
     ArrowUpCircle,
-    RotateCw
+    RotateCw,
+    Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -82,6 +83,9 @@ const AdminWallet = () => {
                     stats: {
                         totalPlatformEarning: summary.totalPlatformEarning || 0,
                         totalAdminEarning: summary.totalAdminEarning || 0,
+                        totalAdminCommission: summary.totalAdminCommission || 0,
+                        totalHandlingFee: summary.totalHandlingFee || 0,
+                        totalGstAmount: summary.totalGstAmount || 0,
                         availableBalance: summary.availableBalance || 0,
                         systemFloat: summary.systemFloatCOD || 0,
                         sellerPendingPayouts: summary.sellerPendingPayouts || 0,
@@ -160,19 +164,23 @@ const AdminWallet = () => {
             label: 'Total Admin Earning',
             value: `₹${(walletData.stats?.totalAdminEarning || 0).toLocaleString()}`,
             description: 'Net profit for platform',
+            breakdown: [
+                { label: 'Commission', value: `₹${(walletData.stats?.totalAdminCommission || 0).toLocaleString()}` },
+                { label: 'Handling', value: `₹${(walletData.stats?.totalHandlingFee || 0).toLocaleString()}` }
+            ],
             icon: DollarSign,
             color: 'purple',
             bg: 'bg-purple-50',
             iconColor: 'text-purple-500'
         },
         {
-            label: 'Available Balance',
-            value: `₹${(walletData.stats?.availableBalance || 0).toLocaleString()}`,
-            description: 'Available in business wallet',
-            icon: Building2,
+            label: 'GST Amount',
+            value: `₹${(walletData.stats?.totalGstAmount || 0).toLocaleString()}`,
+            description: 'Total GST paid by users',
+            icon: Receipt,
             color: 'emerald',
-            bg: 'bg-brand-50',
-            iconColor: 'text-brand-500'
+            bg: 'bg-emerald-50',
+            iconColor: 'text-emerald-600'
         },
         {
             label: 'System Float (COD)',
@@ -462,12 +470,23 @@ const AdminWallet = () => {
                                     <h3 className="ds-stat-medium">{stat.value}</h3>
                                 </div>
 
-                                {/* Bottom Row: Description */}
+                                {/* Bottom Row: Description / Breakdown */}
                                 <div className="pt-2 border-t border-slate-50 mt-auto">
-                                    <p className="text-[10px] font-semibold text-slate-400/80 flex items-center gap-2">
-                                        <span className="w-1 h-3 rounded-full bg-slate-100" />
-                                        {stat.description}
-                                    </p>
+                                    {stat.breakdown ? (
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {stat.breakdown.map((b, bIdx) => (
+                                                <span key={bIdx} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100/90 text-slate-600 flex items-center gap-1">
+                                                    <span>{b.label}:</span>
+                                                    <span className="text-purple-700 font-extrabold">{b.value}</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-[10px] font-semibold text-slate-400/80 flex items-center gap-2">
+                                            <span className="w-1 h-3 rounded-full bg-slate-100" />
+                                            {stat.description}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 

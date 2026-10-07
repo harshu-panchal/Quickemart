@@ -176,7 +176,7 @@ export async function createPendingSellerPayout(order, { session, actorId } = {}
   return payout;
 }
 
-export async function releaseHeldSellerPayout(orderOrId, { actorId = null } = {}) {
+export async function releaseHeldSellerPayout(orderOrId, { actorId = null, force = false } = {}) {
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
@@ -188,6 +188,18 @@ export async function releaseHeldSellerPayout(orderOrId, { actorId = null } = {}
     }
 
     if (order.financeFlags?.sellerPayoutQueued) {
+      await session.commitTransaction();
+      return null;
+    }
+
+    const now = new Date();
+    const isReturnWindowActive =
+      !force &&
+      order.returnWindowExpiresAt instanceof Date &&
+      order.returnWindowExpiresAt > now &&
+      order.returnStatus !== "passed";
+
+    if (isReturnWindowActive) {
       await session.commitTransaction();
       return null;
     }
@@ -576,17 +588,18 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
     const holdSellerPayout =
       order.returnWindowExpiresAt instanceof Date && order.returnWindowExpiresAt > now;
 
-    await createPendingSellerPayout(order, { session, actorId });
-
     if (holdSellerPayout) {
       order.financeFlags = {
         ...(order.financeFlags || {}),
         sellerPayoutHeld: true,
+        sellerPayoutQueued: false,
       };
       order.settlementStatus = {
         ...(order.settlementStatus || {}),
         sellerPayout: "HOLD",
       };
+    } else {
+      await createPendingSellerPayout(order, { session, actorId });
     }
     await createPendingRiderPayout(order, { session, actorId });
     await creditAdminEarning(order, { session, actorId });
