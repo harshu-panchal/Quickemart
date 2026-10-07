@@ -11,6 +11,9 @@ import { useLocation as useAppLocation } from '../context/LocationContext';
 import { getJSON, setJSON, STORAGE_KEYS } from '@core/utils/storage';
 import Lottie from 'lottie-react';
 import { SearchPageSkeleton } from '../components/skeletons';
+import SortByModal from '../components/search/SortByModal';
+import QuickFilterBar from '../components/search/QuickFilterBar';
+import FilterDrawer from '../components/search/FilterDrawer';
 
 const SearchPage = () => {
     const navigate = useNavigate();
@@ -32,6 +35,17 @@ const SearchPage = () => {
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
     const [noServiceData, setNoServiceData] = useState(null);
     const recognitionRef = useRef(null);
+
+    // Filter & Sort State
+    const [sortBy, setSortBy] = useState('relevance');
+    const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+    const [activeFilters, setActiveFilters] = useState({
+        minRating: null,
+        onlyOffers: false,
+        onlyInStock: false,
+        categories: []
+    });
 
     // Manage Recent Searches with LocalStorage
     const [pastSearches, setPastSearches] = useState(() => {
@@ -213,18 +227,88 @@ const SearchPage = () => {
         }
     };
 
-    // Real-time filtering logic
-    const filteredResults = useMemo(() => {
+    // Extract available categories from current product set
+    const availableCategories = useMemo(() => {
+        const map = new Map();
+        allProducts.forEach(p => {
+            if (p.categoryId?._id && p.categoryId?.name) {
+                map.set(p.categoryId._id, p.categoryId.name);
+            }
+        });
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    }, [allProducts]);
+
+    // Real-time filtering & sorting logic pipeline
+    const processedResults = useMemo(() => {
         if (!debouncedQuery.trim()) return [];
-        return allProducts.filter(p =>
-            p.name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+
+        let list = allProducts.filter(p =>
+            p.name?.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
             p.categoryId?.name?.toLowerCase().includes(debouncedQuery.toLowerCase())
         );
-    }, [debouncedQuery, allProducts]);
+
+        // Filter: Category
+        if (activeFilters.categories && activeFilters.categories.length > 0) {
+            list = list.filter(p => activeFilters.categories.includes(p.categoryId?._id));
+        }
+
+        // Filter: Rating 4+ / 3+
+        if (activeFilters.minRating) {
+            list = list.filter(p => {
+                const r = p.averageRating || p.rating || 0;
+                return r >= activeFilters.minRating;
+            });
+        }
+
+        // Filter: Offers
+        if (activeFilters.onlyOffers) {
+            list = list.filter(p => p.originalPrice && p.originalPrice > p.price);
+        }
+
+        // Filter: In Stock
+        if (activeFilters.onlyInStock) {
+            list = list.filter(p => (p.stock > 0 || p.inStock) && p.status !== 'OUT OF STOCK');
+        }
+
+        // Sort Pipeline
+        switch (sortBy) {
+            case 'price_asc':
+                list.sort((a, b) => (a.price || 0) - (b.price || 0));
+                break;
+            case 'price_desc':
+                list.sort((a, b) => (b.price || 0) - (a.price || 0));
+                break;
+            case 'rating_desc':
+                list.sort((a, b) => {
+                    const rA = a.averageRating || a.rating || 0;
+                    const rB = b.averageRating || b.rating || 0;
+                    return rB - rA;
+                });
+                break;
+            case 'discount_desc':
+                list.sort((a, b) => {
+                    const origA = a.originalPrice || a.price || 1;
+                    const saleA = a.price || 0;
+                    const discA = origA > saleA ? ((origA - saleA) / origA) : 0;
+
+                    const origB = b.originalPrice || b.price || 1;
+                    const saleB = b.price || 0;
+                    const discB = origB > saleB ? ((origB - saleB) / origB) : 0;
+
+                    return discB - discA;
+                });
+                break;
+            case 'relevance':
+            default:
+                break;
+        }
+
+        return list;
+    }, [debouncedQuery, allProducts, activeFilters, sortBy]);
 
     useEffect(() => {
-        setResults(filteredResults);
-    }, [filteredResults]);
+        setResults(processedResults);
+    }, [processedResults]);
 
     // Trigger backend search activity logging when user searches
     useEffect(() => {
@@ -318,6 +402,28 @@ const SearchPage = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Sticky Quick Filter Bar */}
+                {query && !isLoading && (
+                    <QuickFilterBar
+                        selectedSort={sortBy}
+                        onOpenSortModal={() => setIsSortModalOpen(true)}
+                        activeFilters={activeFilters}
+                        onToggleRatingPill={() =>
+                            setActiveFilters((prev) => ({
+                                ...prev,
+                                minRating: prev.minRating === 4 ? null : 4,
+                            }))
+                        }
+                        onToggleOffersPill={() =>
+                            setActiveFilters((prev) => ({
+                                ...prev,
+                                onlyOffers: !prev.onlyOffers,
+                            }))
+                        }
+                        onOpenFilterDrawer={() => setIsFilterDrawerOpen(true)}
+                    />
+                )}
 
                 <div className="p-5 space-y-10 pb-24">
                 {/* Search Results List */}
@@ -510,6 +616,23 @@ const SearchPage = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Modals & Drawers */}
+            <SortByModal
+                isOpen={isSortModalOpen}
+                onClose={() => setIsSortModalOpen(false)}
+                selectedSort={sortBy}
+                onSelectSort={(newSort) => setSortBy(newSort)}
+            />
+
+            <FilterDrawer
+                isOpen={isFilterDrawerOpen}
+                onClose={() => setIsFilterDrawerOpen(false)}
+                availableCategories={availableCategories}
+                activeFilters={activeFilters}
+                onApplyFilters={(updatedFilters) => setActiveFilters(updatedFilters)}
+                onResetFilters={() => setActiveFilters({ minRating: null, onlyOffers: false, onlyInStock: false, categories: [] })}
+            />
         </div>
     );
 };
