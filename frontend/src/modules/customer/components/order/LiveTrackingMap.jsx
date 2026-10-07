@@ -472,9 +472,11 @@ const LiveTrackingMap = memo(({
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 bg-primary text-primary-foreground text-[7px] font-bold px-1 py-0.5 rounded-full flex items-center gap-0.5">
-                  4.8 <Star size={5} fill="white" />
-                </div>
+                {riderRating !== undefined && riderRating !== null && Number(riderRating) > 0 && (
+                  <div className="absolute -bottom-0.5 -right-0.5 bg-primary text-primary-foreground text-[7px] font-bold px-1 py-0.5 rounded-full flex items-center gap-0.5">
+                    {Number(riderRating).toFixed(1)} <Star size={5} fill="white" />
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-gray-900 text-xs truncate">{riderName}</h3>

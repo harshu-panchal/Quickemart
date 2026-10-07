@@ -133,6 +133,18 @@ const deliverySchema = new mongoose.Schema(
         lastLocationAt: {
             type: Date,
         },
+
+        averageRating: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 5,
+        },
+        ratingCount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
     },
     {
         timestamps: true,

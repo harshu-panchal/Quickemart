@@ -82,7 +82,9 @@ const DeliveryTracking = () => {
               phone: order.deliveryBoy.phone,
               avatar: order.deliveryBoy.name?.charAt(0) || "?",
               image: order.deliveryBoy.profileImage || "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
-              rating: order.deliveryBoy.rating || 4.5,
+              rating: order.deliveryBoy.averageRating !== undefined && order.deliveryBoy.averageRating !== null && Number(order.deliveryBoy.averageRating) > 0
+                ? Number(order.deliveryBoy.averageRating).toFixed(1)
+                : (order.deliveryBoy.rating && Number(order.deliveryBoy.rating) > 0 ? Number(order.deliveryBoy.rating).toFixed(1) : "New"),
               vehicleNumber: order.deliveryBoy.vehicleNumber || "N/A",
               vehicleType: order.deliveryBoy.vehicleType || "bike",
             } : {

@@ -29,7 +29,10 @@ import {
   Navigation2,
   Camera,
   X,
+  Star,
 } from "lucide-react";
+import api from "@core/api/axios";
+import DeliveryRatingModal from "../components/order/DeliveryRatingModal";
 import { customerApi } from "../services/customerApi";
 import { toast } from "sonner";
 import { subscribeToOrderLocation, subscribeToOrderTrail, subscribeToOrderRoute } from "@/core/services/trackingClient";
@@ -218,6 +221,21 @@ const OrderDetailPage = () => {
     window.scrollTo(0, 0);
   }, []);
 
+  const [deliveryRatingInfo, setDeliveryRatingInfo] = useState(null);
+  const [showDeliveryRatingModal, setShowDeliveryRatingModal] = useState(false);
+
+  const fetchDeliveryRatingInfo = async (ordId) => {
+    if (!ordId) return;
+    try {
+      const res = await api.get(`/delivery-ratings/order/${ordId}`);
+      if (res.data?.success) {
+        setDeliveryRatingInfo(res.data.result);
+      }
+    } catch {
+      // Ignore rating fetch error silently
+    }
+  };
+
   useEffect(() => {
     const isInvalid = !orderId || orderId === "undefined" || orderId === "null";
     if (isInvalid) {
@@ -234,6 +252,10 @@ const OrderDetailPage = () => {
         console.log("[OrderDetailPage] Loaded order details response:", ord);
         console.log("[OrderDetailPage] Active delivery OTP from DB:", ord?.deliveryOtp);
         setOrder(ord);
+
+        if (ord?._id || ord?.orderId) {
+          fetchDeliveryRatingInfo(ord._id || ord.orderId);
+        }
 
         try {
           const retRes = await customerApi.getReturnDetails(resolveOrderLookupId(ord));
@@ -977,7 +999,9 @@ const OrderDetailPage = () => {
                 </div>
                 {order.deliveryBoy && (
                   <div className="absolute -bottom-1 -right-1 bg-white text-primary text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-md">
-                    4.8 ★
+                    {deliveryRatingInfo?.deliveryPartner?.averageRating > 0
+                      ? `${deliveryRatingInfo.deliveryPartner.averageRating.toFixed(1)} ★`
+                      : "New ★"}
                   </div>
                 )}
               </div>
@@ -1007,6 +1031,39 @@ const OrderDetailPage = () => {
                 )}
               </div>
             </div>
+
+            {/* Delivery Rating Prompt / Submitted Card */}
+            {status === "delivered" && deliveryRatingInfo?.eligible && (
+              <button
+                onClick={() => setShowDeliveryRatingModal(true)}
+                className="mt-4 w-full rounded-2xl bg-amber-400 py-3 px-4 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-amber-300 shadow-md flex items-center justify-center gap-2 transition-all"
+              >
+                <Star size={16} className="fill-slate-950" /> Rate Delivery Experience
+              </button>
+            )}
+
+            {deliveryRatingInfo?.rated && deliveryRatingInfo?.rating && (
+              <div className="mt-4 rounded-2xl bg-white/15 backdrop-blur-sm p-3.5 border border-white/20 text-xs">
+                <div className="flex items-center justify-between text-primary-foreground font-bold">
+                  <span className="flex items-center gap-1.5">
+                    Your Delivery Rating:
+                    <span className="flex items-center ml-1">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={13}
+                          className={s <= deliveryRatingInfo.rating.rating ? "fill-amber-300 text-amber-300" : "text-white/30"}
+                        />
+                      ))}
+                    </span>
+                  </span>
+                  <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Rated</span>
+                </div>
+                {deliveryRatingInfo.rating.review && (
+                  <p className="mt-1.5 text-primary-foreground/90 italic font-medium">"{deliveryRatingInfo.rating.review}"</p>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -1479,6 +1536,19 @@ const OrderDetailPage = () => {
           }}
         />
       )}
+
+      {/* Delivery Rating Modal */}
+      <DeliveryRatingModal
+        isOpen={showDeliveryRatingModal}
+        onClose={() => setShowDeliveryRatingModal(false)}
+        orderId={order?._id || order?.orderId || orderId}
+        deliveryPartner={deliveryRatingInfo?.deliveryPartner || order?.deliveryBoy}
+        onSuccess={() => {
+          if (order?._id || orderId) {
+            fetchDeliveryRatingInfo(order?._id || orderId);
+          }
+        }}
+      />
     </div>
   );
 };

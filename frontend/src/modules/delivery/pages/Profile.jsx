@@ -23,11 +23,27 @@ import { useAuth } from "@core/context/AuthContext";
 import { useSettings } from "@core/context/SettingsContext";
 import axiosInstance from '@core/api/axios';
 import { useEffect } from 'react';
+import api from "@core/api/axios";
 
 const Profile = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { settings } = useSettings();
+  const [ratingSummary, setRatingSummary] = useState(null);
+
+  useEffect(() => {
+    const fetchRatingSummary = async () => {
+      try {
+        const res = await api.get("/delivery-ratings/me/summary");
+        if (res.data?.success) {
+          setRatingSummary(res.data.result);
+        }
+      } catch {
+        // Ignore rating summary error
+      }
+    };
+    fetchRatingSummary();
+  }, []);
   const appName = settings?.appName || "App";
   const [faqs, setFaqs] = useState([]);
 
@@ -183,7 +199,10 @@ const Profile = () => {
             Rating
           </p>
           <p className="font-bold text-gray-900 text-lg flex justify-center items-center">
-            4.8 <span className="text-yellow-400 text-sm ml-1">★</span>
+            {ratingSummary?.averageRating > 0
+              ? `${ratingSummary.averageRating.toFixed(1)} `
+              : (user?.averageRating > 0 ? `${Number(user.averageRating).toFixed(1)} ` : "New ")}
+            <span className="text-yellow-400 text-sm ml-1">★</span>
           </p>
         </div>
       </motion.div>

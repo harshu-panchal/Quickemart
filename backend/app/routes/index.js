@@ -13,6 +13,7 @@ import notificationRoute from "./notificationRoutes.js";
 import pushRoute from "./pushRoutes.js";
 import ticketRoute from "./ticketRoutes.js";
 import reviewRoute from "./reviewRoutes.js";
+import deliveryRatingRoute from "./deliveryRatingRoutes.js";
 import faqRoute from "./faqRoutes.js";
 import experienceRoute from "./experienceRoutes.js";
 import offerRoute from "./offerRoutes.js";
@@ -71,6 +72,7 @@ const setupRoutes = (app) => {
     router.use("/push", pushRoute);
     router.use("/tickets", ticketRoute);
     router.use("/reviews", reviewRoute);
+    router.use("/delivery-ratings", deliveryRatingRoute);
     router.use("/admin/faqs", faqRoute);
     router.use("/public/faqs", faqRoute); // For public access without admin prefix
 

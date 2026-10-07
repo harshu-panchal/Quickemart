@@ -74,7 +74,7 @@ const ActiveDeliveryBoys = () => {
                 status: r.isOnline ? 'available' : 'offline',
                 vehicle: r.vehicleType,
                 vehicleNum: r.vehicleNumber || 'N/A',
-                rating: r.rating || 4.5,
+                rating: r.averageRating !== undefined && r.averageRating !== null && Number(r.averageRating) > 0 ? Number(r.averageRating).toFixed(1) : 'New',
                 totalOrders: Number(r.deliveredOrders ?? r.completedOrders ?? r.totalDelivered ?? r.totalOrders ?? 0),
                 todayEarnings: Number(r.todayEarnings ?? 0),
                 location: r.currentArea || r.address || 'Unknown',
