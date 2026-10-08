@@ -5,6 +5,7 @@ import customerPin from "@/assets/customer-pin.png";
 import { deliveryApi } from "../services/deliveryApi";
 import deliveryIcon from "@/assets/deliveryIcon.png";
 import storePin from "@/assets/store-pin.png";
+import SmoothRiderMarker from "@/shared/components/map/SmoothRiderMarker";
 import {
   getCachedDeliveryPartnerLocation,
   saveDeliveryPartnerLocation,
@@ -404,12 +405,36 @@ const DeliveryTrackingMapComponent = ({
     };
   }, [isLoaded, mapInstance, linePath]);
 
+  const hasFittedInitialBoundsRef = useRef(false);
+  const smoothRiderPosRef = useRef(rider);
+
+  const handleSmoothRiderPan = useCallback((smoothPos) => {
+    smoothRiderPosRef.current = smoothPos;
+    const map = mapRef.current;
+    if (!map || !window.google || !smoothPos) return;
+
+    const center = map.getCenter();
+    if (center && window.google.maps.geometry?.spherical?.computeDistanceBetween) {
+      const currentCenterLatLng = new window.google.maps.LatLng(center.lat(), center.lng());
+      const riderLatLng = new window.google.maps.LatLng(smoothPos.lat, smoothPos.lng);
+      const dist = window.google.maps.geometry.spherical.computeDistanceBetween(currentCenterLatLng, riderLatLng);
+      if (dist > 100) {
+        map.panTo(smoothPos);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    hasFittedInitialBoundsRef.current = false;
+  }, [phase, orderId]);
+
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !window.google) return;
+    if (!map || !window.google || hasFittedInitialBoundsRef.current) return;
 
     if (rider) {
       focusOnRider500m(map, rider);
+      hasFittedInitialBoundsRef.current = true;
       return;
     }
 
@@ -421,26 +446,25 @@ const DeliveryTrackingMapComponent = ({
       if (rider) bounds.extend(rider);
       if (dest) bounds.extend(dest);
       map.fitBounds(bounds, 32);
+      hasFittedInitialBoundsRef.current = true;
     } catch {
       /* ignore */
     }
   }, [linePath, rider, dest, focusOnRider500m]);
 
-  // Smoothly keep rider centered and zoomed to 500m view.
+  // Smoothly keep rider centered during live tracking with smooth map pan.
   useEffect(() => {
-    if (!isLoaded || !rider) return undefined;
-    const map = mapRef.current;
-    if (!map) return undefined;
+    if (!isLoaded || !mapRef.current) return undefined;
 
     const id = setInterval(() => {
       const currentMap = mapRef.current;
-      if (!currentMap || !rider) return;
-      currentMap.panTo(rider);
-      focusOnRider500m(currentMap, rider);
+      const targetPos = smoothRiderPosRef.current || rider;
+      if (!currentMap || !targetPos) return;
+      currentMap.panTo(targetPos);
     }, RECENTER_INTERVAL_MS);
 
     return () => clearInterval(id);
-  }, [isLoaded, rider?.lat, rider?.lng, focusOnRider500m]);
+  }, [isLoaded, rider, focusOnRider500m]);
 
   // Add resize observer to handle dynamic height changes
   useEffect(() => {
@@ -532,10 +556,11 @@ const DeliveryTrackingMapComponent = ({
         }}
       >
         {rider && (
-          <Marker
+          <SmoothRiderMarker
             position={rider}
             title="Your location"
             icon={riderMarkerIcon}
+            onPositionUpdate={handleSmoothRiderPan}
           />
         )}
         {dest && (

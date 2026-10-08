@@ -15,6 +15,7 @@ import {
 import customerPin from "@/assets/customer-pin.png";
 import deliveryIcon from "@/assets/deliveryIcon.png";
 import storePin from "@/assets/store-pin.png";
+import SmoothRiderMarker from "@/shared/components/map/SmoothRiderMarker";
 
 const libraries = ["places", "geometry"];
 
@@ -170,13 +171,40 @@ const LiveTrackingMap = memo(({
     return { lat: 20.5937, lng: 78.9629 };
   }, [activeTargetLocation, riderLocation]);
 
-  // Fit bounds when locations or route change
+  const hasFittedInitialBoundsRef = useRef(false);
+  const smoothRiderPosRef = useRef(riderLocation);
+
+  // Smooth camera pan callback when smooth rider marker updates
+  const handleSmoothRiderPan = useCallback((smoothPos) => {
+    smoothRiderPosRef.current = smoothPos;
+    const map = mapRef.current;
+    if (!map || !window.google || !smoothPos) return;
+
+    // Perform smooth camera pan if rider drifts away from center
+    const center = map.getCenter();
+    if (center && window.google.maps.geometry?.spherical?.computeDistanceBetween) {
+      const currentCenterLatLng = new window.google.maps.LatLng(center.lat(), center.lng());
+      const riderLatLng = new window.google.maps.LatLng(smoothPos.lat, smoothPos.lng);
+      const dist = window.google.maps.geometry.spherical.computeDistanceBetween(currentCenterLatLng, riderLatLng);
+      if (dist > 120) {
+        map.panTo(smoothPos);
+      }
+    }
+  }, []);
+
+  // Reset initial bounds flag when route phase changes
+  useEffect(() => {
+    hasFittedInitialBoundsRef.current = false;
+  }, [routePhase]);
+
+  // Fit initial bounds ONCE when locations or route change (prevents flickering on pings)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !window.google) return;
+    if (!map || !window.google || hasFittedInitialBoundsRef.current) return;
 
     if (hasValidLatLng(riderLocation)) {
       focusOnRider500m(map, riderLocation);
+      hasFittedInitialBoundsRef.current = true;
       return;
     }
     
@@ -202,6 +230,7 @@ const LiveTrackingMap = memo(({
       
       if (hasPoints) {
         map.fitBounds(bounds, 60);
+        hasFittedInitialBoundsRef.current = true;
       }
     } catch (err) {
       console.error("Error fitting bounds:", err);
@@ -210,17 +239,17 @@ const LiveTrackingMap = memo(({
 
   // Keep rider centered during live tracking with a smooth map pan.
   useEffect(() => {
-    if (!isLoaded || !mapRef.current || !hasValidLatLng(riderLocation)) return undefined;
+    if (!isLoaded || !mapRef.current) return undefined;
 
     const intervalId = setInterval(() => {
       const map = mapRef.current;
-      if (!map || !hasValidLatLng(riderLocation)) return;
-      map.panTo(riderLocation);
-      focusOnRider500m(map, riderLocation);
+      const targetPos = smoothRiderPosRef.current || riderLocation;
+      if (!map || !hasValidLatLng(targetPos)) return;
+      map.panTo(targetPos);
     }, RECENTER_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [isLoaded, riderLocation?.lat, riderLocation?.lng, focusOnRider500m]);
+  }, [isLoaded, riderLocation, focusOnRider500m]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -374,12 +403,13 @@ const LiveTrackingMap = memo(({
           fullscreenControl: false,
         }}
       >
-        {/* Rider Location Marker */}
+        {/* Rider Location Marker (Smooth Interpolated & Dead-Reckoned) */}
         {riderLocation && (
-          <Marker
+          <SmoothRiderMarker
             position={riderLocation}
             title="Delivery Partner"
             icon={riderMarkerIcon}
+            onPositionUpdate={handleSmoothRiderPan}
           />
         )}
 
