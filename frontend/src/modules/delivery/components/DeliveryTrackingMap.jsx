@@ -25,6 +25,16 @@ const containerStyle = {
   minHeight: "200px",
 };
 
+function hasValidLatLng(location) {
+  return (
+    location &&
+    typeof location.lat === "number" &&
+    typeof location.lng === "number" &&
+    Number.isFinite(location.lat) &&
+    Number.isFinite(location.lng)
+  );
+}
+
 /** GeoJSON [lng, lat] → { lat, lng } */
 function coordsToLatLng(coords) {
   if (!Array.isArray(coords) || coords.length < 2) return null;
@@ -86,24 +96,18 @@ function projectOnSegment(P, A, B) {
  * Snap rawPt onto rawPath starting search from startSegment.
  * Returns { snapped, segmentIndex, distFromLine } or null.
  */
-function snapToPolyline(rawPt, rawPath, startSegment = 0) {
+function snapToPolyline(rawPt, rawPath) {
   if (!rawPt || !rawPath || rawPath.length < 2) return null;
   let bestDist = Infinity;
   let bestPoint = null;
-  let bestSeg = startSegment;
+  let bestSeg = 0;
 
-  // First: search 60 segments ahead (normal forward progress)
-  const from = Math.max(0, startSegment);
-  const to = Math.min(rawPath.length - 1, startSegment + 60);
-  for (let i = from; i < to; i++) {
+  for (let i = 0; i < rawPath.length - 1; i++) {
     const { point, dist } = projectOnSegment(rawPt, rawPath[i], rawPath[i + 1]);
-    if (dist < bestDist) { bestDist = dist; bestPoint = point; bestSeg = i; }
-  }
-  // Fallback: full search if rider is far from the ahead-window (GPS jump / re-route)
-  if (bestDist > 60) {
-    for (let i = 0; i < rawPath.length - 1; i++) {
-      const { point, dist } = projectOnSegment(rawPt, rawPath[i], rawPath[i + 1]);
-      if (dist < bestDist) { bestDist = dist; bestPoint = point; bestSeg = i; }
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestPoint = point;
+      bestSeg = i;
     }
   }
   let heading = 0;
@@ -406,11 +410,19 @@ const DeliveryTrackingMapComponent = ({
   // ─── Normalized rawPath (plain {lat,lng}) ─────────────────────────────────
   const rawPath = useMemo(() => {
     if (!linePath?.length) return [];
-    return linePath.map((p) => ({
+    const pts = linePath.map((p) => ({
       lat: typeof p.lat === "function" ? p.lat() : p.lat,
       lng: typeof p.lng === "function" ? p.lng() : p.lng,
     }));
-  }, [linePath]);
+    if (pts.length < 2 || !hasValidLatLng(dest)) return pts;
+
+    const distFirstToDest = distanceMeters(pts[0], dest);
+    const distLastToDest = distanceMeters(pts[pts.length - 1], dest);
+    if (distFirstToDest !== null && distLastToDest !== null && distFirstToDest < distLastToDest) {
+      return pts.slice().reverse();
+    }
+    return pts;
+  }, [linePath, dest]);
 
   // snappedSegIndex as STATE so remainingPath useMemo actually re-runs when it advances
   const [snappedSegIndex, setSnappedSegIndex] = useState(0);
@@ -425,29 +437,66 @@ const DeliveryTrackingMapComponent = ({
     if (isSimulating) {
       setIsSimulating(false);
       isSimulatingRef.current = false;
-      if (simulationRef.current) clearInterval(simulationRef.current);
+      if (simulationRef.current) cancelAnimationFrame(simulationRef.current);
     } else {
       if (!rawPath || rawPath.length < 2) return;
       setIsSimulating(true);
       isSimulatingRef.current = true;
-      let step = snappedSegIndexRef.current || 0;
-      simulationRef.current = setInterval(() => {
-        if (step >= rawPath.length) {
-          setIsSimulating(false);
-          isSimulatingRef.current = false;
-          clearInterval(simulationRef.current);
-          return;
+      
+      let currentSeg = snappedSegIndexRef.current || 0;
+      let progressInSeg = 0; // meters traveled in current segment
+      let lastTime = performance.now();
+      const SPEED_M_S = 15; // 15 meters per second (~54 km/h) for testing
+      
+      const animate = (time) => {
+        if (!isSimulatingRef.current) return;
+        
+        const dt = (time - lastTime) / 1000;
+        lastTime = time;
+        // Cap dt to prevent massive jumps on tab suspension
+        const safeDt = Math.min(dt, 0.1); 
+        
+        let moveDist = SPEED_M_S * safeDt;
+        progressInSeg += moveDist;
+        
+        let A = rawPath[currentSeg];
+        let B = rawPath[currentSeg + 1];
+        let segDist = distanceMeters(A, B) || 0.1;
+        
+        while (progressInSeg >= segDist) {
+          progressInSeg -= segDist;
+          currentSeg++;
+          if (currentSeg >= rawPath.length - 1) {
+            setIsSimulating(false);
+            isSimulatingRef.current = false;
+            // Snap to exact end
+            setRider(rawPath[rawPath.length - 1]);
+            riderRef.current = rawPath[rawPath.length - 1];
+            return;
+          }
+          A = rawPath[currentSeg];
+          B = rawPath[currentSeg + 1];
+          segDist = distanceMeters(A, B) || 0.1;
         }
-        setRider(rawPath[step]);
-        riderRef.current = rawPath[step];
-        step++;
-      }, 1000);
+        
+        const ratio = progressInSeg / segDist;
+        const lat = A.lat + (B.lat - A.lat) * ratio;
+        const lng = A.lng + (B.lng - A.lng) * ratio;
+        
+        const nextPos = { lat, lng };
+        setRider(nextPos);
+        riderRef.current = nextPos;
+        
+        simulationRef.current = requestAnimationFrame(animate);
+      };
+      
+      simulationRef.current = requestAnimationFrame(animate);
     }
   }, [isSimulating, rawPath]);
 
   useEffect(() => {
     return () => {
-      if (simulationRef.current) clearInterval(simulationRef.current);
+      if (simulationRef.current) cancelAnimationFrame(simulationRef.current);
     };
   }, []);
 
@@ -457,19 +506,21 @@ const DeliveryTrackingMapComponent = ({
       setSnappedRider(rider || null);
       return;
     }
-    const result = snapToPolyline(rider, rawPath, snappedSegIndexRef.current);
+    const result = snapToPolyline(rider, rawPath);
     if (!result) {
       setSnappedRider(rider);
       return;
     }
     const { snapped, segmentIndex, heading } = result;
-    // Only advance, never backtrack
-    if (segmentIndex > snappedSegIndexRef.current) {
-      snappedSegIndexRef.current = segmentIndex;
-      setSnappedSegIndex(segmentIndex); // triggers remainingPath recomputation
-    }
-    setSnappedRider({ ...snapped, heading });
-  }, [rider, rawPath]); // intentionally excludes snappedSegIndex to avoid loops
+    snappedSegIndexRef.current = segmentIndex;
+    setSnappedSegIndex(segmentIndex);
+    setSnappedRider({
+      lat: snapped.lat,
+      lng: snapped.lng,
+      heading,
+      segmentIndex,
+    });
+  }, [rider, rawPath]);
 
   // Reset when a fresh route arrives
   useEffect(() => {
@@ -478,14 +529,13 @@ const DeliveryTrackingMapComponent = ({
     setSnappedRider(null);
   }, [routeData?.polyline]);
 
-  // Remaining route = everything from snappedSegIndex forward (polyline trims as rider advances)
+  // Remaining route = everything from snappedRider.segmentIndex forward
   const remainingPath = useMemo(() => {
     if (rawPath.length < 2) return rawPath;
-    if (snappedSegIndex <= 0) return rawPath;
-    // Prepend snapped position so the line starts exactly at the rider
-    return snappedRider
-      ? [snappedRider, ...rawPath.slice(snappedSegIndex + 1)]
-      : rawPath.slice(snappedSegIndex);
+    if (!snappedRider) return rawPath;
+    const segIdx = snappedRider.segmentIndex ?? snappedSegIndex;
+    const riderPos = { lat: snappedRider.lat, lng: snappedRider.lng };
+    return [riderPos, ...rawPath.slice(segIdx + 1)];
   }, [rawPath, snappedSegIndex, snappedRider]);
 
   // ─── Polyline rendered natively (updates path in-place, no recreation) ─────
@@ -715,6 +765,7 @@ const DeliveryTrackingMapComponent = ({
           setUserPanned(true);
         }}
         options={{
+          mapId: "DEMO_MAP_ID", // Enables Vector Map for 2-finger rotation / tilt
           disableDefaultUI: true,
           zoomControl: true,
           zoomControlOptions:
@@ -725,6 +776,8 @@ const DeliveryTrackingMapComponent = ({
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
+          rotateControl: true,
+          tiltControl: true,
         }}
       >
         {(snappedRider || rider) && (

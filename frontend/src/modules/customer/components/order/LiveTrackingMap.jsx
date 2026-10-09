@@ -49,6 +49,73 @@ function hasValidLatLng(location) {
   );
 }
 
+function distanceMeters(from, to) {
+  if (!from || !to) return null;
+  if (
+    typeof from.lat !== "number" ||
+    typeof from.lng !== "number" ||
+    typeof to.lat !== "number" ||
+    typeof to.lng !== "number" ||
+    !Number.isFinite(from.lat) ||
+    !Number.isFinite(from.lng) ||
+    !Number.isFinite(to.lat) ||
+    !Number.isFinite(to.lng)
+  ) {
+    return null;
+  }
+
+  const r = 6371000;
+  const dLat = ((to.lat - from.lat) * Math.PI) / 180;
+  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getSegmentHeading(A, B) {
+  const lat1 = (A.lat * Math.PI) / 180;
+  const lat2 = (B.lat * Math.PI) / 180;
+  const dLng = ((B.lng - A.lng) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  const brng = (Math.atan2(y, x) * 180) / Math.PI;
+  return (brng + 360) % 360;
+}
+
+function projectOnSegment(P, A, B) {
+  const dx = B.lat - A.lat;
+  const dy = B.lng - A.lng;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { point: A, dist: distanceMeters(P, A) || 0 };
+  const t = Math.max(0, Math.min(1, ((P.lat - A.lat) * dx + (P.lng - A.lng) * dy) / lenSq));
+  const point = { lat: A.lat + t * dx, lng: A.lng + t * dy };
+  return { point, dist: distanceMeters(P, point) || 0 };
+}
+
+function snapToPolyline(rawPt, rawPath) {
+  if (!rawPt || !rawPath || rawPath.length < 2) return null;
+  let bestDist = Infinity;
+  let bestPoint = null;
+  let bestSeg = 0;
+
+  for (let i = 0; i < rawPath.length - 1; i++) {
+    const { point, dist } = projectOnSegment(rawPt, rawPath[i], rawPath[i + 1]);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestPoint = point;
+      bestSeg = i;
+    }
+  }
+  let heading = 0;
+  if (bestPoint && rawPath[bestSeg] && rawPath[bestSeg + 1]) {
+    heading = getSegmentHeading(rawPath[bestSeg], rawPath[bestSeg + 1]);
+  }
+  return bestPoint ? { snapped: bestPoint, segmentIndex: bestSeg, distFromLine: bestDist, heading } : null;
+}
+
 const LiveTrackingMap = memo(({
   status = "out for delivery",
   eta = "8 mins",
@@ -66,7 +133,7 @@ const LiveTrackingMap = memo(({
   const [mapInstance, setMapInstance] = useState(null);
   const [zoom, setZoom] = useState(14);
   const [userPanned, setUserPanned] = useState(false);
-  const isSearching = SEARCHING_STATUSES.includes(status?.toLowerCase());
+  const isSearching = SEARCHING_STATUSES.includes(status?.toLowerCase()) && (!riderName || riderName === "Assigning Rider...");
   const [progress, setProgress] = useState(0);
   const [dots, setDots] = useState("");
 
@@ -135,6 +202,126 @@ const LiveTrackingMap = memo(({
       return null;
     }
   }, [routePolyline, isLoaded]);
+
+  const rawPath = useMemo(() => {
+    if (!decodedPath?.length) return [];
+    const pts = decodedPath.map((p) => ({
+      lat: typeof p.lat === "function" ? p.lat() : p.lat,
+      lng: typeof p.lng === "function" ? p.lng() : p.lng,
+    }));
+    if (pts.length < 2 || !hasValidLatLng(activeTargetLocation)) return pts;
+
+    const distFirstToDest = distanceMeters(pts[0], activeTargetLocation);
+    const distLastToDest = distanceMeters(pts[pts.length - 1], activeTargetLocation);
+    if (distFirstToDest !== null && distLastToDest !== null && distFirstToDest < distLastToDest) {
+      return pts.slice().reverse();
+    }
+    return pts;
+  }, [decodedPath, activeTargetLocation]);
+
+  const [snappedSegIndex, setSnappedSegIndex] = useState(0);
+  const snappedSegIndexRef = useRef(0);
+  const [snappedRider, setSnappedRider] = useState(null);
+
+  useEffect(() => {
+    if (!riderLocation || rawPath.length < 2) {
+      setSnappedRider(riderLocation || null);
+      return;
+    }
+    const result = snapToPolyline(riderLocation, rawPath);
+    if (!result) {
+      setSnappedRider(riderLocation);
+      return;
+    }
+    const { snapped, segmentIndex, heading } = result;
+    snappedSegIndexRef.current = segmentIndex;
+    setSnappedSegIndex(segmentIndex);
+    setSnappedRider({
+      lat: snapped.lat,
+      lng: snapped.lng,
+      heading,
+      segmentIndex,
+    });
+  }, [riderLocation, rawPath]);
+
+  useEffect(() => {
+    snappedSegIndexRef.current = 0;
+    setSnappedSegIndex(0);
+    setSnappedRider(null);
+  }, [routePolyline?.polyline]);
+
+  const remainingPath = useMemo(() => {
+    if (rawPath.length < 2) {
+      if (riderLocation && hasValidLatLng(activeTargetLocation)) {
+        return [riderLocation, activeTargetLocation];
+      }
+      return [];
+    }
+    if (!snappedRider) return rawPath;
+    const segIdx = snappedRider.segmentIndex ?? snappedSegIndex;
+    const riderPos = { lat: snappedRider.lat, lng: snappedRider.lng };
+    return [riderPos, ...rawPath.slice(segIdx + 1)];
+  }, [rawPath, snappedSegIndex, snappedRider, riderLocation, activeTargetLocation]);
+
+  const routeMapPolylineRef = useRef(null);
+  const routeBgPolylineRef = useRef(null);
+
+  // ─── Polyline rendered natively (updates path in-place, no recreation) ─────
+  useEffect(() => {
+    if (!isLoaded || !mapInstance || !window.google?.maps) return undefined;
+
+    if (!remainingPath?.length) {
+      if (routeMapPolylineRef.current) {
+        routeMapPolylineRef.current.setMap(null);
+        routeMapPolylineRef.current = null;
+      }
+      if (routeBgPolylineRef.current) {
+        routeBgPolylineRef.current.setMap(null);
+        routeBgPolylineRef.current = null;
+      }
+      return undefined;
+    }
+
+    if (routeMapPolylineRef.current) {
+      // Update path in-place — avoids flickering from destroy/recreate
+      routeMapPolylineRef.current.setPath(remainingPath);
+      if (routeBgPolylineRef.current) {
+        routeBgPolylineRef.current.setPath(remainingPath);
+      }
+    } else {
+      // Background glow/casing polyline
+      const bgPl = new window.google.maps.Polyline({
+        path: remainingPath,
+        strokeColor: "#1d4ed8",
+        strokeOpacity: 0.35,
+        strokeWeight: 8,
+        map: mapInstance,
+        zIndex: 9,
+      });
+      // Main active polyline
+      const pl = new window.google.maps.Polyline({
+        path: remainingPath,
+        strokeColor: "#2563eb",
+        strokeOpacity: 0.95,
+        strokeWeight: 5,
+        map: mapInstance,
+        zIndex: 10,
+      });
+      routeBgPolylineRef.current = bgPl;
+      routeMapPolylineRef.current = pl;
+    }
+
+    return () => {
+      if (routeMapPolylineRef.current) {
+        routeMapPolylineRef.current.setMap(null);
+        routeMapPolylineRef.current = null;
+      }
+      if (routeBgPolylineRef.current) {
+        routeBgPolylineRef.current.setMap(null);
+        routeBgPolylineRef.current = null;
+      }
+    };
+  }, [isLoaded, mapInstance, remainingPath]);
 
   const riderMarkerIcon = useMemo(() => {
     if (!isLoaded || !window.google?.maps) return undefined;
@@ -410,18 +597,25 @@ const LiveTrackingMap = memo(({
           setUserPanned(true);
         }}
         options={{
+          mapId: "DEMO_MAP_ID", // Enables Vector Map for 2-finger rotation / tilt
           disableDefaultUI: true,
           zoomControl: true,
+          zoomControlOptions:
+            typeof window !== "undefined" && window.google?.maps?.ControlPosition
+              ? { position: window.google.maps.ControlPosition.RIGHT_CENTER }
+              : undefined,
           gestureHandling: "greedy",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
+          rotateControl: true,
+          tiltControl: true,
         }}
       >
         {/* Rider Location Marker (Smooth Interpolated & Dead-Reckoned) */}
-        {riderLocation && (
+        {(snappedRider || riderLocation) && (
           <SmoothRiderMarker
-            position={riderLocation}
+            position={snappedRider || riderLocation}
             title="Delivery Partner"
             icon={riderMarkerIcon}
             onPositionUpdate={handleSmoothRiderPan}
@@ -446,28 +640,6 @@ const LiveTrackingMap = memo(({
           />
         )}
 
-        {/* Line connecting rider to destination - use cached polyline if available */}
-        {decodedPath && decodedPath.length > 0 ? (
-          <Polyline
-            path={decodedPath}
-            options={{
-              strokeColor: "var(--primary)",
-              strokeOpacity: 0.8,
-              strokeWeight: 4,
-              geodesic: false,
-            }}
-          />
-        ) : riderLocation && hasValidLatLng(activeTargetLocation) ? (
-          <Polyline
-            path={[riderLocation, activeTargetLocation]}
-            options={{
-              strokeColor: "var(--primary)",
-              strokeOpacity: 0.6,
-              strokeWeight: 3,
-              geodesic: true,
-            }}
-          />
-        ) : null}
       </GoogleMap>
 
       {/* 3. Floating Overlay Cards */}
@@ -501,6 +673,23 @@ const LiveTrackingMap = memo(({
           Open in Maps
         </button>
       </div>
+
+      {/* Floating Recenter button when user has panned */}
+      {userPanned && (riderLocation || snappedRider) && (
+        <button
+          type="button"
+          onClick={() => {
+            setUserPanned(false);
+            if (mapRef.current) {
+              focusOnRider500m(mapRef.current, snappedRider || riderLocation);
+            }
+          }}
+          className="absolute top-20 left-4 z-40 bg-white/95 backdrop-blur-md rounded-full px-3 py-1.5 shadow-md border border-slate-200 text-[11px] font-bold text-slate-800 flex items-center gap-1.5 hover:bg-white transition-all cursor-pointer shadow-brand-100"
+        >
+          <Navigation size={13} className="text-blue-600 fill-blue-600 animate-pulse" />
+          Recenter on Rider
+        </button>
+      )}
 
       {/* 4. Rider Info Card (Compact Bottom) */}
       {riderName && (

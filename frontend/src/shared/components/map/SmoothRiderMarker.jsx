@@ -9,6 +9,7 @@ const SmoothRiderMarkerComponent = ({
   icon,
   title = "Delivery Partner",
   zIndex = 100,
+  rotationOffset = 0,
   onPositionUpdate,
 }) => {
   const [rotatedIcon, setRotatedIcon] = useState(icon);
@@ -78,7 +79,8 @@ const SmoothRiderMarkerComponent = ({
   // Handle async rotation of the icon
   useEffect(() => {
     if (!icon || !icon.url) return;
-    const heading = displayPos?.heading || 0;
+    const rawHeading = displayPos?.heading || 0;
+    const heading = (rawHeading + rotationOffset + 360) % 360;
     const roundedHeading = Math.round(heading / 2) * 2;
     const cacheKey = `${icon.url}_${roundedHeading}`;
 
@@ -119,7 +121,7 @@ const SmoothRiderMarkerComponent = ({
     };
 
     return () => { isMounted = false; };
-  }, [icon, displayPos?.heading]);
+  }, [icon, displayPos?.heading, rotationOffset]);
 
   if (!displayPos) return null;
 
