@@ -17,8 +17,8 @@ function getDistanceMeters(p1, p2) {
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos((p1.lat * Math.PI) / 180) *
-      Math.cos((p2.lat * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
+    Math.cos((p2.lat * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 

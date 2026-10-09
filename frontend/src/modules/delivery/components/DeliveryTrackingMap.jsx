@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
-import { Loader2 } from "lucide-react";
+import { Loader2, Navigation, Maximize2, Minimize2 } from "lucide-react";
 import customerPin from "@/assets/customer-pin.png";
 import { deliveryApi } from "../services/deliveryApi";
 import deliveryIcon from "@/assets/deliveryIcon.png";
@@ -59,6 +59,60 @@ function distanceMeters(from, to) {
   return 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ─── Module-level route-snap helpers (pure functions, stable references) ────
+
+function getSegmentHeading(A, B) {
+  const lat1 = (A.lat * Math.PI) / 180;
+  const lat2 = (B.lat * Math.PI) / 180;
+  const dLng = ((B.lng - A.lng) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  const brng = (Math.atan2(y, x) * 180) / Math.PI;
+  return (brng + 360) % 360;
+}
+
+/** Project point P onto segment A→B. Returns { point, dist }. */
+function projectOnSegment(P, A, B) {
+  const dx = B.lat - A.lat;
+  const dy = B.lng - A.lng;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { point: A, dist: distanceMeters(P, A) || 0 };
+  const t = Math.max(0, Math.min(1, ((P.lat - A.lat) * dx + (P.lng - A.lng) * dy) / lenSq));
+  const point = { lat: A.lat + t * dx, lng: A.lng + t * dy };
+  return { point, dist: distanceMeters(P, point) || 0 };
+}
+
+/**
+ * Snap rawPt onto rawPath starting search from startSegment.
+ * Returns { snapped, segmentIndex, distFromLine } or null.
+ */
+function snapToPolyline(rawPt, rawPath, startSegment = 0) {
+  if (!rawPt || !rawPath || rawPath.length < 2) return null;
+  let bestDist = Infinity;
+  let bestPoint = null;
+  let bestSeg = startSegment;
+
+  // First: search 60 segments ahead (normal forward progress)
+  const from = Math.max(0, startSegment);
+  const to = Math.min(rawPath.length - 1, startSegment + 60);
+  for (let i = from; i < to; i++) {
+    const { point, dist } = projectOnSegment(rawPt, rawPath[i], rawPath[i + 1]);
+    if (dist < bestDist) { bestDist = dist; bestPoint = point; bestSeg = i; }
+  }
+  // Fallback: full search if rider is far from the ahead-window (GPS jump / re-route)
+  if (bestDist > 60) {
+    for (let i = 0; i < rawPath.length - 1; i++) {
+      const { point, dist } = projectOnSegment(rawPt, rawPath[i], rawPath[i + 1]);
+      if (dist < bestDist) { bestDist = dist; bestPoint = point; bestSeg = i; }
+    }
+  }
+  let heading = 0;
+  if (bestPoint && rawPath[bestSeg] && rawPath[bestSeg + 1]) {
+    heading = getSegmentHeading(rawPath[bestSeg], rawPath[bestSeg + 1]);
+  }
+  return bestPoint ? { snapped: bestPoint, segmentIndex: bestSeg, distFromLine: bestDist, heading } : null;
+}
+
 function destinationForPhase(order, phase) {
   const isReturn = order?.returnStatus && order.returnStatus !== "none";
   if (phase === "pickup") {
@@ -104,9 +158,14 @@ const DeliveryTrackingMapComponent = ({
   order,
   onRouteStatsChange,
 }) => {
+  const containerRef = useRef(null);
   const mapRef = useRef(null);
   const routePolylineRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
+  const [zoom, setZoom] = useState(15);
+  const [userPanned, setUserPanned] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const [rider, setRider] = useState(() => {
     const c = getCachedDeliveryPartnerLocation();
     return c ? { lat: c.lat, lng: c.lng } : null;
@@ -116,6 +175,9 @@ const DeliveryTrackingMapComponent = ({
     const c = getCachedDeliveryPartnerLocation();
     return c ? { lat: c.lat, lng: c.lng } : null;
   })());
+  const smoothRiderPosRef = useRef(rider);
+  const hasFittedInitialBoundsRef = useRef(false);
+
   const [routeData, setRouteData] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const lastFetchRef = useRef({ at: 0, phase: null, orderId: null });
@@ -124,6 +186,41 @@ const DeliveryTrackingMapComponent = ({
   const lastLocationPostRef = useRef(0);
   const locationInFlightRef = useRef(false);
   const locationAbortRef = useRef(null);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    const timer = setTimeout(() => {
+      if (mapRef.current && window.google) {
+        window.google.maps.event.trigger(mapRef.current, "resize");
+        const targetPos = smoothRiderPosRef.current || rider;
+        if (targetPos) {
+          mapRef.current.panTo(targetPos);
+        }
+      }
+    }, 100);
+    return () => {
+      clearTimeout(timer);
+      document.body.style.overflow = "";
+    };
+  }, [isFullscreen, rider]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen]);
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
@@ -143,6 +240,8 @@ const DeliveryTrackingMapComponent = ({
         const heading = pos.coords.heading;
         const speed = pos.coords.speed;
         
+        if (isSimulatingRef.current) return;
+
         saveDeliveryPartnerLocation(lat, lng);
         setRider({ lat, lng });
         riderRef.current = { lat, lng };
@@ -304,9 +403,130 @@ const DeliveryTrackingMapComponent = ({
     return [];
   }, [decodedPath]);
 
+  // ─── Normalized rawPath (plain {lat,lng}) ─────────────────────────────────
+  const rawPath = useMemo(() => {
+    if (!linePath?.length) return [];
+    return linePath.map((p) => ({
+      lat: typeof p.lat === "function" ? p.lat() : p.lat,
+      lng: typeof p.lng === "function" ? p.lng() : p.lng,
+    }));
+  }, [linePath]);
+
+  // snappedSegIndex as STATE so remainingPath useMemo actually re-runs when it advances
+  const [snappedSegIndex, setSnappedSegIndex] = useState(0);
+  const snappedSegIndexRef = useRef(0); // mirror ref for use inside effects without deps
+  const [snappedRider, setSnappedRider] = useState(null);
+
+  const [isSimulating, setIsSimulating] = useState(false);
+  const simulationRef = useRef(null);
+  const isSimulatingRef = useRef(false);
+
+  const toggleSimulation = useCallback(() => {
+    if (isSimulating) {
+      setIsSimulating(false);
+      isSimulatingRef.current = false;
+      if (simulationRef.current) clearInterval(simulationRef.current);
+    } else {
+      if (!rawPath || rawPath.length < 2) return;
+      setIsSimulating(true);
+      isSimulatingRef.current = true;
+      let step = snappedSegIndexRef.current || 0;
+      simulationRef.current = setInterval(() => {
+        if (step >= rawPath.length) {
+          setIsSimulating(false);
+          isSimulatingRef.current = false;
+          clearInterval(simulationRef.current);
+          return;
+        }
+        setRider(rawPath[step]);
+        riderRef.current = rawPath[step];
+        step++;
+      }, 1000);
+    }
+  }, [isSimulating, rawPath]);
+
+  useEffect(() => {
+    return () => {
+      if (simulationRef.current) clearInterval(simulationRef.current);
+    };
+  }, []);
+
+  // Whenever raw rider GPS changes → snap to polyline
+  useEffect(() => {
+    if (!rider || rawPath.length < 2) {
+      setSnappedRider(rider || null);
+      return;
+    }
+    const result = snapToPolyline(rider, rawPath, snappedSegIndexRef.current);
+    if (!result) {
+      setSnappedRider(rider);
+      return;
+    }
+    const { snapped, segmentIndex, heading } = result;
+    // Only advance, never backtrack
+    if (segmentIndex > snappedSegIndexRef.current) {
+      snappedSegIndexRef.current = segmentIndex;
+      setSnappedSegIndex(segmentIndex); // triggers remainingPath recomputation
+    }
+    setSnappedRider({ ...snapped, heading });
+  }, [rider, rawPath]); // intentionally excludes snappedSegIndex to avoid loops
+
+  // Reset when a fresh route arrives
+  useEffect(() => {
+    snappedSegIndexRef.current = 0;
+    setSnappedSegIndex(0);
+    setSnappedRider(null);
+  }, [routeData?.polyline]);
+
+  // Remaining route = everything from snappedSegIndex forward (polyline trims as rider advances)
+  const remainingPath = useMemo(() => {
+    if (rawPath.length < 2) return rawPath;
+    if (snappedSegIndex <= 0) return rawPath;
+    // Prepend snapped position so the line starts exactly at the rider
+    return snappedRider
+      ? [snappedRider, ...rawPath.slice(snappedSegIndex + 1)]
+      : rawPath.slice(snappedSegIndex);
+  }, [rawPath, snappedSegIndex, snappedRider]);
+
+  // ─── Polyline rendered natively (updates path in-place, no recreation) ─────
+  useEffect(() => {
+    if (!isLoaded || !mapInstance || !window.google?.maps) return undefined;
+
+    if (!remainingPath?.length) {
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+        routePolylineRef.current = null;
+      }
+      return undefined;
+    }
+
+    if (routePolylineRef.current) {
+      // Update path in-place — avoids flickering from destroy/recreate
+      routePolylineRef.current.setPath(remainingPath);
+    } else {
+      const pl = new window.google.maps.Polyline({
+        path: remainingPath,
+        strokeColor: "#2563eb",
+        strokeOpacity: 0.95,
+        strokeWeight: 5,
+        map: mapInstance,
+        zIndex: 10,
+      });
+      routePolylineRef.current = pl;
+    }
+
+    return () => {
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+        routePolylineRef.current = null;
+      }
+    };
+  }, [isLoaded, mapInstance, remainingPath]);
+
+
+  // ─── Marker icons ─────────────────────────────────────────────────────────
   const riderMarkerIcon = useMemo(() => {
     if (!isLoaded || !window.google?.maps) return undefined;
-
     return {
       url: deliveryIcon,
       scaledSize: new window.google.maps.Size(44, 64),
@@ -316,7 +536,6 @@ const DeliveryTrackingMapComponent = ({
 
   const customerMarkerIcon = useMemo(() => {
     if (!isLoaded || !window.google?.maps) return undefined;
-
     return {
       url: customerPin,
       scaledSize: new window.google.maps.Size(40, 40),
@@ -326,7 +545,6 @@ const DeliveryTrackingMapComponent = ({
 
   const storeMarkerIcon = useMemo(() => {
     if (!isLoaded || !window.google?.maps) return undefined;
-
     return {
       url: storePin,
       scaledSize: new window.google.maps.Size(40, 40),
@@ -334,11 +552,15 @@ const DeliveryTrackingMapComponent = ({
     };
   }, [isLoaded]);
 
-  const mapCenter = useMemo(() => {
+  // mapCenter: only used for INITIAL render — camera is controlled imperatively afterwards
+  // Do NOT update this after load (would cause Google Maps to re-center and bounce)
+  const initialCenter = useMemo(() => {
     if (rider) return rider;
     if (dest) return dest;
     return { lat: 20.5937, lng: 78.9629 };
-  }, [rider, dest]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty deps: intentionally frozen at mount
+  const mapCenter = initialCenter;
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
@@ -347,82 +569,38 @@ const DeliveryTrackingMapComponent = ({
 
   const focusOnRider500m = useCallback((map, riderLocation) => {
     if (!map || !window.google?.maps || !riderLocation) return;
-
     const center = new window.google.maps.LatLng(riderLocation.lat, riderLocation.lng);
     const bounds = new window.google.maps.LatLngBounds();
-
     if (window.google.maps.geometry?.spherical?.computeOffset) {
-      [0, 90, 180, 270].forEach((heading) => {
-        const edge = window.google.maps.geometry.spherical.computeOffset(
-          center,
-          RIDER_FOCUS_RADIUS_M,
-          heading,
-        );
-        bounds.extend(edge);
+      [0, 90, 180, 270].forEach((h) => {
+        bounds.extend(window.google.maps.geometry.spherical.computeOffset(center, RIDER_FOCUS_RADIUS_M, h));
       });
     } else {
-      const latOffset = RIDER_FOCUS_RADIUS_M / 111111;
-      const lngOffset =
-        RIDER_FOCUS_RADIUS_M /
-        (111111 * Math.cos((riderLocation.lat * Math.PI) / 180) || 1);
-      bounds.extend({ lat: riderLocation.lat + latOffset, lng: riderLocation.lng });
-      bounds.extend({ lat: riderLocation.lat - latOffset, lng: riderLocation.lng });
-      bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng + lngOffset });
-      bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng - lngOffset });
+      const latOff = RIDER_FOCUS_RADIUS_M / 111111;
+      const lngOff = RIDER_FOCUS_RADIUS_M / (111111 * Math.cos((riderLocation.lat * Math.PI) / 180) || 1);
+      bounds.extend({ lat: riderLocation.lat + latOff, lng: riderLocation.lng });
+      bounds.extend({ lat: riderLocation.lat - latOff, lng: riderLocation.lng });
+      bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng + lngOff });
+      bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng - lngOff });
     }
-
     map.fitBounds(bounds, 24);
   }, []);
 
-  const strokeColor = "#2563eb";
-
-  useEffect(() => {
-    if (!isLoaded || !mapInstance || !window.google?.maps) return undefined;
-
-    // Clear previous polyline
-    if (routePolylineRef.current) {
-      routePolylineRef.current.setMap(null);
-      routePolylineRef.current = null;
-    }
-
-    if (!linePath?.length) return undefined;
-
-    const pl = new window.google.maps.Polyline({
-      path: linePath,
-      strokeColor: "#2563eb",
-      strokeOpacity: 0.95,
-      strokeWeight: 5,
-      map: mapInstance,
-      zIndex: 10,
-    });
-    routePolylineRef.current = pl;
-
-    return () => {
-      if (routePolylineRef.current) {
-        routePolylineRef.current.setMap(null);
-        routePolylineRef.current = null;
-      }
-    };
-  }, [isLoaded, mapInstance, linePath]);
-
-  const hasFittedInitialBoundsRef = useRef(false);
-  const smoothRiderPosRef = useRef(rider);
-
   const handleSmoothRiderPan = useCallback((smoothPos) => {
     smoothRiderPosRef.current = smoothPos;
+    if (userPanned) return;
     const map = mapRef.current;
     if (!map || !window.google || !smoothPos) return;
 
-    const center = map.getCenter();
-    if (center && window.google.maps.geometry?.spherical?.computeDistanceBetween) {
-      const currentCenterLatLng = new window.google.maps.LatLng(center.lat(), center.lng());
-      const riderLatLng = new window.google.maps.LatLng(smoothPos.lat, smoothPos.lng);
-      const dist = window.google.maps.geometry.spherical.computeDistanceBetween(currentCenterLatLng, riderLatLng);
-      if (dist > 100) {
+    // Only pan when rider is actually off-screen (prevents the constant map bounce)
+    const bounds = map.getBounds();
+    if (bounds) {
+      const isVisible = bounds.contains({ lat: smoothPos.lat, lng: smoothPos.lng });
+      if (!isVisible) {
         map.panTo(smoothPos);
       }
     }
-  }, []);
+  }, [userPanned]);
 
   useEffect(() => {
     hasFittedInitialBoundsRef.current = false;
@@ -452,49 +630,20 @@ const DeliveryTrackingMapComponent = ({
     }
   }, [linePath, rider, dest, focusOnRider500m]);
 
-  // Smoothly keep rider centered during live tracking with smooth map pan.
-  useEffect(() => {
-    if (!isLoaded || !mapRef.current) return undefined;
+  // Auto-pan: only when rider drifts off-screen, not on a fixed timer (timer caused bouncing)
+  // This is handled entirely inside handleSmoothRiderPan on each GPS tick.
 
-    const id = setInterval(() => {
-      const currentMap = mapRef.current;
-      const targetPos = smoothRiderPosRef.current || rider;
-      if (!currentMap || !targetPos) return;
-      currentMap.panTo(targetPos);
-    }, RECENTER_INTERVAL_MS);
-
-    return () => clearInterval(id);
-  }, [isLoaded, rider, focusOnRider500m]);
-
-  // Add resize observer to handle dynamic height changes
+  // Add resize observer to handle dynamic container height changes without resetting zoom
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.google) return undefined;
 
     const handleResize = () => {
       window.google.maps.event.trigger(map, 'resize');
-      // Re-focus rider after resize when available
-      try {
-        if (rider) {
-          focusOnRider500m(map, rider);
-          return;
-        }
-        const bounds = new window.google.maps.LatLngBounds();
-        if (linePath?.length) {
-          linePath.forEach((p) => bounds.extend(p));
-        }
-        if (rider) bounds.extend(rider);
-        if (dest) bounds.extend(dest);
-        map.fitBounds(bounds, 32);
-      } catch {
-        /* ignore */
-      }
     };
 
-    // Listen for window resize events
     window.addEventListener('resize', handleResize);
     
-    // Create a resize observer for the map container
     const mapContainer = map.getDiv()?.parentElement;
     let resizeObserver;
     
@@ -511,7 +660,7 @@ const DeliveryTrackingMapComponent = ({
         resizeObserver.disconnect();
       }
     };
-  }, [linePath, rider, dest, focusOnRider500m]);
+  }, []);
 
   if (!apiKey) {
     return (
@@ -541,23 +690,46 @@ const DeliveryTrackingMapComponent = ({
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-100">
+    <div
+      ref={containerRef}
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-[9999] w-screen h-screen bg-slate-900 flex flex-col overflow-hidden"
+          : "relative w-full h-full overflow-hidden bg-slate-100 rounded-3xl"
+      }
+    >
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={mapCenter}
-        zoom={14}
+        zoom={zoom}
         onLoad={onMapLoad}
+        onZoomChanged={() => {
+          if (mapRef.current) {
+            const z = mapRef.current.getZoom();
+            if (typeof z === "number" && z > 0) {
+              setZoom(z);
+            }
+          }
+        }}
+        onDragStart={() => {
+          setUserPanned(true);
+        }}
         options={{
           disableDefaultUI: true,
           zoomControl: true,
+          zoomControlOptions:
+            typeof window !== "undefined" && window.google?.maps?.ControlPosition
+              ? { position: window.google.maps.ControlPosition.RIGHT_CENTER }
+              : undefined,
+          gestureHandling: "greedy",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
         }}
       >
-        {rider && (
+        {(snappedRider || rider) && (
           <SmoothRiderMarker
-            position={rider}
+            position={snappedRider || rider}
             title="Your location"
             icon={riderMarkerIcon}
             onPositionUpdate={handleSmoothRiderPan}
@@ -587,11 +759,64 @@ const DeliveryTrackingMapComponent = ({
           />
         )}
       </GoogleMap>
-      <div className="absolute bottom-2 right-2 bg-white/95 backdrop-blur px-2 py-1 rounded-md text-[10px] text-slate-600 font-bold border border-slate-200 shadow-sm">
-        {routeLoading ? "Updating route…" : "Tracking View"}
+
+      {/* Bottom-Right Control Bar: Tracking badge + Mobile Fullscreen button */}
+      <div className="absolute bottom-3 right-3 z-30 flex items-center gap-2 max-w-[calc(100vw-24px)] select-none">
+        {import.meta.env.DEV && (
+          <button
+            type="button"
+            onClick={toggleSimulation}
+            className={`bg-slate-900/90 hover:bg-slate-900 text-white backdrop-blur-md px-3 py-1.5 rounded-xl shadow-xl border border-slate-700/80 text-[10px] font-bold transition-all cursor-pointer ${isSimulating ? 'text-rose-400' : 'text-sky-400'}`}
+          >
+            {isSimulating ? "Stop Sim" : "Simulate Rider"}
+          </button>
+        )}
+        <div className="hidden sm:block bg-white/95 backdrop-blur px-2.5 py-1.5 rounded-xl text-[10px] text-slate-700 font-bold border border-slate-200/80 shadow-md">
+          {routeLoading ? "Updating route…" : "Tracking View"}
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="bg-slate-900/90 hover:bg-slate-900 active:scale-95 text-white backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-xl border border-slate-700/80 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all touch-manipulation"
+          title={isFullscreen ? "Exit Fullscreen" : "Full Screen Map"}
+        >
+          {isFullscreen ? (
+            <>
+              <Minimize2 size={16} className="text-emerald-400" />
+              <span>Exit</span>
+            </>
+          ) : (
+            <>
+              <Maximize2 size={16} className="text-emerald-400" />
+              <span>Full Screen</span>
+            </>
+          )}
+        </button>
       </div>
+
+      {/* Recenter on Rider Button */}
+      {userPanned && (
+        <button
+          type="button"
+          onClick={() => {
+            setUserPanned(false);
+            const map = mapRef.current;
+            const targetPos = smoothRiderPosRef.current || rider;
+            if (map && targetPos) {
+              map.panTo(targetPos);
+            }
+          }}
+          className="absolute top-3 left-3 z-30 flex items-center gap-1.5 bg-white/95 text-slate-800 backdrop-blur-md px-3 py-1.5 rounded-full shadow-md border border-slate-200 text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+        >
+          <Navigation size={14} className="text-blue-600 animate-pulse" />
+          <span>Recenter on Rider</span>
+        </button>
+      )}
+
+
       {routeData?.degraded && (
-        <div className="absolute top-2 left-2 bg-amber-50/95 text-amber-900 text-[10px] px-2 py-1 rounded border border-amber-200 max-w-[85%] leading-snug">
+        <div className="absolute top-3 left-3 z-20 bg-amber-50/95 text-amber-900 text-[10px] px-2 py-1 rounded border border-amber-200 max-w-[85%] leading-snug">
           Route unavailable. Add{" "}
           <span className="font-mono">GOOGLE_MAPS_API_KEY</span> to the{" "}
           <strong>backend</strong> <span className="font-mono">.env</span>, enable

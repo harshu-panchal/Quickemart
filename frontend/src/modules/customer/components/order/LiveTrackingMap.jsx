@@ -64,6 +64,8 @@ const LiveTrackingMap = memo(({
 }) => {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
+  const [zoom, setZoom] = useState(14);
+  const [userPanned, setUserPanned] = useState(false);
   const isSearching = SEARCHING_STATUSES.includes(status?.toLowerCase());
   const [progress, setProgress] = useState(0);
   const [dots, setDots] = useState("");
@@ -177,6 +179,7 @@ const LiveTrackingMap = memo(({
   // Smooth camera pan callback when smooth rider marker updates
   const handleSmoothRiderPan = useCallback((smoothPos) => {
     smoothRiderPosRef.current = smoothPos;
+    if (userPanned) return;
     const map = mapRef.current;
     if (!map || !window.google || !smoothPos) return;
 
@@ -190,7 +193,7 @@ const LiveTrackingMap = memo(({
         map.panTo(smoothPos);
       }
     }
-  }, []);
+  }, [userPanned]);
 
   // Reset initial bounds flag when route phase changes
   useEffect(() => {
@@ -393,11 +396,23 @@ const LiveTrackingMap = memo(({
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={mapCenter}
-        zoom={14}
+        zoom={zoom}
         onLoad={onMapLoad}
+        onZoomChanged={() => {
+          if (mapRef.current) {
+            const z = mapRef.current.getZoom();
+            if (typeof z === "number" && z > 0) {
+              setZoom(z);
+            }
+          }
+        }}
+        onDragStart={() => {
+          setUserPanned(true);
+        }}
         options={{
           disableDefaultUI: true,
-          zoomControl: false,
+          zoomControl: true,
+          gestureHandling: "greedy",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
