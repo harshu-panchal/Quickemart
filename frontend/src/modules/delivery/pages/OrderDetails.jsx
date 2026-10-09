@@ -83,11 +83,10 @@ const getPersistedRiderStep = (order) => {
   const riderStep = Number(order.deliveryRiderStep) || 0;
 
   if (
-    riderStep >= 4 ||
     workflowStatus === "DELIVERED" ||
     legacyStatus === "delivered"
   ) {
-    return 4;
+    return 3;
   }
 
   if (
@@ -95,15 +94,6 @@ const getPersistedRiderStep = (order) => {
     workflowStatus === "OUT_FOR_DELIVERY" ||
     legacyStatus === "out_for_delivery" ||
     order.outForDeliveryAt
-  ) {
-    return 3;
-  }
-
-  if (
-    riderStep >= 2 ||
-    workflowStatus === "PICKUP_READY" ||
-    legacyStatus === "packed" ||
-    order.pickupReadyAt
   ) {
     return 2;
   }

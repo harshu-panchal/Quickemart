@@ -575,12 +575,9 @@ const OrderDetailPage = () => {
     status !== "cancelled";
   const sellerLocation = coordsToLatLng(order?.seller?.location?.coordinates);
   const routePhase = getTrackingRoutePhase(order);
-  const routeMatchesPhase =
-    routePhase === "pickup"
-      ? routePolyline?.phase
-        ? routePolyline.phase === routePhase
-        : !!routePolyline?.polyline
-      : routePolyline?.phase === routePhase;
+  const routeMatchesPhase = routePolyline?.phase
+    ? routePolyline.phase === routePhase
+    : !!routePolyline?.polyline;
   const activeRoutePolyline = routeMatchesPhase ? routePolyline : null;
   const estimatedArrival = useMemo(() => {
     if (!order) {
