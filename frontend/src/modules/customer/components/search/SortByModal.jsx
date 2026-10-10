@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
@@ -11,6 +11,17 @@ export const SORT_OPTIONS = [
 ];
 
 const SortByModal = ({ isOpen, onClose, selectedSort, onSelectSort }) => {
+    // Prevent background page scroll when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            const originalStyle = window.getComputedStyle(document.body).overflow;
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = originalStyle || '';
+            };
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (

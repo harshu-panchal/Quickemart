@@ -17,6 +17,17 @@ const FilterDrawer = ({
         setLocalFilters(activeFilters);
     }, [activeFilters, isOpen]);
 
+    // Prevent background page scroll when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            const originalStyle = window.getComputedStyle(document.body).overflow;
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = originalStyle || '';
+            };
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const handleBrandToggle = (brandName) => {
@@ -95,15 +106,15 @@ const FilterDrawer = ({
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: '100%', opacity: 0 }}
                         transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-                        className="fixed bottom-0 left-0 right-0 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:left-1/2 md:-translate-x-1/2 md:max-w-lg w-full bg-white rounded-t-3xl md:rounded-3xl shadow-2xl z-[201] overflow-hidden flex flex-col max-h-[85vh]"
+                        className="fixed bottom-0 left-0 right-0 md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:left-1/2 md:-translate-x-1/2 md:max-w-lg w-full bg-white rounded-t-3xl md:rounded-3xl shadow-2xl z-[201] overflow-hidden flex flex-col h-[85vh] max-h-[85vh] md:h-[80vh] md:max-h-[80vh]"
                     >
                         {/* Mobile Drag Handle */}
-                        <div className="md:hidden pt-3 pb-1 flex justify-center">
+                        <div className="md:hidden pt-3 pb-1 flex justify-center flex-shrink-0">
                             <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
                         </div>
 
                         {/* Drawer Header */}
-                        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100">
+                        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
                             <div className="flex items-center gap-2">
                                 <h3 className="text-lg font-black text-slate-800 tracking-tight">
                                     Filters
@@ -125,8 +136,8 @@ const FilterDrawer = ({
                             </div>
                         </div>
 
-                        {/* Filter Content */}
-                        <div className="p-6 space-y-6 overflow-y-auto no-scrollbar flex-1">
+                        {/* Filter Content - Smooth Scrollable Container */}
+                        <div className="p-6 space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0 touch-pan-y">
                             {/* Rating Section */}
                             <div>
                                 <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">
@@ -196,9 +207,9 @@ const FilterDrawer = ({
                             {displayBrands.length > 0 && (
                                 <div>
                                     <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">
-                                        Brands
+                                        Brands ({displayBrands.length})
                                     </h4>
-                                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1 no-scrollbar">
+                                    <div className="flex flex-wrap gap-2 p-2 max-h-[38vh] overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/40">
                                         {displayBrands.map((b) => {
                                             const brandName = typeof b === 'string' ? b : b.name;
                                             const count = typeof b === 'object' ? b.count : null;
@@ -211,11 +222,11 @@ const FilterDrawer = ({
                                                     className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
                                                         isSelected
                                                             ? 'bg-brand-50 border-primary text-primary shadow-xs font-extrabold'
-                                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                                                     }`}
                                                 >
                                                     <span>{brandName}</span>
-                                                    {count && (
+                                                    {count !== null && (
                                                         <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-primary text-white' : 'bg-slate-200 text-slate-500'}`}>
                                                             {count}
                                                         </span>
@@ -229,7 +240,7 @@ const FilterDrawer = ({
                         </div>
 
                         {/* Footer Action Buttons */}
-                        <div className="p-4 border-t border-slate-100 bg-white flex items-center gap-3">
+                        <div className="p-4 border-t border-slate-100 bg-white flex items-center gap-3 flex-shrink-0">
                             <button
                                 onClick={handleApply}
                                 className="w-full py-3.5 bg-primary hover:opacity-95 text-white font-black rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-brand-100 transition-all active:scale-[0.99]"
