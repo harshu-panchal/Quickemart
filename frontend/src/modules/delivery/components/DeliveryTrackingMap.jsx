@@ -188,6 +188,7 @@ const DeliveryTrackingMapComponent = ({
   const routeOriginRef = useRef(null);
   const watchIdRef = useRef(null);
   const lastLocationPostRef = useRef(0);
+  const lastSimPostRef = useRef(0);
   const locationInFlightRef = useRef(false);
   const locationAbortRef = useRef(null);
 
@@ -444,9 +445,12 @@ const DeliveryTrackingMapComponent = ({
       isSimulatingRef.current = true;
 
       let currentSeg = snappedSegIndexRef.current || 0;
+      if (currentSeg >= rawPath.length - 1) {
+        currentSeg = 0;
+      }
       let progressInSeg = 0; // meters traveled in current segment
       let lastTime = performance.now();
-      const SPEED_M_S = 15; // 15 meters per second (~54 km/h) for testing
+      const SPEED_M_S = 18; // ~65 km/h for smooth movement along route
 
       const animate = (time) => {
         if (!isSimulatingRef.current) return;
@@ -463,15 +467,25 @@ const DeliveryTrackingMapComponent = ({
         let B = rawPath[currentSeg + 1];
         let segDist = distanceMeters(A, B) || 0.1;
 
+        let segmentChanged = false;
         while (progressInSeg >= segDist) {
           progressInSeg -= segDist;
           currentSeg++;
+          segmentChanged = true;
           if (currentSeg >= rawPath.length - 1) {
             setIsSimulating(false);
             isSimulatingRef.current = false;
-            // Snap to exact end
-            setRider(rawPath[rawPath.length - 1]);
-            riderRef.current = rawPath[rawPath.length - 1];
+            // Snap to exact end of polyline
+            const endPt = rawPath[rawPath.length - 1];
+            const endHeading = rawPath.length >= 2 ? getSegmentHeading(rawPath[rawPath.length - 2], endPt) : 0;
+            const endSeg = Math.max(0, rawPath.length - 2);
+            snappedSegIndexRef.current = endSeg;
+            setSnappedSegIndex(endSeg);
+            setSnappedRider({
+              ...endPt,
+              heading: endHeading,
+              segmentIndex: endSeg,
+            });
             return;
           }
           A = rawPath[currentSeg];
@@ -479,20 +493,41 @@ const DeliveryTrackingMapComponent = ({
           segDist = distanceMeters(A, B) || 0.1;
         }
 
-        const ratio = progressInSeg / segDist;
+        const ratio = Math.max(0, Math.min(1, progressInSeg / segDist));
         const lat = A.lat + (B.lat - A.lat) * ratio;
         const lng = A.lng + (B.lng - A.lng) * ratio;
+        const heading = getSegmentHeading(A, B);
 
-        const nextPos = { lat, lng };
-        setRider(nextPos);
-        riderRef.current = nextPos;
+        const nextPos = { lat, lng, heading, segmentIndex: currentSeg };
+        riderRef.current = { lat, lng };
+        snappedSegIndexRef.current = currentSeg;
+
+        // Directly set snapped rider for smooth marker movement along polyline
+        setSnappedRider(nextPos);
+        if (segmentChanged) {
+          setSnappedSegIndex(currentSeg);
+        }
+
+        // Post simulated location to backend every 1.0s so socket / Firebase broadcasts to customer map
+        const now = Date.now();
+        if (now - lastSimPostRef.current > 1000) {
+          lastSimPostRef.current = now;
+          saveDeliveryPartnerLocation(lat, lng);
+          deliveryApi.postLocation({
+            lat,
+            lng,
+            heading,
+            speed: 18,
+            orderId: orderId || null,
+          }).catch(() => {});
+        }
 
         simulationRef.current = requestAnimationFrame(animate);
       };
 
       simulationRef.current = requestAnimationFrame(animate);
     }
-  }, [isSimulating, rawPath]);
+  }, [isSimulating, rawPath, orderId]);
 
   useEffect(() => {
     return () => {
@@ -500,8 +535,9 @@ const DeliveryTrackingMapComponent = ({
     };
   }, []);
 
-  // Whenever raw rider GPS changes → snap to polyline
+  // Whenever raw rider GPS changes → snap to polyline (skips during active simulation)
   useEffect(() => {
+    if (isSimulatingRef.current) return;
     if (!rider || rawPath.length < 2) {
       setSnappedRider(rider || null);
       return;
