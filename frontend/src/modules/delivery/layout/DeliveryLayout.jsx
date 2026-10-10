@@ -495,7 +495,7 @@ const DeliveryLayout = () => {
     // The backend throttle (locationThrottleService: 3 s + 20 m) is the
     // authoritative rate-limiter — the frontend just needs to stop blocking
     // every update for 30 s, which caused the 30–50 m map-update lag.
-    const HEARTBEAT_MS = 5000;
+    const HEARTBEAT_MS = 2000;
     let lastPostAt = 0;
 
     const watchId = navigator.geolocation.watchPosition(

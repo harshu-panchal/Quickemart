@@ -16,7 +16,7 @@ const ROUTE_REFRESH_THRESHOLD_M = 150;
 const ROUTE_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const RECENTER_INTERVAL_MS = 15000;
 const RIDER_FOCUS_RADIUS_M = 500;
-const LOCATION_POST_INTERVAL_MS = 5000;
+const LOCATION_POST_INTERVAL_MS = 2000;
 
 // Container style will be 100% to fill parent
 const containerStyle = {

@@ -21,9 +21,9 @@ import { getRedisClient } from "../../config/redis.js";
 import { distanceMeters } from "../../utils/geoUtils.js";
 
 const LOC_MIN_INTERVAL_MS = () =>
-  parseInt(process.env.LOCATION_MIN_INTERVAL_MS || "3000", 10);
+  parseInt(process.env.LOCATION_MIN_INTERVAL_MS || "2000", 10);
 const LOC_MIN_MOVE_M = () =>
-  parseInt(process.env.LOCATION_MIN_MOVE_METERS || "20", 10);
+  parseInt(process.env.LOCATION_MIN_MOVE_METERS || "3", 10);
 
 /**
  * @param {string|ObjectId} deliveryId
