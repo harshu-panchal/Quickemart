@@ -84,9 +84,12 @@ const getPersistedRiderStep = (order) => {
 
   if (
     workflowStatus === "DELIVERED" ||
-    legacyStatus === "delivered"
+    legacyStatus === "delivered" ||
+    order.isDelivered ||
+    order.deliveredAt ||
+    riderStep >= 4
   ) {
-    return 3;
+    return 4;
   }
 
   if (
@@ -94,6 +97,13 @@ const getPersistedRiderStep = (order) => {
     workflowStatus === "OUT_FOR_DELIVERY" ||
     legacyStatus === "out_for_delivery" ||
     order.outForDeliveryAt
+  ) {
+    return 3;
+  }
+
+  if (
+    riderStep >= 2 ||
+    workflowStatus === "PICKUP_READY"
   ) {
     return 2;
   }
@@ -1128,6 +1138,29 @@ const OrderDetails = () => {
                 onError={handleOtpGenerationError}
                 isReturn={false}
               />
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Delivered / Completed Banner */}
+        {((!isReturn && step >= 4) || (isReturn && step >= 5) || String(order?.workflowStatus).toUpperCase() === "DELIVERED" || String(order?.status).toLowerCase() === "delivered") && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="p-6 rounded-3xl shadow-sm border border-emerald-200 bg-emerald-50/60 text-center">
+              <div className="w-14 h-14 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-md">
+                <CheckCircle size={32} />
+              </div>
+              <h3 className="font-extrabold text-xl text-emerald-900 mb-1">
+                Order Delivered
+              </h3>
+              <p className="text-emerald-700 text-sm mb-4 font-medium">
+                This order has been completed successfully.
+              </p>
+              <Button
+                onClick={() => navigate("/delivery/dashboard")}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl border-none shadow-sm"
+              >
+                Back to Dashboard
+              </Button>
             </Card>
           </motion.div>
         )}
