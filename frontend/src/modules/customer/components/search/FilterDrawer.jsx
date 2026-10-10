@@ -5,6 +5,7 @@ import { X, Star, Percent, Check, RefreshCw } from 'lucide-react';
 const FilterDrawer = ({
     isOpen,
     onClose,
+    availableBrands = [],
     availableCategories = [],
     activeFilters,
     onApplyFilters,
@@ -17,6 +18,16 @@ const FilterDrawer = ({
     }, [activeFilters, isOpen]);
 
     if (!isOpen) return null;
+
+    const handleBrandToggle = (brandName) => {
+        setLocalFilters((prev) => {
+            const current = prev.brands || [];
+            const updated = current.includes(brandName)
+                ? current.filter((b) => b !== brandName)
+                : [...current, brandName];
+            return { ...prev, brands: updated };
+        });
+    };
 
     const handleCategoryToggle = (catId) => {
         setLocalFilters((prev) => {
@@ -53,12 +64,17 @@ const FilterDrawer = ({
             minRating: null,
             onlyOffers: false,
             onlyInStock: false,
+            brands: [],
             categories: [],
         };
         setLocalFilters(resetState);
         onResetFilters();
         onClose();
     };
+
+    const displayBrands = availableBrands.length > 0 
+        ? availableBrands 
+        : (availableCategories || []).map(c => typeof c === 'string' ? { name: c, count: null } : { name: c.name, count: null });
 
     return (
         <AnimatePresence>
@@ -176,27 +192,34 @@ const FilterDrawer = ({
                                 </div>
                             </div>
 
-                            {/* Category Filter */}
-                            {availableCategories.length > 0 && (
+                            {/* Brand Filter */}
+                            {displayBrands.length > 0 && (
                                 <div>
                                     <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">
-                                        Categories
+                                        Brands
                                     </h4>
-                                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 no-scrollbar">
-                                        {availableCategories.map((cat) => {
-                                            const isSelected = (localFilters.categories || []).includes(cat.id);
+                                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1 no-scrollbar">
+                                        {displayBrands.map((b) => {
+                                            const brandName = typeof b === 'string' ? b : b.name;
+                                            const count = typeof b === 'object' ? b.count : null;
+                                            const isSelected = (localFilters.brands || []).includes(brandName);
                                             return (
                                                 <button
-                                                    key={cat.id}
+                                                    key={brandName}
                                                     type="button"
-                                                    onClick={() => handleCategoryToggle(cat.id)}
-                                                    className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
+                                                    onClick={() => handleBrandToggle(brandName)}
+                                                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
                                                         isSelected
-                                                            ? 'bg-brand-50 border-primary text-primary shadow-xs'
+                                                            ? 'bg-brand-50 border-primary text-primary shadow-xs font-extrabold'
                                                             : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                                                     }`}
                                                 >
-                                                    {cat.name}
+                                                    <span>{brandName}</span>
+                                                    {count && (
+                                                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-primary text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                                            {count}
+                                                        </span>
+                                                    )}
                                                 </button>
                                             );
                                         })}

@@ -38,6 +38,7 @@ const QuickFilterBar = ({
         (activeFilters.minRating ? 1 : 0) +
         (activeFilters.onlyOffers ? 1 : 0) +
         (activeFilters.onlyInStock ? 1 : 0) +
+        (activeFilters.brands?.length || 0) +
         (activeFilters.categories?.length || 0);
 
     const activeSortLabel = SORT_OPTIONS.find((s) => s.id === selectedSort && s.id !== 'relevance')?.label;

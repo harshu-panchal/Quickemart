@@ -44,6 +44,7 @@ const SearchPage = () => {
         minRating: null,
         onlyOffers: false,
         onlyInStock: false,
+        brands: [],
         categories: []
     });
 
@@ -227,6 +228,48 @@ const SearchPage = () => {
         }
     };
 
+    // Multi-field search matching helper (Name, Brand, Category, Tags)
+    const matchesProductQuery = (p, rawQuery) => {
+        if (!rawQuery || !rawQuery.trim()) return true;
+        const q = rawQuery.trim().toLowerCase();
+
+        // 1. Name
+        if (p.name && p.name.toLowerCase().includes(q)) return true;
+
+        // 2. Brand
+        if (p.brand && p.brand.toLowerCase().includes(q)) return true;
+
+        // 3. Category
+        if (p.categoryId?.name && p.categoryId.name.toLowerCase().includes(q)) return true;
+
+        // 4. Tags
+        const tagsList = Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? [p.tags] : []);
+        const searchTagsList = Array.isArray(p.searchTags) ? p.searchTags : (typeof p.searchTags === 'string' ? [p.searchTags] : []);
+        const allTags = [...tagsList, ...searchTagsList];
+        if (allTags.some(t => typeof t === 'string' && t.toLowerCase().includes(q))) return true;
+
+        return false;
+    };
+
+    // Extract available brands for the current search query (sorted by product count)
+    const availableBrands = useMemo(() => {
+        const matchingProducts = debouncedQuery.trim()
+            ? allProducts.filter(p => matchesProductQuery(p, debouncedQuery))
+            : allProducts;
+
+        const countsMap = new Map();
+        matchingProducts.forEach(p => {
+            const b = p.brand && String(p.brand).trim();
+            if (b) {
+                countsMap.set(b, (countsMap.get(b) || 0) + 1);
+            }
+        });
+
+        return Array.from(countsMap.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    }, [allProducts, debouncedQuery]);
+
     // Extract available categories from current product set
     const availableCategories = useMemo(() => {
         const map = new Map();
@@ -242,10 +285,12 @@ const SearchPage = () => {
     const processedResults = useMemo(() => {
         if (!debouncedQuery.trim()) return [];
 
-        let list = allProducts.filter(p =>
-            p.name?.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
-            p.categoryId?.name?.toLowerCase().includes(debouncedQuery.toLowerCase())
-        );
+        let list = allProducts.filter(p => matchesProductQuery(p, debouncedQuery));
+
+        // Filter: Brands
+        if (activeFilters.brands && activeFilters.brands.length > 0) {
+            list = list.filter(p => p.brand && activeFilters.brands.includes(p.brand));
+        }
 
         // Filter: Category
         if (activeFilters.categories && activeFilters.categories.length > 0) {
@@ -628,10 +673,11 @@ const SearchPage = () => {
             <FilterDrawer
                 isOpen={isFilterDrawerOpen}
                 onClose={() => setIsFilterDrawerOpen(false)}
+                availableBrands={availableBrands}
                 availableCategories={availableCategories}
                 activeFilters={activeFilters}
                 onApplyFilters={(updatedFilters) => setActiveFilters(updatedFilters)}
-                onResetFilters={() => setActiveFilters({ minRating: null, onlyOffers: false, onlyInStock: false, categories: [] })}
+                onResetFilters={() => setActiveFilters({ minRating: null, onlyOffers: false, onlyInStock: false, brands: [], categories: [] })}
             />
         </div>
     );
