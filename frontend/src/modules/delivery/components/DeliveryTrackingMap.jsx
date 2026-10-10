@@ -188,7 +188,6 @@ const DeliveryTrackingMapComponent = ({
   const routeOriginRef = useRef(null);
   const watchIdRef = useRef(null);
   const lastLocationPostRef = useRef(0);
-  const lastSimPostRef = useRef(0);
   const locationInFlightRef = useRef(false);
   const locationAbortRef = useRef(null);
 
@@ -244,13 +243,13 @@ const DeliveryTrackingMapComponent = ({
         const accuracy = pos.coords.accuracy;
         const heading = pos.coords.heading;
         const speed = pos.coords.speed;
-        
+
         if (isSimulatingRef.current) return;
 
         saveDeliveryPartnerLocation(lat, lng);
         setRider({ lat, lng });
         riderRef.current = { lat, lng };
-        
+
         // Throttle location POSTs to once every 5s and skip if one is already in-flight
         const now = Date.now();
         if (now - lastLocationPostRef.current < LOCATION_POST_INTERVAL_MS) return;
@@ -266,12 +265,12 @@ const DeliveryTrackingMapComponent = ({
         deliveryApi.postLocation(
           { lat, lng, accuracy, heading, speed, orderId: orderId || null },
           { signal: controller.signal, timeout: 8000 },
-        ).catch(() => {}).finally(() => {
+        ).catch(() => { }).finally(() => {
           locationInFlightRef.current = false;
           if (locationAbortRef.current === controller) locationAbortRef.current = null;
         });
       },
-      () => {},
+      () => { },
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
     );
     return () => {
@@ -338,7 +337,7 @@ const DeliveryTrackingMapComponent = ({
       if (routeAbortRef.current === controller) routeAbortRef.current = null;
       setRouteLoading(false);
     }
-  // Stable — uses riderRef so GPS ticks don't recreate this callback
+    // Stable — uses riderRef so GPS ticks don't recreate this callback
   }, [orderId, phase]);
 
   useEffect(() => {
@@ -359,9 +358,9 @@ const DeliveryTrackingMapComponent = ({
       }
       routeInFlightRef.current = false;
     };
-  // rider in deps only to trigger initial fetch when location first becomes available
-  // fetchRoute is stable (doesn't depend on rider state)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // rider in deps only to trigger initial fetch when location first becomes available
+    // fetchRoute is stable (doesn't depend on rider state)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!rider, fetchRoute, phase, orderId]);
 
   const isReturn = order?.returnStatus && order.returnStatus !== "none";
@@ -445,12 +444,9 @@ const DeliveryTrackingMapComponent = ({
       isSimulatingRef.current = true;
 
       let currentSeg = snappedSegIndexRef.current || 0;
-      if (currentSeg >= rawPath.length - 1) {
-        currentSeg = 0;
-      }
       let progressInSeg = 0; // meters traveled in current segment
       let lastTime = performance.now();
-      const SPEED_M_S = 18; // ~65 km/h for smooth, visible movement along route
+      const SPEED_M_S = 15; // 15 meters per second (~54 km/h) for testing
 
       const animate = (time) => {
         if (!isSimulatingRef.current) return;
@@ -467,25 +463,15 @@ const DeliveryTrackingMapComponent = ({
         let B = rawPath[currentSeg + 1];
         let segDist = distanceMeters(A, B) || 0.1;
 
-        let segmentChanged = false;
         while (progressInSeg >= segDist) {
           progressInSeg -= segDist;
           currentSeg++;
-          segmentChanged = true;
           if (currentSeg >= rawPath.length - 1) {
             setIsSimulating(false);
             isSimulatingRef.current = false;
-            // Snap to exact end of polyline
-            const endPt = rawPath[rawPath.length - 1];
-            const endHeading = rawPath.length >= 2 ? getSegmentHeading(rawPath[rawPath.length - 2], endPt) : 0;
-            const endSeg = Math.max(0, rawPath.length - 2);
-            snappedSegIndexRef.current = endSeg;
-            setSnappedSegIndex(endSeg);
-            setSnappedRider({
-              ...endPt,
-              heading: endHeading,
-              segmentIndex: endSeg,
-            });
+            // Snap to exact end
+            setRider(rawPath[rawPath.length - 1]);
+            riderRef.current = rawPath[rawPath.length - 1];
             return;
           }
           A = rawPath[currentSeg];
@@ -493,33 +479,13 @@ const DeliveryTrackingMapComponent = ({
           segDist = distanceMeters(A, B) || 0.1;
         }
 
-        const ratio = Math.max(0, Math.min(1, progressInSeg / segDist));
+        const ratio = progressInSeg / segDist;
         const lat = A.lat + (B.lat - A.lat) * ratio;
         const lng = A.lng + (B.lng - A.lng) * ratio;
-        const heading = getSegmentHeading(A, B);
 
-        const nextPos = { lat, lng, heading, segmentIndex: currentSeg };
-        riderRef.current = { lat, lng };
-        snappedSegIndexRef.current = currentSeg;
-
-        // Directly set snapped rider for smooth marker movement along polyline
-        setSnappedRider(nextPos);
-        if (segmentChanged) {
-          setSnappedSegIndex(currentSeg);
-        }
-
-        // Post simulated location to backend every 1.5s so socket / Firebase broadcasts to customer map
-        const now = Date.now();
-        if (now - lastSimPostRef.current > 1500) {
-          lastSimPostRef.current = now;
-          saveDeliveryPartnerLocation(lat, lng);
-          deliveryApi.postLocation({
-            lat,
-            lng,
-            heading,
-            orderId: orderId || null,
-          }).catch(() => {});
-        }
+        const nextPos = { lat, lng };
+        setRider(nextPos);
+        riderRef.current = nextPos;
 
         simulationRef.current = requestAnimationFrame(animate);
       };
@@ -534,9 +500,8 @@ const DeliveryTrackingMapComponent = ({
     };
   }, []);
 
-  // Whenever raw rider GPS changes → snap to polyline (skips during active simulation)
+  // Whenever raw rider GPS changes → snap to polyline
   useEffect(() => {
-    if (isSimulatingRef.current) return;
     if (!rider || rawPath.length < 2) {
       setSnappedRider(rider || null);
       return;
@@ -643,7 +608,7 @@ const DeliveryTrackingMapComponent = ({
     if (rider) return rider;
     if (dest) return dest;
     return { lat: 20.5937, lng: 78.9629 };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // empty deps: intentionally frozen at mount
   const mapCenter = initialCenter;
 
@@ -728,10 +693,10 @@ const DeliveryTrackingMapComponent = ({
     };
 
     window.addEventListener('resize', handleResize);
-    
+
     const mapContainer = map.getDiv()?.parentElement;
     let resizeObserver;
-    
+
     if (mapContainer && window.ResizeObserver) {
       resizeObserver = new ResizeObserver(() => {
         handleResize();
@@ -921,7 +886,7 @@ const DeliveryTrackingMap = memo(DeliveryTrackingMapComponent, (prevProps, nextP
   // Only re-render if these props actually change
   const destPrev = destinationForPhase(prevProps.order, prevProps.phase);
   const destNext = destinationForPhase(nextProps.order, nextProps.phase);
-  
+
   return (
     prevProps.orderId === nextProps.orderId &&
     prevProps.phase === nextProps.phase &&

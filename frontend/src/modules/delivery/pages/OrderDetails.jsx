@@ -610,10 +610,10 @@ const OrderDetails = () => {
         <div className="flex flex-col items-end">
           <span
             className={`text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wide ${publicStatusStage === 1
-                ? "bg-brand-100 text-brand-700"
-                : publicStatusStage === 2
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-brand-100 text-brand-700"
+              ? "bg-brand-100 text-brand-700"
+              : publicStatusStage === 2
+                ? "bg-amber-100 text-amber-700"
+                : "bg-brand-100 text-brand-700"
               }`}
           >
             {isReturn ? (
@@ -966,9 +966,9 @@ const OrderDetails = () => {
                       <div className="flex items-center space-x-2 mt-0.5">
                         <p
                           className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${order.payment?.method?.toLowerCase() === "cash" ||
-                              order.payment?.method?.toLowerCase() === "cod"
-                              ? "bg-orange-50 text-orange-700 border-orange-200"
-                              : "bg-brand-50 text-brand-700 border-brand-200"
+                            order.payment?.method?.toLowerCase() === "cod"
+                            ? "bg-orange-50 text-orange-700 border-orange-200"
+                            : "bg-brand-50 text-brand-700 border-brand-200"
                             }`}
                         >
                           {order.payment?.method?.toUpperCase() || "PENDING"}
@@ -980,9 +980,9 @@ const OrderDetails = () => {
                   <div className="flex space-x-2">
                     {(isReturn ? order.seller?.phone : order.address?.phone) && (
                       <>
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
+                        <Button
+                          variant="outline"
+                          size="icon"
                           className="h-9 w-9"
                           onClick={() =>
                             (window.location.href = `sms:${isReturn ? order.seller?.phone : order.address?.phone}`)
@@ -1138,29 +1138,6 @@ const OrderDetails = () => {
                 onError={handleOtpGenerationError}
                 isReturn={false}
               />
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Delivered / Completed Banner */}
-        {((!isReturn && step >= 4) || (isReturn && step >= 5) || String(order?.workflowStatus).toUpperCase() === "DELIVERED" || String(order?.status).toLowerCase() === "delivered") && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <Card className="p-6 rounded-3xl shadow-sm border border-emerald-200 bg-emerald-50/60 text-center">
-              <div className="w-14 h-14 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-md">
-                <CheckCircle size={32} />
-              </div>
-              <h3 className="font-extrabold text-xl text-emerald-900 mb-1">
-                Order Delivered
-              </h3>
-              <p className="text-emerald-700 text-sm mb-4 font-medium">
-                This order has been completed successfully.
-              </p>
-              <Button
-                onClick={() => navigate("/delivery/dashboard")}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl border-none shadow-sm"
-              >
-                Back to Dashboard
-              </Button>
             </Card>
           </motion.div>
         )}

@@ -266,23 +266,9 @@ const LiveTrackingMap = memo(({
   const routeMapPolylineRef = useRef(null);
   const routeBgPolylineRef = useRef(null);
 
-  // Cleanup polylines on unmount or mapInstance change
-  useEffect(() => {
-    return () => {
-      if (routeMapPolylineRef.current) {
-        routeMapPolylineRef.current.setMap(null);
-        routeMapPolylineRef.current = null;
-      }
-      if (routeBgPolylineRef.current) {
-        routeBgPolylineRef.current.setMap(null);
-        routeBgPolylineRef.current = null;
-      }
-    };
-  }, [mapInstance]);
-
   // ─── Polyline rendered natively (updates path in-place, no recreation) ─────
   useEffect(() => {
-    if (!isLoaded || !mapInstance || !window.google?.maps) return;
+    if (!isLoaded || !mapInstance || !window.google?.maps) return undefined;
 
     if (!remainingPath?.length) {
       if (routeMapPolylineRef.current) {
@@ -293,7 +279,7 @@ const LiveTrackingMap = memo(({
         routeBgPolylineRef.current.setMap(null);
         routeBgPolylineRef.current = null;
       }
-      return;
+      return undefined;
     }
 
     if (routeMapPolylineRef.current) {
@@ -324,6 +310,17 @@ const LiveTrackingMap = memo(({
       routeBgPolylineRef.current = bgPl;
       routeMapPolylineRef.current = pl;
     }
+
+    return () => {
+      if (routeMapPolylineRef.current) {
+        routeMapPolylineRef.current.setMap(null);
+        routeMapPolylineRef.current = null;
+      }
+      if (routeBgPolylineRef.current) {
+        routeBgPolylineRef.current.setMap(null);
+        routeBgPolylineRef.current = null;
+      }
+    };
   }, [isLoaded, mapInstance, remainingPath]);
 
   const riderMarkerIcon = useMemo(() => {
@@ -400,11 +397,11 @@ const LiveTrackingMap = memo(({
       hasFittedInitialBoundsRef.current = true;
       return;
     }
-    
+
     try {
       const bounds = new window.google.maps.LatLngBounds();
       let hasPoints = false;
-      
+
       // Add route points if available
       if (decodedPath && decodedPath.length > 0) {
         decodedPath.forEach((point) => bounds.extend(point));
@@ -420,7 +417,7 @@ const LiveTrackingMap = memo(({
           hasPoints = true;
         }
       }
-      
+
       if (hasPoints) {
         map.fitBounds(bounds, 60);
         hasFittedInitialBoundsRef.current = true;
@@ -552,7 +549,7 @@ const LiveTrackingMap = memo(({
   }
 
   // ─── LIVE TRACKING STATE ───────────────────────────────────────────────
-  
+
   // If Google Maps is not loaded or no API key
   if (!apiKey) {
     return (
