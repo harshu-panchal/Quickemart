@@ -21,6 +21,7 @@ export const customerApi = {
       ? axiosInstance.get("/products", { params, ...options })
       : getWithDedupe("/products", params, options),
   getProductById: (id, params) => getWithDedupe(`/products/${id}`, params),
+  trackProductClick: (data) => axiosInstance.post("/customer/activity/product-click", data),
 
   // Sellers & Location
   getNearbySellers: (params) => getWithDedupe("/seller/nearby", params),

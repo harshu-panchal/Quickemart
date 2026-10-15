@@ -7,8 +7,9 @@ import {
     updateCustomerProfile,
     getCustomerTransactions,
     lookupCustomerByPhone,
+    logProductClickActivity,
 } from "../controller/customerAuthController.js";
-import { verifyToken } from "../middleware/authMiddleware.js";
+import { verifyToken, optionalVerifyToken } from "../middleware/authMiddleware.js";
 import {
     authRouteRateLimiter,
     createContentLengthGuard,
@@ -42,6 +43,9 @@ router.get("/transactions", verifyToken, getCustomerTransactions);
 router.get("/lookup-by-phone", verifyToken, customerLookupRateLimiter, lookupCustomerByPhone);
 
 import { handleLogoutActivity } from "../controller/adminActivityController.js";
+
+// Activity tracking routes
+router.post("/activity/product-click", optionalVerifyToken, logProductClickActivity);
 
 // Logout activity route
 router.post("/logout", verifyToken, handleLogoutActivity);

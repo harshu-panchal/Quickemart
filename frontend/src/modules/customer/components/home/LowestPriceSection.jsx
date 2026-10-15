@@ -1,16 +1,22 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductCard from "../shared/ProductCard";
 import { ProductGridSkeleton } from "../skeletons";
 import { usePrefetchedProductFrame } from "../../hooks/usePrefetchedProductFrame";
+import { shuffleArray } from "../../../../shared/utils/arrayUtils";
 
 const LowestPriceSection = ({ products = [], isLoading = false, onSeeAll }) => {
+  // Randomize product ordering on each page load/refresh or when products update
+  const shuffledProducts = useMemo(() => {
+    return shuffleArray(products);
+  }, [products]);
+
   const {
     visibleProducts,
     hasMore,
     showNextFrame,
-  } = usePrefetchedProductFrame(products, { frameSize: 12, initialCount: 12 });
+  } = usePrefetchedProductFrame(shuffledProducts, { frameSize: 12, initialCount: 12 });
 
   const handleSeeMore = () => {
     if (hasMore) {

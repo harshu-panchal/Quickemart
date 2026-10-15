@@ -13,6 +13,7 @@ import { useSettings } from '@core/context/SettingsContext';
 import { useAuth } from '@core/context/AuthContext';
 import Lottie from 'lottie-react';
 import { ProductDetailSkeleton } from '../components/skeletons';
+import { trackProductClickActivity } from '../utils/activityTracker';
 
 import StarRating from '../components/reviews/StarRating';
 import RatingSummary from '../components/reviews/RatingSummary';
@@ -91,6 +92,7 @@ const ProductDetailPage = () => {
                 };
                 setProduct(formatted);
                 setActiveImage(formatted.images[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600&auto=format&fit=crop');
+                trackProductClickActivity(formatted);
                 
                 fetchReviews(1, reviewFilter);
                 if (isAuthenticated) {

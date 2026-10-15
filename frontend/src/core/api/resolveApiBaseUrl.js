@@ -11,14 +11,15 @@ function ensureApiPath(pathname) {
 }
 
 function buildLocalApiUrl(hostname) {
-  const protocol = window.location.protocol || "http:";
+  const protocol = (typeof window !== "undefined" && window.location?.protocol) || "http:";
   return `${protocol}//${hostname}:${DEFAULT_API_PORT}${DEFAULT_API_PATH}`;
 }
 
 function parseEnvUrl(rawUrl) {
   if (!rawUrl) return null;
   try {
-    const parsed = new URL(rawUrl, window.location.origin);
+    const origin = typeof window !== "undefined" ? window.location?.origin : "http://localhost";
+    const parsed = new URL(rawUrl, origin);
     return `${normalizeOrigin(parsed.origin)}${ensureApiPath(parsed.pathname)}`;
   } catch {
     return null;
@@ -43,11 +44,12 @@ function isLocalUrl(urlStr) {
 }
 
 export function resolveApiBaseUrl() {
+  const env = (typeof import.meta !== "undefined" && import.meta.env) ? import.meta.env : {};
   const envUrl =
-    parseEnvUrl(import.meta.env.VITE_API_URL) ||
-    parseEnvUrl(import.meta.env.VITE_API_BASE_URL);
+    parseEnvUrl(env.VITE_API_URL) ||
+    parseEnvUrl(env.VITE_API_BASE_URL);
 
-  const browserHostname = window.location.hostname;
+  const browserHostname = typeof window !== "undefined" ? window.location?.hostname : "localhost";
   const isCurrentLocal =
     browserHostname === "localhost" ||
     browserHostname === "127.0.0.1" ||
@@ -55,7 +57,7 @@ export function resolveApiBaseUrl() {
 
   // When developing on localhost, route API requests to the local backend server (port 7000)
   // unless explicitly forced to use remote production API via VITE_FORCE_REMOTE_API=true.
-  if (isCurrentLocal && import.meta.env.VITE_FORCE_REMOTE_API !== "true") {
+  if (isCurrentLocal && env.VITE_FORCE_REMOTE_API !== "true") {
     return buildLocalApiUrl(browserHostname || "localhost");
   }
 

@@ -224,3 +224,59 @@ export const getCustomerTransactions = async (req, res) => {
         return handleResponse(res, 500, error.message);
     }
 };
+
+/**
+ * Non-blocking activity logging for registered customer product clicks.
+ */
+export const logProductClickActivity = async (req, res) => {
+    try {
+        const userRole = String(req.user?.role || "").toLowerCase();
+        const isCustomer = userRole === "customer" || userRole === "user";
+
+        if (req.user && isCustomer) {
+            const {
+                productId,
+                productName,
+                price,
+                salePrice,
+                brand,
+                categoryName,
+                sellerId,
+            } = req.body || {};
+
+            if (productId) {
+                const displayName = productName || "Product";
+                const effectivePrice = Number(salePrice || price || 0);
+
+                await logActivity({
+                    req,
+                    userId: req.user.id || req.user._id,
+                    role: "customer",
+                    action: "PRODUCT_CLICK",
+                    category: "PRODUCT",
+                    severity: "INFO",
+                    description: `Viewed product: "${displayName}"`,
+                    metadata: {
+                        productId: String(productId),
+                        productName: displayName,
+                        price: Number(price) || 0,
+                        salePrice: Number(salePrice) || 0,
+                        effectivePrice,
+                        brand: brand || "",
+                        category: categoryName || "",
+                        sellerId: sellerId || null,
+                    },
+                });
+
+                if (process.env.NODE_ENV !== "production") {
+                    console.log(`[ActivityTracker] Logged product click for user ${req.user.id || req.user._id}: "${displayName}"`);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("[ActivityTracker] Non-fatal product click log error:", err.message);
+    }
+
+    return res.status(200).json({ success: true });
+};
+

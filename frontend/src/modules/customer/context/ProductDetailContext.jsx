@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
+import { trackProductClickActivity } from '../utils/activityTracker';
 
 const ProductDetailContext = createContext();
 
@@ -18,6 +19,8 @@ export const ProductDetailProvider = ({ children }) => {
     const openProduct = (product) => {
         setSelectedProduct(product);
         setIsOpen(true);
+        // Track product click activity for registered user asynchronously
+        trackProductClickActivity(product);
     };
 
     const closeProduct = () => {

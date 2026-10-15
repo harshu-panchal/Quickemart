@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Clock } from "lucide-react";
 
 import { useProductDetail } from "../../context/ProductDetailContext";
+import { trackProductClickActivity } from "../../utils/activityTracker";
 
 const getItemStockLimit = (item) => {
   if (!item) return 0;
@@ -113,6 +114,7 @@ const ProductCard = React.memo(
 
     const handleProductClick = React.useCallback(
       (e) => {
+        trackProductClickActivity(product);
         if (openProduct) {
           e.preventDefault();
           openProduct(product);

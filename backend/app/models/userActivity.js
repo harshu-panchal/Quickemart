@@ -34,7 +34,7 @@ const userActivitySchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["AUTH", "ORDER", "INVENTORY", "PAYOUT", "PROFILE", "SYSTEM", "SECURITY", "SEARCH", "WISHLIST"],
+      enum: ["AUTH", "ORDER", "INVENTORY", "PAYOUT", "PROFILE", "SYSTEM", "SECURITY", "SEARCH", "WISHLIST", "PRODUCT"],
       default: "SYSTEM",
       index: true,
     },

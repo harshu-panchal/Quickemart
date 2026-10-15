@@ -171,11 +171,13 @@ const UserActivity = () => {
     { id: "admin", label: "Admins" },
   ];
 
-  const categories = ["all", "AUTH", "ORDER", "WISHLIST", "SEARCH", "INVENTORY", "PAYOUT", "PROFILE", "SECURITY", "SYSTEM"];
+  const categories = ["all", "AUTH", "ORDER", "PRODUCT", "WISHLIST", "SEARCH", "INVENTORY", "PAYOUT", "PROFILE", "SECURITY", "SYSTEM"];
   const severities = ["all", "INFO", "WARNING", "CRITICAL"];
 
   const getCategoryBadgeStyle = (category) => {
     switch ((category || "").toUpperCase()) {
+      case "PRODUCT":
+        return "bg-cyan-100 text-cyan-800 border-cyan-300";
       case "SEARCH":
         return "bg-amber-100 text-amber-800 border-amber-300";
       case "WISHLIST":

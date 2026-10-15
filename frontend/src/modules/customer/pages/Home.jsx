@@ -258,7 +258,7 @@ const Home = () => {
     setIsLoading(true);
     try {
       const hasValidLocation = Number.isFinite(currentLocation?.latitude) && Number.isFinite(currentLocation?.longitude);
-      const productParams = { limit: 20 };
+      const productParams = { limit: 36 };
       if (hasValidLocation) {
         productParams.lat = currentLocation.latitude;
         productParams.lng = currentLocation.longitude;
@@ -376,7 +376,7 @@ const Home = () => {
       setLowestPriceLoading(true);
       try {
         const productParams = {
-          limit: 20,
+          limit: 36,
           headerId: activeCategory._id,
         };
         if (hasValidLocation) {
