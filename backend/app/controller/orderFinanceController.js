@@ -18,6 +18,7 @@ import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
 import { verifyClientPaymentCallback } from "../services/paymentService.js";
 import { buildCheckoutPricingSnapshot } from "../services/checkoutPricingService.js";
 import { validateBody as validateWithJoi } from "../middleware/validate.js";
+import { checkOrderHasElectronics } from "../services/electronicsService.js";
 
 export const previewCheckoutFinance = async (req, res) => {
   try {
@@ -55,12 +56,18 @@ export const previewCheckoutFinance = async (req, res) => {
         }))
       : undefined;
 
+    const electronicsCheck = await checkOrderHasElectronics(payload.items);
+
     return handleResponse(res, 200, "Checkout preview generated", {
       paymentMode: payload.paymentMode,
       breakdown: pricingSnapshot.aggregateBreakdown,
       sellerCount: pricingSnapshot.sellerCount,
       itemCount: pricingSnapshot.itemCount,
       sellerBreakdowns,
+      hasElectronics: electronicsCheck.hasElectronics,
+      requiresEmail: electronicsCheck.hasElectronics,
+      electronicsCount: electronicsCheck.electronicsCount,
+      electronicsItems: electronicsCheck.electronicsItems,
       // Audit Phase 5: expose the resolved coupon snapshot so the
       // frontend can render "Coupon CODE applied — ₹X off" without
       // running its own math. `null` when no coupon was supplied or
@@ -90,6 +97,7 @@ export const createOrderWithFinancialSnapshot = async (req, res) => {
       tipAmount: validated.tipAmount || 0,
       walletAmount: validated.walletAmount || 0,
       couponId: validated.couponId || null,
+      customerEmail: validated.customerEmail || req.user?.email || null,
       // Audit Phase 5 (C-2 + H-7): forward couponCode so the placement
       // service can re-validate end-to-end. We deliberately DO NOT
       // forward `discountTotal`, `taxTotal`, or `pricing` from the

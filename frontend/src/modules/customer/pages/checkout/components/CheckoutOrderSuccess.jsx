@@ -1,5 +1,5 @@
 import React from "react";
-import { Check } from "lucide-react";
+import { Check, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 /**
@@ -8,8 +8,9 @@ import { motion, AnimatePresence } from "framer-motion";
  * Props:
  *   orderId – string order ID (last 6 chars shown)
  *   show    – boolean — controls visibility via AnimatePresence
+ *   customerEmail – string recipient of invoice bill copy
  */
-const CheckoutOrderSuccess = React.memo(function CheckoutOrderSuccess({ orderId, show }) {
+const CheckoutOrderSuccess = React.memo(function CheckoutOrderSuccess({ orderId, show, customerEmail }) {
   return (
     <AnimatePresence>
       {show && (
@@ -32,6 +33,19 @@ const CheckoutOrderSuccess = React.memo(function CheckoutOrderSuccess({ orderId,
             className="text-3xl font-black text-slate-800 mb-2">
             Order placed
           </motion.h2>
+
+          {customerEmail && (
+            <motion.div
+              initial={{ y: 15, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.25 }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl mb-4 shadow-sm"
+            >
+              <Mail size={16} className="text-emerald-600 flex-shrink-0" />
+              <span>Bill copy sent to: <strong className="text-emerald-950 font-black">{customerEmail}</strong></span>
+            </motion.div>
+          )}
+
           <motion.p
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
