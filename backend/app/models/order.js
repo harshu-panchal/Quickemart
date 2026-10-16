@@ -26,6 +26,15 @@ const orderSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    customerEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+    hasElectronics: {
+      type: Boolean,
+      default: false,
+    },
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Seller",

@@ -32,6 +32,7 @@ import {
   Check,
   Contact2,
   Wallet,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -66,6 +67,7 @@ import CheckoutAddressSection from "./checkout/components/CheckoutAddressSection
 import CheckoutCartSummary from "./checkout/components/CheckoutCartSummary";
 import CheckoutPricingBreakdown from "./checkout/components/CheckoutPricingBreakdown";
 import CheckoutPaymentSelector from "./checkout/components/CheckoutPaymentSelector";
+import CheckoutElectronicsEmailSection from "./checkout/components/CheckoutElectronicsEmailSection";
 import CheckoutCouponSection from "./checkout/components/CheckoutCouponSection";
 import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommendedProducts";
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
@@ -168,6 +170,25 @@ const CheckoutPage = () => {
   const [orderId, setOrderId] = useState(null);
   const [pricingPreview, setPricingPreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState(() => user?.email || "");
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [hasElectronicsOrder, setHasElectronicsOrder] = useState(false);
+  const [electronicsInfo, setElectronicsInfo] = useState(null);
+
+  useEffect(() => {
+    if (user?.email && !customerEmail) {
+      setCustomerEmail(user.email);
+    }
+  }, [user?.email]);
+
+  const clientHasElectronics = useMemo(() => {
+    return (cart || []).some((item) => {
+      const text = `${item?.name || ""} ${item?.categoryName || ""} ${item?.category || ""} ${item?.headerName || ""}`.toLowerCase();
+      return /electronic|electrical|gadget|laptop|mobile|smartphone|computer|appliance|headphone|earphone|camera|smart\s*watch|power\s*bank|charger|television|\btv\b|refrigerator|air\s*conditioner|microwave|oven|\biron\b|\bkettle\b/i.test(text);
+    });
+  }, [cart]);
+
+  const hasElectronicsInCart = Boolean(hasElectronicsOrder || clientHasElectronics);
   const postOrderNavigateRef = useRef(null);
   const previewDebounceRef = useRef(null);
   const [currentAddress, setCurrentAddress] = useState({
@@ -773,6 +794,7 @@ const CheckoutPage = () => {
       timeSlot: selectedTimeSlot,
       couponCode: selectedCoupon?.code || null,
       couponId: selectedCoupon?.couponId || selectedCoupon?._id || selectedCoupon?.id || null,
+      customerEmail: customerEmail.trim() || undefined,
     });
 
     const fetchPreview = async () => {
@@ -781,6 +803,15 @@ const CheckoutPage = () => {
         const res = await customerApi.checkoutPreview(buildPreviewPayload());
         if (res.data?.success) {
           setPricingPreview(res.data.result?.breakdown ?? null);
+          if (res.data.result?.hasElectronics) {
+            setHasElectronicsOrder(true);
+            setElectronicsInfo({
+              count: res.data.result.electronicsCount || 1,
+              items: res.data.result.electronicsItems || [],
+            });
+          } else {
+            setHasElectronicsOrder(false);
+          }
         }
       } catch (error) {
         console.error("Checkout preview failed", error);
@@ -857,6 +888,16 @@ const CheckoutPage = () => {
       showToast("One or more items in your cart belong to a closed store. Please remove them to proceed.", "error");
       return;
     }
+
+    if (hasElectronicsInCart) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!customerEmail.trim() || !emailRegex.test(customerEmail.trim())) {
+        showToast("Please enter your email to receive your electronic items invoice & warranty copy.", "error");
+        setIsEmailModalOpen(true);
+        return;
+      }
+    }
+
     setIsPlacingOrder(true);
     try {
       const taxAmount = pricingPreview?.taxTotal || 0;
@@ -868,6 +909,7 @@ const CheckoutPage = () => {
         tipAmount: selectedTip,
         timeSlot: selectedTimeSlot,
         walletAmount: walletAmountToUse,
+        customerEmail: customerEmail.trim() || undefined,
         couponCode: selectedCoupon?.code || null,
         couponId: selectedCoupon?.couponId || selectedCoupon?._id || selectedCoupon?.id || null,
         items: cart.map((item) => ({
@@ -933,7 +975,10 @@ const CheckoutPage = () => {
 
         // COD flow
         clearCart();
-        showToast("Order placed — waiting for seller to accept.", "success");
+        const invoiceNotice = customerEmail?.trim()
+          ? ` Bill copy sent to ${customerEmail.trim()}`
+          : " — waiting for seller to accept.";
+        showToast(`Order placed!${invoiceNotice}`, "success");
         setOrderId(mainOrderId);
         setShowSuccess(true);
 
@@ -1058,7 +1103,7 @@ const CheckoutPage = () => {
   return (
     <div className="min-h-screen bg-[#f5f1e8] pb-32 font-sans">
       {/* Order Success Overlay */}
-      <CheckoutOrderSuccess orderId={orderId} show={showSuccess} />
+      <CheckoutOrderSuccess orderId={orderId} show={showSuccess} customerEmail={customerEmail} />
 
       {/* Premium Header */}
       <div className="bg-gradient-to-br from-[var(--brand-700)] via-[var(--brand-600)] to-[var(--brand-400)] pt-6 pb-12 md:pb-24 relative z-10 shadow-lg md:rounded-b-[4rem] rounded-b-[2rem] overflow-hidden">
@@ -1250,6 +1295,17 @@ const CheckoutPage = () => {
               discountAmount={discountAmount}
             />
 
+            {/* Electronics Invoice Email Section */}
+            {hasElectronicsInCart && (
+              <CheckoutElectronicsEmailSection
+                email={customerEmail}
+                onChangeEmail={setCustomerEmail}
+                hasElectronics={hasElectronicsInCart}
+                electronicsCount={electronicsInfo?.count || 1}
+                electronicsItems={electronicsInfo?.items || []}
+              />
+            )}
+
             {/* Payment Selector */}
             <CheckoutPaymentSelector
               paymentMethods={paymentMethods}
@@ -1419,6 +1475,59 @@ const CheckoutPage = () => {
               </Button>
             </DialogFooter>
           </motion.div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Prompt Dialog for Electronics */}
+      <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2 shadow-sm">
+              <Mail size={24} />
+            </div>
+            <DialogTitle className="text-center text-lg font-black text-slate-800">
+              Email Required for Electronics Bill
+            </DialogTitle>
+            <DialogDescription className="text-center text-xs text-slate-500">
+              Your order contains electronic products. QuickeMart will email your official warranty invoice & tax bill copy to this email address.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Label htmlFor="modal-customer-email" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Email Address
+            </Label>
+            <Input
+              id="modal-customer-email"
+              type="email"
+              placeholder="e.g. yourname@gmail.com"
+              value={customerEmail}
+              onChange={(e) => setCustomerEmail(e.target.value)}
+              className="h-11 rounded-xl font-medium"
+            />
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsEmailModalOpen(false)}
+              className="w-full sm:w-auto border-slate-200 text-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!customerEmail.trim() || !emailRegex.test(customerEmail.trim())) {
+                  showToast("Please enter a valid email address.", "error");
+                  return;
+                }
+                setIsEmailModalOpen(false);
+                handlePlaceOrder();
+              }}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              Confirm & Continue
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
