@@ -43,6 +43,7 @@ export const checkoutPreviewSchema = Joi.object({
   // customer instead of the placer. Re-validated server-side in
   // placeOrderAtomic — never trusted from the client alone.
   recipientCustomerId: Joi.string().allow("", null).optional(),
+  customerEmail: Joi.string().email().allow("", null).optional(),
 }).unknown(true);
 
 export const createFinanceOrderSchema = checkoutPreviewSchema.keys({

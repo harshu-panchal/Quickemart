@@ -1,5 +1,4 @@
 node_modules/
-.env
 
 # Locally-stored uploads (products/categories/etc.) — persisted on the
 # server outside the deploy directory, not part of the repo.
@@ -12,3 +11,4 @@ coverage/
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+config.bat

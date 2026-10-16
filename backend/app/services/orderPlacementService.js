@@ -43,6 +43,8 @@ import {
   validateIdempotencyKey,
 } from "./idempotencyService.js";
 import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
+import { checkOrderHasElectronics } from "./electronicsService.js";
+import { sendOrderInvoiceEmail } from "./emailService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import * as logger from "./logger.js";
@@ -421,6 +423,23 @@ export async function placeOrderAtomic({
       session,
     });
 
+    const electronicsCheck = await checkOrderHasElectronics(orderItemsInput, { session });
+    const hasElectronics = Boolean(electronicsCheck?.hasElectronics);
+    const providedEmail = String(normalizedPayload.customerEmail || user?.email || "").trim();
+
+    if (hasElectronics && !providedEmail) {
+      const err = new Error(
+        "Email is required for orders containing electronic items so that the bill and warranty invoice copy can be sent to you."
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (providedEmail && user && !user.email) {
+      user.email = providedEmail.toLowerCase();
+      await user.save({ session }).catch(() => {});
+    }
+
     // Audit Phase 4 (C-1): when WALLET_REDEMPTION_REDUCES_PAYABLE is on,
     // pass walletAmount through to the snapshot so the per-seller
     // grandTotal is reduced proportionately. When the flag is off the
@@ -524,6 +543,8 @@ export async function placeOrderAtomic({
         orderId,
         customer: ownerId,
         placedBy: ownerId !== customerId ? customerId : null,
+        customerEmail: providedEmail || undefined,
+        hasElectronics,
         seller: entry.sellerId,
         items: mapOrderItemsForPersistence(entry.items),
         address: normalizedAddress,
@@ -799,6 +820,17 @@ export async function placeOrderAtomic({
           checkoutGroupId,
           sellerId: order.seller,
           customerId,
+        });
+      }
+    }
+
+    if (providedEmail) {
+      for (const order of orders) {
+        void sendOrderInvoiceEmail({ order, customerEmail: providedEmail }).catch((err) => {
+          logger.warn("[placeOrderAtomic] sendOrderInvoiceEmail failed", {
+            orderId: order.orderId,
+            error: err.message,
+          });
         });
       }
     }
